@@ -1,0 +1,26 @@
+titleOnly: false             # Only check PR title (not commits)
+types:
+  - feat                    # Marks a new feature
+  - fix                     # Marks a bug fix
+  - chore                   # Marks a maintenance or tooling change
+  - docs                    # Documentation change
+  - style                   # Code style formatting
+  - refactor                # Code refactor that is not a fix or feature
+  - perf                    # Performance improvement
+  - test                    # Adding or correcting tests
+  - BREAKING CHANGE
+
+requireScope: false         # Require scope for every PR type (like `feat(api):`)
+
+# Only allow squash merges
+squashOnly: true
+
+# Always require semantic PR titles
+requireSemanticTitle: true
+
+# Allow certain users to bypass rules
+allowMergeForUsers:
+  - dependabot[bot]
+
+# Disable specific checks (e.g., title)
+disableTitleCheck: false

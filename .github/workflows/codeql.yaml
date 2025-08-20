@@ -1,0 +1,21 @@
+name: "CodeQL::Analyze"
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
+  schedule:
+    - cron: '16 11 * * 5'
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+jobs:
+  analyze:
+    uses: openkcm/build/.github/workflows/codeql.yaml@main
+    secrets: inherit
