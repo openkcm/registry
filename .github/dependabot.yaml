@@ -17,9 +17,3 @@ updates:
       - "openkcm/go-maintainers"
     schedule:
       interval: daily
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    reviewers:
-      - "openkcm/go-maintainers"
-    schedule:
-      interval: "daily"
