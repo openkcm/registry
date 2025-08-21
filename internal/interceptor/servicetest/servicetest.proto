@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+option go_package = "github.tools.sap/kms/registry/internal/interceptor/servicetest";
+
+service TestService {
+  rpc TestCall(TestCallRequest) returns (TestCallResponse) {}
+  rpc TestCallStream(TestCallRequest) returns (stream TestCallResponse) {}
+}
+
+message TestCallRequest {
+  string id  = 1;
+}
+
+message TestCallResponse {
+  string id  = 1;
+}

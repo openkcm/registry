@@ -1,0 +1,64 @@
+version: "2"
+linters:
+  default: all
+  disable:
+    - funlen
+    - noctx
+    - noinlineerr
+    - depguard
+    - exhaustruct
+    - ginkgolinter
+    - musttag
+    - nlreturn
+    - tagalign
+    - varnamelen
+    - gochecknoinits
+    - gochecknoglobals
+    - wrapcheck
+    - wsl
+    - godox
+    - protogetter
+    - lll
+    - revive
+    - ireturn
+    - noinlineerr
+    - embeddedstructfieldcheck
+    - wsl_v5
+    - noctx
+    - mnd
+  settings:
+    tagliatelle:
+      case:
+        use-field-name: true
+        rules:
+          json: camel
+    paralleltest:
+      ignore-missing: true
+      ignore-missing-subtests: true
+    testifylint:
+      disable:
+        - require-error
+  exclusions:
+    rules:
+      - path: "_test.go"
+        linters:
+          - funlen
+          - maintidx
+          - goconst
+          - dupl
+      - path: "service/error.go"
+        linters:
+          - ireturn
+formatters:
+  enable:
+    - gci
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.tools.sap/kms/registry)
+        - blank
+        - dot
+        - alias
+        - localmodule

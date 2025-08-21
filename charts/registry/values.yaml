@@ -1,0 +1,348 @@
+# Default values for registry.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+
+# Override the "name" value, which is used to annotate some of
+# the resources that are created by this Chart (using "app.kubernetes.io/name").
+# +docs:property
+nameOverride: ""
+
+# Override the "fullname" value. This value is used as part of
+# most of the names of the resources created by this Helm chart.
+# +docs:property
+fullnameOverride: ""
+
+# This namespace allows you to define where the services are installed into.
+# If not set then they use the namespace of the release.
+# This is helpful when installing a chart dependency (sub chart).
+namespace: ""
+
+# This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+replicaCount: 1
+
+# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
+image:
+  # The container registry to pull the image from.
+  # For example:
+  #   registry: kms.common.repositories.cloud.sap
+  #   repository: cmk
+  # +docs:property
+  registry: kms.common.repositories.cloud.sap
+
+  # The container image
+  # +docs:property
+  repository: registry
+
+  # Override the image tag to deploy by setting this variable.
+  # If no value is set, the chart's appVersion is used.
+  # +docs:property
+  # tag: 0.0.1
+
+  # Setting a digest will override any tag.
+  # +docs:property
+  # digest: sha256:0e072dddd1f7f8fc8909a2ca6f65e76c5f0d2fcfb8be47935ae3457e8bbceb20
+
+  # Kubernetes imagePullPolicy.
+  pullPolicy: IfNotPresent
+
+  # Setting the arguments for the container
+  # +docs:property
+  #args:
+  #  - --graceful-shutdown=2
+  #  - --graceful-shutdown-message="Graceful shutdown in %d seconds"
+
+  # Setting the command
+  # +docs:property
+  #command: "./extension-server"
+
+
+# This is for the secretes for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+imagePullSecrets: []
+  # - name: "registry-access"
+
+# This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# This is for setting Kubernetes Annotations to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+podAnnotations: {}
+# This is for setting Kubernetes Labels to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+podLabels: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+podDisruptionBudget:
+  # Enable or disable the PodDisruptionBudget resource.
+  #
+  # This prevents downtime during voluntary disruptions such as during a Node upgrade.
+  # For example, the PodDisruptionBudget will block `kubectl drain`
+  # Pod is currently running.
+  enabled: false
+
+  # This configures the minimum available pods for disruptions. It can either be set to
+  # an integer (e.g. 1) or a percentage value (e.g. 25%).
+  # It cannot be used if `maxUnavailable` is set.
+  # +docs:property
+  # +docs:type=unknown
+  # minAvailable: 1
+
+  # This configures the maximum unavailable pods for disruptions. It can either be set to
+  # an integer (e.g. 1) or a percentage value (e.g. 25%).
+  # it cannot be used if `minAvailable` is set.
+  # +docs:property
+  # +docs:type=unknown
+  # maxUnavailable: 1
+
+# This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
+service:
+  # Labels to add to the service
+  labels: {}
+  # Annotations to add to the service
+  annotations: {}
+  # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+  type: ClusterIP
+  # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+  ports:
+    - name: grpc
+      protocol: TCP
+      port: 9092
+      targetPort: 9092
+    - name: http-status
+      protocol: TCP
+      port: 8888
+      targetPort: 8888
+
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+livenessProbe: {}
+readinessProbe: {}
+
+# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Additional init containers on the output Deployment definition.
+extraInitContainers: []
+
+# Additional containers on the output Deployment definition.
+extraContainers: []
+
+# Additional volumes on the output Deployment definition.
+extraVolumes: []
+# - name: foo
+#   secret:
+#     secretName: mysecret
+#     optional: false
+
+# Additional volumeMounts on the output Deployment definition.
+extraVolumeMounts: []
+# - name: foo
+#   mountPath: "/etc/foo"
+#   readOnly: true
+
+# Additional ens on the output Deployment definition.
+extraEnvs: []
+# Additional envsFrom on the output Deployment definition.
+extraEnvsFrom: []
+
+nodeSelector: {}
+
+tolerations: []
+
+ports:
+  - name: grpc
+    containerPort: 9092
+    protocol: TCP
+  - name: http-status
+    containerPort: 8888
+    protocol: TCP
+
+affinity: {}
+
+config:
+  # Debug mode for the service includes gRPC reflection
+  debugMode: true
+  # Database configuration
+  database:
+    host: "to be set"
+    port: 5432
+    name: "registry"
+    user:
+      source: "embedded"
+      value: "to be set"
+    password:
+      source: "embedded"
+      value: "to be set"
+
+  application:
+    name: registry
+    environment: production
+
+  grpcServer:
+    address: :9092
+    attributes:
+      # maxConnectionIdle is a duration for the amount of time after which an idle connection would be closed by sending a GoAway.
+      maxConnectionIdle: 300s # the default value is infinity.
+
+      # maxConnectionAge is a duration for the maximum amount of time a connection may exist before it will be closed by sending a GoAway.
+      maxConnectionAge: 1800s # the default value is infinity.
+
+      # maxConnectionAgeGrace is an additive period after MaxConnectionAge after which the connection will be forcibly closed.
+      maxConnectionAgeGrace: 5s # the default value is infinity.
+
+      # After a duration of this time, if the server doesn't see any activity, it pings the client to see if the transport is still alive.
+      time: 7200s # the default value is 2 hours.
+
+      # After having pinged for keepalive check, the server waits for a duration of Timeout, and if no activity is seen even after that, the connection is closed.
+      timeout: 20s # the default value is 20 seconds.
+
+    # efPolMinTime is a minimum amount of time a client should wait before sending a keepalive ping.
+    efPolMinTime: 300s # the default value is 5 minutes.
+
+    # If true, the server allows keepalive pings even when there are no active streams(RPCs).
+    # If false, and the client sends ping when there are no active streams, the server will send GOAWAY and close the connection.
+    efPolPermitWithoutStream: false # default value is false.
+
+    maxRecvMsgSize: 4194304 # in bytes (4 MB), the default value is 4 MB.
+
+    clientAttributes:
+      # Defines how often the client sends keepalive pings to the server.
+      keepaliveTime: 1s
+      # Specifies how long the client waits for a response to a keepalive ping before considering the connection dead.
+      keepaliveTimeout: 1s
+
+  # Configuration for the orbital service for tenant provisioning.
+  orbital:
+    # confirmJobDelay is the delay before confirming a job. Use time.Duration syntax, e.g. 10ms, 1s, 5m, etc.
+    confirmJobDelay: 0
+    # taskLimitNum is the maximum number of tasks to process concurrently.
+    taskLimitNum: 10
+    # maxReconcileCount is the maximum number of times a task can be reconciled.
+    maxReconcileCount: 10
+    # backoffBaseIntervalSec is the base interval for exponential backoff in seconds.
+    backoffBaseIntervalSec: 2
+    # backoffMaxIntervalSec is the maximum interval for exponential backoff in seconds.
+    backoffMaxIntervalSec: 240
+    # targets defines the regions and their respective connection configurations.
+    # Regions must match the tenant regions defined in the registry.
+    targets:
+#      # Example target configuration, replace with actual values.
+#      - region: "to be set"
+#        connection:
+#          # type defines the connection type to the target, only amqp is supported at the moment.
+#          type: amqp
+#          amqp:
+#            # url is the AMQP URL to connect to the message broker including port, e.g. amqps://my-broker-host:5671
+#            url: "amqps://<to be set>"
+#            # source defines the queue to consume messages from, e.g. cmk/global/tenants
+#            source: "to be set"
+#            # target defines the topic to publish messages to, e.g. cmk/emea/tenants
+#            target: "to be set"
+#          auth:
+#            # type defines the authentication method, currently only none and mtls are supported.
+#            type: mtls
+#            # mtls contains the configuration for mutual TLS authentication.
+#            mtls:
+#              # certFile is the path to the client certificate file.
+#              certFile: /etc/certs/tls.crt
+#              # keyFile is the path to the client private key file.
+#              keyFile: /etc/certs/tls.key
+#              # caFile is the path to the CA certificate file for verifying the server certificate.
+#              caFile: /etc/certs/ca.crt
+    # workers defines the configurations for the orbital workers. Existing workers are:
+    # confirm-job, create-task, reconcile, and notify-event.
+    # Each worker has a name, number of workers, execution interval, and timeout.
+    # For execution interval and timeout, use time.Duration syntax, e.g. 1s, 100ms, etc.
+    workers:
+      - name: confirm-job
+        noOfWorkers: 1
+        execInterval: 1s
+        timeout: 5s
+      - name: create-task
+        noOfWorkers: 1
+        execInterval: 1s
+        timeout: 5s
+      - name: reconcile
+        noOfWorkers: 1
+        execInterval: 1s
+        timeout: 5s
+      - name: notify-event
+        noOfWorkers: 1
+        execInterval: 1s
+        timeout: 5s
+
+  status:
+    enabled: true
+    address: :8888
+    profiling: true
+
+  logger:
+    level: info # one of: debug, info, warn, error
+    format: text # one of: json, text
+    source: false
+
+  telemetry:
+    traces:
+      enabled: true
+      protocol: grpc
+      host:
+        source: env
+        env: OTEL_HOST
+      secretRef:
+        type: insecure
+
+    metrics:
+      enabled: true
+      protocol: grpc
+      prometheus:
+        enabled: true
+      host:
+        source: env
+        env: OTEL_HOST
+      secretRef:
+        type: insecure
+
+    logs:
+      enabled: true
+      protocol: grpc
+      host:
+        source: env
+        env: OTEL_HOST
+      secretRef:
+        type: insecure
