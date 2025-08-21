@@ -294,6 +294,7 @@ func (t *Tenant) RemoveTenantLabels(ctx context.Context, in *tenantgrpc.RemoveTe
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRequest) error {
 	id := model.ID(in.GetId())
+
 	err := id.Validate()
 	if err != nil {
 		return err
@@ -304,6 +305,7 @@ func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRe
 	}
 
 	labels := model.Labels(in.GetLabels())
+
 	err = labels.Validate()
 	if err != nil {
 		return err
@@ -316,6 +318,7 @@ func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRe
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (t *Tenant) validateRemoveTenantLabelsRequest(in *tenantgrpc.RemoveTenantLabelsRequest) error {
 	id := model.ID(in.GetId())
+
 	err := id.Validate()
 	if err != nil {
 		return err
@@ -394,6 +397,7 @@ func getTenant(ctx context.Context, r repository.Repository, id model.ID) (*mode
 
 func (t *Tenant) buildListTenantsQuery(in *tenantgrpc.ListTenantsRequest) (*repository.Query, error) {
 	query := repository.NewQuery(&model.Tenant{})
+
 	err := query.ApplyPagination(in.GetLimit(), in.GetPageToken())
 	if err != nil {
 		return nil, err
