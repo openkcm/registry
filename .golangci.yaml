@@ -4,7 +4,6 @@ linters:
   disable:
     - funlen
     - noctx
-    - noinlineerr
     - depguard
     - exhaustruct
     - ginkgolinter
@@ -21,9 +20,6 @@ linters:
     - lll
     - revive
     - ireturn
-    - noinlineerr
-    - embeddedstructfieldcheck
-    - wsl_v5
     - noctx
     - mnd
   settings:
