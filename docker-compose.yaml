@@ -1,0 +1,108 @@
+networks:
+  registry-service:
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+    command: [ "postgres", "-c", "log_statement=all" ] # log all queries into the container log file
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./local/postgres/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - registry-service
+
+  rabbitmq:
+    image: rabbitmq:4
+    ports:
+      - "5671:5671"
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - registry-service
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - ./local/rabbitmq/certs:/etc/rabbitmq/certs:ro
+      - ./local/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./local/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./local/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+
+  registry-service:
+    image: registry-service:dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./local/registry/config.yaml:/etc/registry/config.yaml
+      - ./local/rabbitmq/certs:/etc/registry/certs:ro
+    ports:
+      - "8888:8888"
+      - "9092:9092"
+    environment:
+      OTEL_HOST: "otel-collector:4317"
+      DATABASE_HOST: "postgres"
+    healthcheck:
+      test: ["CMD", "/grpc-health-probe", "-addr=localhost:9092"]
+      interval: 1s
+      timeout: 5s
+      retries: 5
+    networks:
+      - registry-service
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./local/prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.enable-lifecycle'
+    networks:
+      - registry-service
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    ports:
+      - "3004:3000"
+    restart: unless-stopped
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./local/grafana/provisioning:/etc/grafana/provisioning
+      - ./local/grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - registry-service
+
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    volumes:
+      - ./local/telemetry/config.yaml:/etc/telemetry/config.yaml
+    command: [ "--config=/etc/telemetry/config.yaml" ]
+    ports:
+      - "4317:4317"
+    networks:
+      - registry-service
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  pg_data:
+

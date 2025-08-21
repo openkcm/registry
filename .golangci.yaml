@@ -1,100 +1,61 @@
 version: "2"
-
-run:
-  concurrency: 4
-  timeout: 10m
-
 linters:
   default: all
   disable:
-    - bodyclose
-    - gomoddirectives
-    - contextcheck
-    - cyclop
-    - depguard
-    - dupl
-    - err113
-    - exhaustive
-    - exhaustruct
-    - forbidigo
+    - noinlineerr
     - funlen
+    - noctx
+    - depguard
+    - exhaustruct
     - ginkgolinter
-    - gochecknoglobals
-    - gochecknoinits
-    - gocognit
-    - gocritic
-    - godot
-    - godox
-    - gosec
-    - ireturn
-    - lll
-    - mnd
     - musttag
-    - nestif
     - nlreturn
-    - revive
     - tagalign
-    - testpackage
-    - unparam
     - varnamelen
+    - gochecknoinits
+    - gochecknoglobals
     - wrapcheck
     - wsl
+    - godox
+    - protogetter
+    - lll
+    - revive
+    - ireturn
+    - noctx
+    - mnd
   settings:
+    tagliatelle:
+      case:
+        use-field-name: true
+        rules:
+          json: camel
     paralleltest:
       ignore-missing: true
       ignore-missing-subtests: true
-    tagliatelle:
-      case:
-        rules:
-          json: camel
-        use-field-name: true
     testifylint:
       disable:
         - require-error
   exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
     rules:
-      - linters:
-          - dupl
+      - path: "_test.go"
+        linters:
           - funlen
           - maintidx
-        source: ^func Test
-      - linters:
-          - dupl
-          - funlen
-          - gocognit
           - goconst
-          - maintidx
-        path: (.+)_test\.go
-    paths:
-      - vendor
-      - third_party$
-      - builtin$
-      - examples$
+          - dupl
+      - path: "service/error.go"
+        linters:
+          - ireturn
 formatters:
   enable:
     - gci
-    - gofmt
-    - goimports
   settings:
     gci:
       sections:
         - standard
         - default
-        - prefix(github.com/openkcm/checker)
+        - prefix(github.tools.sap/kms/registry)
         - blank
         - dot
         - alias
         - localmodule
-  exclusions:
-    generated: lax
-    paths:
-      - vendor
-      - third_party$
-      - builtin$
-      - examples$

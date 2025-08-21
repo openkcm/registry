@@ -1,0 +1,127 @@
+debugMode: true
+
+database:
+  host: "localhost"
+  port: 5432
+  name: "registry"
+  user:
+    source: "embedded"
+    value: "postgres"
+  password:
+    source: "embedded"
+    value: "secret"
+
+application:
+  name: registry
+  environment: development
+
+grpcServer:
+  address: :9092
+  attributes:
+    # maxConnectionIdle is a duration for the amount of time after which an idle connection would be closed by sending a GoAway.
+    maxConnectionIdle: 300s # the default value is infinity.
+
+    # maxConnectionAge is a duration for the maximum amount of time a connection may exist before it will be closed by sending a GoAway.
+    maxConnectionAge: 1800s # the default value is infinity.
+
+    # maxConnectionAgeGrace is an additive period after MaxConnectionAge after which the connection will be forcibly closed.
+    maxConnectionAgeGrace: 5s # the default value is infinity.
+
+    # After a duration of this time, if the server doesn't see any activity, it pings the client to see if the transport is still alive.
+    time: 7200s # the default value is 2 hours.
+
+    # After having pinged for keepalive check, the server waits for a duration of Timeout, and if no activity is seen even after that, the connection is closed.
+    timeout: 20s # the default value is 20 seconds.
+
+  # efPolMinTime is a minimum amount of time a client should wait before sending a keepalive ping.
+  efPolMinTime: 300s # the default value is 5 minutes.
+
+  # If true, the server allows keepalive pings even when there are no active streams(RPCs).
+  # If false, and the client sends ping when there are no active streams, the server will send GOAWAY and close the connection.
+  efPolPermitWithoutStream: false # default value is false.
+
+  maxRecvMsgSize: 4194304 # in bytes (4 MB), the default value is 4 MB.
+
+  clientAttributes:
+    # Defines how often the client sends keepalive pings to the server.
+    keepaliveTime: 1s
+    # Specifies how long the client waits for a response to a keepalive ping before considering the connection dead.
+    keepaliveTimeout: 1s
+
+orbital:
+  confirmJobDelay: 0
+  taskLimitNum: 10
+  maxReconcileCount: 10
+  backoffBaseIntervalSec: 2
+  backoffMaxIntervalSec: 240
+  targets:
+    - region: test-region
+      connection:
+        type: amqp
+        amqp:
+          url: "amqps://rabbitmq:5671"
+          source: "cmk.global.tenants"
+          target: "cmk.emea.tenants"
+        auth:
+          type: mtls
+          mtls:
+            certFile: /etc/registry/certs/client.crt
+            keyFile: /etc/registry/certs/client.key
+            caFile: /etc/registry/certs/ca.crt
+  workers:
+    - name: confirm-job
+      noOfWorkers: 1
+      execInterval: 100ms
+      timeout: 100ms
+    - name: create-task
+      noOfWorkers: 1
+      execInterval: 100ms
+      timeout: 100ms
+    - name: reconcile
+      noOfWorkers: 1
+      execInterval: 100ms
+      timeout: 100ms
+    - name: notify-event
+      noOfWorkers: 1
+      execInterval: 100ms
+      timeout: 100ms
+
+status:
+  enabled: true
+  address: :8888
+  profiling: true
+
+logger:
+  level: info # one of: debug, info, warn, error
+  format: text # one of: json, text
+  source: false
+
+telemetry:
+  traces:
+    enabled: true
+    protocol: grpc
+    host:
+      source: env
+      env: OTEL_HOST
+    secretRef:
+      type: insecure
+
+  metrics:
+    enabled: true
+    protocol: grpc
+    prometheus:
+      enabled: true
+    host:
+      source: env
+      env: OTEL_HOST
+    secretRef:
+      type: insecure
+
+  logs:
+    enabled: true
+    protocol: grpc
+    host:
+      source: env
+      env: OTEL_HOST
+    secretRef:
+      type: insecure

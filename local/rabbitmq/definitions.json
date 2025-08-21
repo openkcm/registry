@@ -1,0 +1,47 @@
+{
+  "users": [
+    {
+      "name": "client",
+      "password_hash": "vo7zO26JVjQRvsfeZpy2EYBcZ6xAQMWQKyJ8SvekDUdOODpM",
+      "tags": "administrator"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "client",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "/",
+      "description": "",
+      "metadata": {
+        "description": "",
+        "tags": [],
+        "default_queue_type": "classic"
+      },
+      "tags": [],
+      "default_queue_type": "classic"
+    }
+  ],
+  "queues": [
+    {
+      "name": "cmk.global.tenants",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "cmk.emea.tenants",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ]
+}

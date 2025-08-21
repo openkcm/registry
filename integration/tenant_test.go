@@ -1,0 +1,1116 @@
+//go:build integration
+// +build integration
+
+package integration_test
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"gorm.io/gorm"
+
+	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
+
+	"github.com/openkcm/registry/integration/operatortest"
+	"github.com/openkcm/registry/internal/model"
+	"github.com/openkcm/registry/internal/repository/sql"
+	"github.com/openkcm/registry/internal/service"
+)
+
+func TestTenantReconciliation(t *testing.T) {
+	// given
+	conn, err := newGRPCClientConn()
+	require.NoError(t, err)
+	defer conn.Close()
+
+	tSubj := tenantgrpc.NewServiceClient(conn)
+
+	ctx := t.Context()
+	db, err := startDB()
+	require.NoError(t, err)
+
+	operator, err := operatortest.New(ctx)
+	require.NoError(t, err)
+	go operator.ListenAndRespond(ctx)
+
+	const (
+		tenantIDFail    = "test-tenant-fail"
+		tenantIDSuccess = "test-tenant-success"
+		tenantRegion    = "test-region"
+	)
+
+	t.Run("ProvisionTenant", func(t *testing.T) {
+		tests := []struct {
+			name           string
+			tenantID       string
+			region         string
+			expectedStatus tenantgrpc.Status
+		}{
+			{
+				name:           "should change status to PROVISIONING_ERROR if region is not found",
+				tenantID:       "test-tenant-cancel",
+				region:         "non-existing-region",
+				expectedStatus: tenantgrpc.Status_STATUS_PROVISIONING_ERROR,
+			},
+			{
+				name:           "should change status to PROVISIONING_ERROR if operator fails to process the request",
+				tenantID:       tenantIDFail,
+				region:         tenantRegion,
+				expectedStatus: tenantgrpc.Status_STATUS_PROVISIONING_ERROR,
+			},
+			{
+				name:           "should change status to ACTIVE if tenant is provisioned successfully",
+				tenantID:       tenantIDSuccess,
+				region:         tenantRegion,
+				expectedStatus: tenantgrpc.Status_STATUS_ACTIVE,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// given
+				req := validRegisterTenantReq()
+				req.Id = tt.tenantID
+				req.Region = tt.region
+
+				// when
+				_, err := tSubj.RegisterTenant(ctx, req)
+				assert.NoError(t, err)
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req.GetId())})
+					assert.NoError(t, err)
+				}()
+
+				// then
+				err = waitForReconciliation(ctx, tSubj, req.GetId(), tt.expectedStatus)
+				assert.NoError(t, err)
+			})
+		}
+	})
+
+	t.Run("BlockTenant", func(t *testing.T) {
+		tests := []struct {
+			name           string
+			tenantID       string
+			expectedStatus tenantgrpc.Status
+		}{
+			{
+				name:           "should change status to BLOCKING_ERROR if operator fails to process the request",
+				tenantID:       tenantIDFail,
+				expectedStatus: tenantgrpc.Status_STATUS_BLOCKING_ERROR,
+			},
+			{
+				name:           "should change status to BLOCKED if tenant is blocked successfully",
+				tenantID:       tenantIDSuccess,
+				expectedStatus: tenantgrpc.Status_STATUS_BLOCKED,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// given
+				tenant := validTenant()
+				tenant.ID = model.ID(tt.tenantID)
+				tenant.Region = tenantRegion
+				err := createTenantInDB(ctx, db, tenant)
+				assert.NoError(t, err)
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				_, err = tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
+					Id: tenant.ID.String(),
+				})
+				assert.NoError(t, err)
+
+				// then
+				err = waitForReconciliation(ctx, tSubj, tenant.ID.String(), tt.expectedStatus)
+				assert.NoError(t, err)
+			})
+		}
+	})
+
+	t.Run("UnblockTenant", func(t *testing.T) {
+		tests := []struct {
+			name           string
+			tenantID       string
+			expectedStatus tenantgrpc.Status
+		}{
+			{
+				name:           "should change status to UNBLOCKING_ERROR if operator fails to process the request",
+				tenantID:       tenantIDFail,
+				expectedStatus: tenantgrpc.Status_STATUS_UNBLOCKING_ERROR,
+			},
+			{
+				name:           "should change status to ACTIVE if tenant is unblocked successfully",
+				tenantID:       tenantIDSuccess,
+				expectedStatus: tenantgrpc.Status_STATUS_ACTIVE,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// given
+				tenant := validTenant()
+				tenant.ID = model.ID(tt.tenantID)
+				tenant.Region = tenantRegion
+				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+				err := createTenantInDB(ctx, db, tenant)
+				assert.NoError(t, err)
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				_, err = tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
+					Id: tenant.ID.String(),
+				})
+				assert.NoError(t, err)
+
+				// then
+				err = waitForReconciliation(ctx, tSubj, tenant.ID.String(), tt.expectedStatus)
+				assert.NoError(t, err)
+			})
+		}
+	})
+
+	t.Run("TerminateTenant", func(t *testing.T) {
+		tests := []struct {
+			name           string
+			tenantID       string
+			expectedStatus tenantgrpc.Status
+		}{
+			{
+				name:           "should change status to TERMINATION_ERROR if operator fails to process the request",
+				tenantID:       tenantIDFail,
+				expectedStatus: tenantgrpc.Status_STATUS_TERMINATION_ERROR,
+			},
+			{
+				name:           "should change status to TERMINATED if tenant is terminated successfully",
+				tenantID:       tenantIDSuccess,
+				expectedStatus: tenantgrpc.Status_STATUS_TERMINATED,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// given
+				tenant := validTenant()
+				tenant.ID = model.ID(tt.tenantID)
+				tenant.Region = tenantRegion
+				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+				err := createTenantInDB(ctx, db, tenant)
+				assert.NoError(t, err)
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				_, err = tSubj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
+					Id: tenant.ID.String(),
+				})
+				assert.NoError(t, err)
+
+				// then
+				err = waitForReconciliation(ctx, tSubj, tenant.ID.String(), tt.expectedStatus)
+				assert.NoError(t, err)
+			})
+		}
+	})
+}
+
+func waitForReconciliation(ctx context.Context, tSubj tenantgrpc.ServiceClient, tenantID string, expectedStatus tenantgrpc.Status) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	currentStatus := tenantgrpc.Status_STATUS_UNSPECIFIED
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%w; expected status: %s; current status: %s", ctx.Err(), expectedStatus, currentStatus)
+		default:
+			resp, err := tSubj.ListTenants(ctx, &tenantgrpc.ListTenantsRequest{
+				Id: tenantID,
+			})
+			if err != nil {
+				return err
+			}
+			if resp.GetTenants()[0].GetStatus() == expectedStatus {
+				return nil
+			}
+
+			currentStatus = resp.GetTenants()[0].GetStatus()
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func TestTenantService(t *testing.T) {
+	// given
+	conn, err := newGRPCClientConn()
+	require.NoError(t, err)
+	defer conn.Close()
+
+	tSubj := tenantgrpc.NewServiceClient(conn)
+
+	ctx := t.Context()
+	db, err := startDB()
+	require.NoError(t, err)
+
+	t.Run("RegisterTenant", func(t *testing.T) {
+		t.Run("should return an error if", func(t *testing.T) {
+			// given
+			invalidRequests := map[string]*tenantgrpc.RegisterTenantRequest{
+				"one argument is empty": {
+					Id:        validRandID(),
+					Region:    "region",
+					OwnerId:   "",
+					OwnerType: "owner_type",
+					Role:      tenantgrpc.Role_ROLE_TEST,
+				},
+				"request is empty": {},
+			}
+
+			for reason, req := range invalidRequests {
+				t.Run(reason, func(t *testing.T) {
+					// when
+					resp, err := tSubj.RegisterTenant(ctx, req)
+
+					// then
+					assert.Error(t, err)
+					assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+					assert.Nil(t, resp)
+				})
+			}
+
+			t.Run("ID is found to already exist", func(t *testing.T) {
+				// given
+				req := &tenantgrpc.RegisterTenantRequest{
+					Name:      "SuccessFactor",
+					Id:        validRandID(),
+					Region:    "region",
+					OwnerId:   "customer-123",
+					OwnerType: "owner_type",
+					Role:      tenantgrpc.Role_ROLE_TEST,
+				}
+
+				// when
+				firstResp, err := tSubj.RegisterTenant(ctx, req)
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req.GetId())})
+					assert.NoError(t, err)
+				}()
+
+				// then
+				assert.NoError(t, err)
+				assert.NotNil(t, firstResp)
+
+				// when
+				secondResp, err := tSubj.RegisterTenant(ctx, req)
+
+				// then
+				assert.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Nil(t, secondResp)
+			})
+		})
+
+		t.Run("should succeed", func(t *testing.T) {
+			// given
+			req := &tenantgrpc.RegisterTenantRequest{
+				Name:      "SuccessFactor",
+				Id:        validRandID(),
+				Region:    "region",
+				OwnerId:   "customer-123",
+				OwnerType: "owner_type",
+				Role:      tenantgrpc.Role_ROLE_TEST,
+				Labels: map[string]string{
+					"key1": "value1",
+					"key2": "value2",
+				},
+			}
+
+			// when
+			resp, err := tSubj.RegisterTenant(ctx, req)
+			defer func() {
+				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req.GetId())})
+				assert.NoError(t, err)
+			}()
+
+			// then
+			assert.Equal(t, req.Id, resp.GetId())
+			assert.NoError(t, err)
+		})
+	})
+
+	t.Run("ListTenants", func(t *testing.T) {
+		t.Run("should return error given no entries exist if", func(t *testing.T) {
+			// given
+			tests := []struct {
+				name    string
+				request *tenantgrpc.ListTenantsRequest
+			}{
+				{
+					name:    "no filters are provided",
+					request: &tenantgrpc.ListTenantsRequest{},
+				},
+				{
+					name: "only id filter is provided",
+					request: &tenantgrpc.ListTenantsRequest{
+						Id: validRandID(),
+					},
+				},
+				{
+					name: "only name filter is provided",
+					request: &tenantgrpc.ListTenantsRequest{
+						Name: "some-name",
+					},
+				},
+				{
+					name: "only Region filter is provided",
+					request: &tenantgrpc.ListTenantsRequest{
+						Region: "CMK_REGION_EU",
+					},
+				},
+				{
+					name: "only OwnerID filter is provided",
+					request: &tenantgrpc.ListTenantsRequest{
+						OwnerId: "some-owner-id",
+					},
+				},
+				{
+					name: "only OwnerType filter is provided",
+					request: &tenantgrpc.ListTenantsRequest{
+						OwnerType: "owner_type",
+					},
+				},
+				{
+					name: "all filter are provided",
+					request: &tenantgrpc.ListTenantsRequest{
+						Id:        validRandID(),
+						Name:      "some-name",
+						Region:    "region",
+						OwnerId:   "customer-123",
+						OwnerType: "owner_type",
+					},
+				},
+			}
+
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					// when
+					result, err := tSubj.ListTenants(ctx, tt.request)
+
+					// then
+					assert.Error(t, err)
+					assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+					assert.Nil(t, result)
+				})
+			}
+		})
+
+		t.Run("given entries exist", func(t *testing.T) {
+			// given
+			req1 := &tenantgrpc.RegisterTenantRequest{
+				Name:      "SuccessFactor",
+				Id:        validRandID(),
+				Region:    "region",
+				OwnerId:   "customer-123",
+				OwnerType: "owner_type",
+				Role:      tenantgrpc.Role_ROLE_TEST,
+				Labels: map[string]string{
+					"key11": "value11",
+					"key12": "value12",
+				},
+			}
+			resp1, err := tSubj.RegisterTenant(ctx, req1)
+			assert.NoError(t, err)
+			defer func() {
+				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req1.GetId())})
+				assert.NoError(t, err)
+			}()
+
+			time.Sleep(time.Millisecond)
+
+			req2 := &tenantgrpc.RegisterTenantRequest{
+				Name:      "Ariba",
+				Id:        validRandID(),
+				Region:    "region-2",
+				OwnerId:   "cost-center-999",
+				OwnerType: "cost-center",
+				Role:      tenantgrpc.Role_ROLE_TEST,
+				Labels: map[string]string{
+					"key21": "value21",
+					"key22": "value22",
+				},
+			}
+			resp2, err := tSubj.RegisterTenant(ctx, req2)
+			assert.NoError(t, err)
+			defer func() {
+				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req2.GetId())})
+				assert.NoError(t, err)
+			}()
+
+			t.Run("should return all tenants if no filter is applied", func(t *testing.T) {
+				// when
+				resp, err := tSubj.ListTenants(ctx, &tenantgrpc.ListTenantsRequest{})
+
+				// then
+				assert.NoError(t, err)
+				assert.Len(t, resp.GetTenants(), 2)
+				assert.Empty(t, resp.GetNextPageToken())
+				assertEqualValues(t, req1, resp.Tenants[1])
+				assert.Equal(t, tenantgrpc.Status_STATUS_PROVISIONING, resp.Tenants[1].Status)
+				assertEqualValues(t, req2, resp.Tenants[0])
+				assert.Equal(t, tenantgrpc.Status_STATUS_PROVISIONING, resp.Tenants[0].Status)
+			})
+
+			t.Run("should return tenant filtered by", func(t *testing.T) {
+				// given
+				tests := []struct {
+					name             string
+					request          *tenantgrpc.ListTenantsRequest
+					expectedTenantID string
+				}{
+					{
+						name: "ID",
+						request: &tenantgrpc.ListTenantsRequest{
+							Id: resp1.GetId(),
+						},
+						expectedTenantID: resp1.GetId(),
+					},
+					{
+						name: "Name",
+						request: &tenantgrpc.ListTenantsRequest{
+							Name: req2.Name,
+						},
+						expectedTenantID: resp2.GetId(),
+					},
+					{
+						name: "Region",
+						request: &tenantgrpc.ListTenantsRequest{
+							Region: req2.Region,
+						},
+						expectedTenantID: resp2.GetId(),
+					},
+					{
+						name: "OwnerID",
+						request: &tenantgrpc.ListTenantsRequest{
+							OwnerId: req1.OwnerId,
+						},
+						expectedTenantID: resp1.GetId(),
+					},
+					{
+						name: "OwnerType",
+						request: &tenantgrpc.ListTenantsRequest{
+							OwnerType: req2.OwnerType,
+						},
+						expectedTenantID: resp2.GetId(),
+					},
+				}
+
+				for _, test := range tests {
+					t.Run(test.name, func(t *testing.T) {
+						// when
+						list, err := tSubj.ListTenants(ctx, test.request)
+
+						// then
+						assert.NoError(t, err)
+						assert.Len(t, list.GetTenants(), 1)
+						assert.Equal(t, test.expectedTenantID, list.GetTenants()[0].Id)
+					})
+				}
+			})
+		})
+	})
+
+	t.Run("BlockTenant", func(t *testing.T) {
+		t.Run("should return an error if", func(t *testing.T) {
+			t.Run("tenant cannot be found", func(t *testing.T) {
+				// when
+				resp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
+					Id: validRandID(),
+				})
+
+				// then
+				assert.Nil(t, resp)
+				assert.Error(t, err)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+			})
+
+			t.Run("tenant is in a state that prevents blocking", func(t *testing.T) {
+				// given
+				state := model.TenantStatus(tenantgrpc.Status_STATUS_PROVISIONING.String())
+				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
+				assert.NoError(t, err)
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				resp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
+					Id: tenant.ID.String(),
+				})
+
+				// then
+				assert.Nil(t, resp)
+				assert.Error(t, err)
+				assert.Equal(t, codes.FailedPrecondition, status.Code(err), err.Error())
+			})
+
+		})
+
+		t.Run("should succeed if tenant is active", func(t *testing.T) {
+			// given
+			state := model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String())
+			tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
+			assert.NoError(t, err)
+
+			defer func() {
+				err = deleteTenantFromDB(ctx, db, tenant)
+				assert.NoError(t, err)
+			}()
+
+			expStatus := tenantgrpc.Status_STATUS_BLOCKING
+
+			// when
+			utResp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
+				Id: tenant.ID.String(),
+			})
+
+			// then
+			assert.NoError(t, err)
+			assert.NotNil(t, utResp)
+			ltResp, err := listTenants(ctx, tSubj)
+			assert.NoError(t, err)
+			assert.Len(t, ltResp.Tenants, 1)
+			assert.Equal(t, expStatus, ltResp.Tenants[0].Status)
+		})
+	})
+
+	t.Run("UnblockTenant", func(t *testing.T) {
+		t.Run("should return an error if", func(t *testing.T) {
+			t.Run("tenant cannot be found", func(t *testing.T) {
+				// when
+				resp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
+					Id: validRandID(),
+				})
+
+				// then
+				assert.Nil(t, resp)
+				assert.Error(t, err)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+			})
+
+			t.Run("tenant is in a state that prevents unblocking", func(t *testing.T) {
+				// given
+				state := model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATED.String())
+				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
+				assert.NoError(t, err)
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				resp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
+					Id: tenant.ID.String(),
+				})
+
+				// then
+				assert.Nil(t, resp)
+				assert.Error(t, err)
+				assert.Equal(t, codes.FailedPrecondition, status.Code(err), err.Error())
+			})
+		})
+
+		t.Run("should succeed if tenant is blocked", func(t *testing.T) {
+			// given
+			state := model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+			tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
+			assert.NoError(t, err)
+
+			defer func() {
+				err = deleteTenantFromDB(ctx, db, tenant)
+				assert.NoError(t, err)
+			}()
+
+			expStatus := tenantgrpc.Status_STATUS_UNBLOCKING
+
+			// when
+			utResp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
+				Id: tenant.ID.String(),
+			})
+
+			// then
+			assert.NoError(t, err)
+			assert.NotNil(t, utResp)
+			ltResp, err := listTenants(ctx, tSubj)
+			assert.NoError(t, err)
+			assert.Len(t, ltResp.Tenants, 1)
+			assert.Equal(t, expStatus, ltResp.Tenants[0].Status)
+		})
+	})
+
+	t.Run("TerminateTenant", func(t *testing.T) {
+		t.Run("should return an error if", func(t *testing.T) {
+			t.Run("tenant cannot be found", func(t *testing.T) {
+				// when
+				resp, err := tSubj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
+					Id: validRandID(),
+				})
+
+				// then
+				assert.Nil(t, resp)
+				assert.Error(t, err)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+			})
+
+			t.Run("tenant is in a state that prevents terminating", func(t *testing.T) {
+				// given
+				state := model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATING.String())
+				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
+				assert.NoError(t, err)
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				resp, err := tSubj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
+					Id: tenant.ID.String(),
+				})
+
+				// then
+				assert.Nil(t, resp)
+				assert.Error(t, err)
+				assert.Equal(t, codes.FailedPrecondition, status.Code(err), err.Error())
+			})
+		})
+
+		t.Run("should succeed if tenant is blocked", func(t *testing.T) {
+			// given
+			state := model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+			tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
+			assert.NoError(t, err)
+
+			defer func() {
+				err = deleteTenantFromDB(ctx, db, tenant)
+				assert.NoError(t, err)
+			}()
+
+			expStatus := tenantgrpc.Status_STATUS_TERMINATING
+
+			// when
+			utResp, err := tSubj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
+				Id: tenant.ID.String(),
+			})
+
+			// then
+			assert.NoError(t, err)
+			assert.NotNil(t, utResp)
+			ltResp, err := listTenants(ctx, tSubj)
+			assert.NoError(t, err)
+			assert.Len(t, ltResp.Tenants, 1)
+			assert.Equal(t, expStatus, ltResp.Tenants[0].Status)
+		})
+	})
+
+	t.Run("SetTenantLabels", func(t *testing.T) {
+		t.Run("should succeed if", func(t *testing.T) {
+			t.Run("request is valid", func(t *testing.T) {
+				// given
+				// For creating a tenant with a specific status, direct database access is needed
+				tenant, err := persistTenant(ctx, db, validRandID(),
+					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
+				assert.NoError(t, err)
+
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				res, err := tSubj.SetTenantLabels(ctx, &tenantgrpc.SetTenantLabelsRequest{
+					Id: tenant.ID.String(),
+					Labels: map[string]string{
+						"key1": "value12",
+						"key3": "value3",
+					},
+				})
+
+				// then
+				assert.NoError(t, err)
+				assert.NotNil(t, res)
+				assert.True(t, res.GetSuccess())
+				actTenants, err := listTenants(ctx, tSubj)
+				assert.NoError(t, err)
+				assert.Len(t, actTenants.GetTenants(), 1)
+				assert.Equal(t, 3, len(actTenants.GetTenants()[0].GetLabels()))
+				assert.Equal(t, "value12", actTenants.GetTenants()[0].GetLabels()["key1"])
+				assert.Equal(t, "value2", actTenants.GetTenants()[0].GetLabels()["key2"])
+				assert.Equal(t, "value3", actTenants.GetTenants()[0].GetLabels()["key3"])
+			})
+		})
+
+		t.Run("should return error if", func(t *testing.T) {
+			t.Run("ID is empty", func(t *testing.T) {
+				// when
+				res, err := tSubj.SetTenantLabels(ctx, &tenantgrpc.SetTenantLabelsRequest{
+					Id: "",
+					Labels: map[string]string{
+						"key1": "value1",
+					},
+				})
+
+				// then
+				assert.Error(t, err)
+				assert.ErrorIs(t, model.ErrEmptyID, err)
+				assert.Nil(t, res)
+			})
+			t.Run("labels are empty", func(t *testing.T) {
+				// when
+				res, err := tSubj.SetTenantLabels(ctx, &tenantgrpc.SetTenantLabelsRequest{
+					Id: "ID1",
+				})
+
+				// then
+				assert.Error(t, err)
+				assert.ErrorIs(t, service.ErrMissingLabels, err)
+				assert.Nil(t, res)
+			})
+			t.Run("labels keys are empty", func(t *testing.T) {
+				// when
+				res, err := tSubj.SetTenantLabels(ctx, &tenantgrpc.SetTenantLabelsRequest{
+					Id: "ID1",
+					Labels: map[string]string{
+						"": "value1",
+					},
+				})
+
+				// then
+				assert.Error(t, err)
+				assert.ErrorIs(t, model.ErrLabelsIncludeEmptyString, err)
+				assert.Nil(t, res)
+			})
+			t.Run("labels values are empty", func(t *testing.T) {
+				// when
+				res, err := tSubj.SetTenantLabels(ctx, &tenantgrpc.SetTenantLabelsRequest{
+					Id: "ID1",
+					Labels: map[string]string{
+						"key1": "",
+					},
+				})
+
+				// then
+				assert.Error(t, err)
+				assert.ErrorIs(t, model.ErrLabelsIncludeEmptyString, err)
+				assert.Nil(t, res)
+			})
+			t.Run("tenant to update is not present in the database", func(t *testing.T) {
+				// when
+				id := uuid.NewString()
+				res, err := tSubj.SetTenantLabels(ctx, &tenantgrpc.SetTenantLabelsRequest{
+					Id: id,
+					Labels: map[string]string{
+						"key1": "value1",
+					},
+				})
+
+				// then
+				assert.Error(t, err)
+				assert.ErrorIs(t, service.ErrTenantNotFound, err)
+				assert.Nil(t, res)
+			})
+		})
+	})
+
+	t.Run("RemoveTenantLabels", func(t *testing.T) {
+		t.Run("should succeed if", func(t *testing.T) {
+			t.Run("request is valid", func(t *testing.T) {
+				// given
+				// For creating a tenant with a specific status, direct database access is needed
+				tenant, err := persistTenant(ctx, db, validRandID(),
+					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
+				assert.NoError(t, err)
+
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				res, err := tSubj.RemoveTenantLabels(ctx, &tenantgrpc.RemoveTenantLabelsRequest{
+					Id:        tenant.ID.String(),
+					LabelKeys: []string{"key1"},
+				})
+
+				// then
+				assert.NoError(t, err)
+				assert.NotNil(t, res)
+				assert.True(t, res.GetSuccess())
+				actTenants, err := listTenants(ctx, tSubj)
+				assert.NoError(t, err)
+				assert.Len(t, actTenants.GetTenants(), 1)
+				assert.Equal(t, 1, len(actTenants.GetTenants()[0].GetLabels()))
+				assert.Equal(t, "value2", actTenants.GetTenants()[0].GetLabels()["key2"])
+				_, ok := actTenants.GetTenants()[0].GetLabels()["key1"]
+				assert.False(t, ok, "key1 should have been removed")
+			})
+			t.Run("label does not exist", func(t *testing.T) {
+				// given
+				// For creating a tenant with a specific status, direct database access is needed
+				tenant, err := persistTenant(ctx, db, validRandID(),
+					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
+				assert.NoError(t, err)
+
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				res, err := tSubj.RemoveTenantLabels(ctx, &tenantgrpc.RemoveTenantLabelsRequest{
+					Id:        tenant.ID.String(),
+					LabelKeys: []string{"key3"},
+				})
+
+				// then
+				assert.NoError(t, err)
+				assert.NotNil(t, res)
+				assert.True(t, res.GetSuccess())
+				actTenants, err := listTenants(ctx, tSubj)
+				assert.NoError(t, err)
+				assert.Len(t, actTenants.GetTenants(), 1)
+				assert.Equal(t, 2, len(actTenants.GetTenants()[0].GetLabels()))
+			})
+		})
+
+		t.Run("should return error if", func(t *testing.T) {
+			t.Run("external ID is empty", func(t *testing.T) {
+				// when
+				res, err := tSubj.RemoveTenantLabels(ctx, &tenantgrpc.RemoveTenantLabelsRequest{
+					Id:        "",
+					LabelKeys: []string{"key1"},
+				})
+
+				// then
+				assert.Error(t, err)
+				assert.ErrorIs(t, model.ErrEmptyID, err)
+				assert.Nil(t, res)
+			})
+			t.Run("labels keys are empty", func(t *testing.T) {
+				// when
+				res, err := tSubj.RemoveTenantLabels(ctx, &tenantgrpc.RemoveTenantLabelsRequest{
+					Id: "ID1",
+				})
+
+				// then
+				assert.Error(t, err)
+				assert.ErrorIs(t, service.ErrMissingLabelKeys, err)
+				assert.Nil(t, res)
+			})
+			t.Run("labels keys have empty value", func(t *testing.T) {
+				// when
+				res, err := tSubj.RemoveTenantLabels(ctx, &tenantgrpc.RemoveTenantLabelsRequest{
+					Id:        "ID1",
+					LabelKeys: []string{""},
+				})
+
+				// then
+				assert.Error(t, err)
+				assert.ErrorIs(t, service.ErrEmptyLabelKeys, err)
+				assert.Nil(t, res)
+			})
+			t.Run("tenant to update is not present in the database", func(t *testing.T) {
+				// when
+				id := uuid.NewString()
+				res, err := tSubj.RemoveTenantLabels(ctx, &tenantgrpc.RemoveTenantLabelsRequest{
+					Id:        id,
+					LabelKeys: []string{"key1"},
+				})
+
+				// then
+				assert.Error(t, err)
+				assert.ErrorIs(t, service.ErrTenantNotFound, err)
+				assert.Nil(t, res)
+			})
+		})
+	})
+}
+
+func TestListTenantsPagination(t *testing.T) {
+	conn, err := newGRPCClientConn()
+	require.NoError(t, err)
+	defer func(conn *grpc.ClientConn) {
+		err := conn.Close()
+		assert.NoError(t, err)
+	}(conn)
+	subj := tenantgrpc.NewServiceClient(conn)
+
+	ctx := t.Context()
+	db, err := startDB()
+	require.NoError(t, err)
+
+	t.Run("ListTenantsPagination", func(t *testing.T) {
+		t.Run("given tenants with different creation timestamps", func(t *testing.T) {
+			// given
+			tenantRequest1 := validRegisterTenantReq()
+			tenantRequest1.Name = "t1"
+			_, err := subj.RegisterTenant(ctx, tenantRequest1)
+			assert.NoError(t, err)
+			defer func() {
+				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(tenantRequest1.GetId())})
+				assert.NoError(t, err)
+			}()
+			tenantRequest2 := validRegisterTenantReq()
+			tenantRequest2.Name = "t2"
+			_, err = subj.RegisterTenant(ctx, tenantRequest2)
+			assert.NoError(t, err)
+			defer func() {
+				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(tenantRequest2.GetId())})
+				assert.NoError(t, err)
+			}()
+
+			t.Run("should return next page token with applied limit", func(t *testing.T) {
+				req := &tenantgrpc.ListTenantsRequest{
+					Limit: 1,
+				}
+				res, _ := subj.ListTenants(ctx, req)
+				assert.NoError(t, err)
+				assert.NotEmpty(t, res.NextPageToken)
+				assert.Len(t, res.Tenants, 1)
+				assert.Equal(t, "t2", res.Tenants[0].Name)
+			})
+
+			t.Run("should not return next page token if limit is greater than number of tenants", func(t *testing.T) {
+				req := &tenantgrpc.ListTenantsRequest{
+					Limit: 3,
+				}
+				res, _ := subj.ListTenants(ctx, req)
+				assert.NoError(t, err)
+				assert.Empty(t, res.NextPageToken)
+				assert.Len(t, res.Tenants, 2)
+			})
+
+			t.Run("page token point to next page", func(t *testing.T) {
+				// first page
+				req := &tenantgrpc.ListTenantsRequest{
+					Limit: 1,
+				}
+				res, err := subj.ListTenants(ctx, req)
+				assert.NoError(t, err)
+				assert.NotEmpty(t, res.NextPageToken)
+				assert.Len(t, res.Tenants, 1)
+				assert.Equal(t, "t2", res.Tenants[0].Name)
+
+				// second page
+				req = &tenantgrpc.ListTenantsRequest{
+					Limit:     1,
+					PageToken: res.NextPageToken,
+				}
+				res, err = subj.ListTenants(ctx, req)
+				assert.NoError(t, err)
+				assert.Len(t, res.Tenants, 1)
+				assert.Equal(t, "t1", res.Tenants[0].Name)
+			})
+		})
+		t.Run("given tenants with same creation timestamp", func(t *testing.T) {
+			// for reliably creating tenants with the same created_at timestamp
+			// direct database access is needed
+			require.NoError(t, err)
+			tenants := make([]model.Tenant, 3)
+			now := time.Now()
+			for i := range tenants {
+				tenant, err := persistTenant(ctx, db, validRandID(),
+					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), now)
+				assert.NoError(t, err)
+				tenants[i] = *tenant
+			}
+			defer func() {
+				for _, tenant := range tenants {
+					err = deleteTenantFromDB(ctx, db, &tenant)
+					assert.NoError(t, err)
+				}
+			}()
+
+			// mirrors the order in which the tenants are queried by ID besides the created_at timestamp
+			sort.Slice(tenants, func(i, j int) bool {
+				return tenants[i].ID.String() > tenants[j].ID.String()
+			})
+
+			t.Run("should avoid duplicates across pages", func(t *testing.T) {
+				// first page
+				res1, err := subj.ListTenants(ctx, &tenantgrpc.ListTenantsRequest{
+					Limit: 2,
+				})
+				assert.NoError(t, err)
+				assert.Len(t, res1.Tenants, 2)
+
+				// second page
+				res2, err := subj.ListTenants(ctx, &tenantgrpc.ListTenantsRequest{
+					PageToken: res1.NextPageToken,
+				})
+				assert.NoError(t, err)
+				assert.Len(t, res2.Tenants, 1)
+				assert.Equal(t, tenants[2].ID.String(), res2.Tenants[0].Id)
+
+				assert.Equal(t, len(tenants), len(res1.Tenants)+len(res2.Tenants))
+
+				for _, prevTenants := range res1.GetTenants() {
+					assert.False(t, prevTenants.Id == res2.GetTenants()[0].Id)
+				}
+			})
+		})
+	})
+}
+
+func listTenants(ctx context.Context, subj tenantgrpc.ServiceClient) (*tenantgrpc.ListTenantsResponse, error) {
+	req := &tenantgrpc.ListTenantsRequest{}
+	return subj.ListTenants(ctx, req)
+}
+
+func persistTenant(ctx context.Context, db *gorm.DB, id string, status model.TenantStatus, createdAt time.Time) (*model.Tenant, error) {
+	repo := sql.NewRepository(db)
+	tenant := &model.Tenant{
+		Name:      "t1",
+		ID:        model.ID(id),
+		Region:    "region",
+		OwnerID:   "customer-123",
+		OwnerType: "customer",
+		Status:    status,
+		Role:      "ROLE_LIVE",
+		Labels: map[string]string{
+			"key1": "value1",
+			"key2": "value2",
+		},
+		CreatedAt: createdAt,
+	}
+	err := repo.Create(ctx, tenant)
+	return tenant, err
+}
+
+func assertEqualValues(t *testing.T, req1 *tenantgrpc.RegisterTenantRequest, tenant *tenantgrpc.Tenant) {
+	t.Helper()
+	assert.Equal(t, req1.Id, tenant.Id)
+	assert.Equal(t, req1.Name, tenant.Name)
+	assert.Equal(t, req1.Region, tenant.Region)
+	assert.Equal(t, req1.OwnerId, tenant.OwnerId)
+	assert.Equal(t, req1.OwnerType, tenant.OwnerType)
+	assert.Equal(t, req1.Role, tenant.Role)
+	assert.Equal(t, req1.Labels, tenant.Labels)
+}

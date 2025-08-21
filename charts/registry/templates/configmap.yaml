@@ -1,0 +1,14 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "registry.name" . }}-config
+  namespace: {{ include "registry.namespace" . }}
+  labels:
+    {{- include "registry.labels" . | nindent 4 }}
+immutable: {{ .Values.config.isImmutable | default false }}
+data:
+  {{- with .Values.config }}
+  config.yaml: |-
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
