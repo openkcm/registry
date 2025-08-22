@@ -1,56 +1,68 @@
 [![REUSE status](https://api.reuse.software/badge/github.com/openkcm/registry)](https://api.reuse.software/info/github.com/openkcm/registry)
 
 
-# Registry service
-
-## Purpose
-
-Registry service is the central data management service for the CMK landscape. It manages CMK tenants and systems.
-
-## Description
-
-Registry service is part of the global CMK layer and is responsible for managing the following CMK resources:
-
-### Tenants
-The tenant resource holds information about CMK tenants like owner id and type and region.
-It is used by
-* The Tenant Management API to create, block and terminate tenants
-* The regional CMK layer to implement the tenant lifecycle used by the CMK application
-
-### Systems
-Systems are all customer-exposed business tenants of any kind.
-The systems resource holds information about the system, the kernel service region and key assignment information.
-It is used by
-* The Kernel Services to announce or terminate systems
-* The CMK application to manage information about the systems and their key assignment.
-
-
-```mermaid
-graph LR
-  subgraph CMK global
-      TMA[Tenant Management API]
-      TMA -->|Uses| RS
-    RS[Registry Service]
-    RS -->|Manages| T[CMK Tenants]
-    RS -->|Manages| SYS[Systems]
-  end
-  subgraph CMK Regional
-    CMK[CMK application]
-  end
-  CMK -->|Uses| RS
-```
-
-# OpenKCM: Our new open source project
-
-[![REUSE status](https://api.reuse.software/badge/github.com/openkcm/registry)](https://api.reuse.software/info/github.com/openkcm/registry)
+# Registry
 
 ## About this project
 
-*Insert a short description of your project here...*
+Registry is the central data management service for the CMK landscape. It manages CMK tenants and systems.
+
+Tenants hold information about CMK tenants like owner id and type and region.
+It is used by
+* Tenant Management API to create, block and terminate tenants,
+* regional CMK layer to implement the tenant lifecycle used by the CMK application.
+
+Systems are all customer-exposed business tenants of any kind.
+The system resource holds information about the system, the crypto layer region and key assignment information.
+It is used by
+* Crypto layer to announce or terminate systems,
+* CMK application to manage information about the systems and their key assignment.
+
 
 ## Requirements and Setup
 
-*Insert a short description what is required to get your project running...*
+### Dependencies
+
+* [Go 1.25.0+](https://golang.org/)
+* [gorm](https://github.com/go-gorm/gorm)
+* [Docker](https://www.docker.com/)
+* [Docker Compose](https://docs.docker.com/compose/)
+
+### Running the Registry
+
+The registry depends on a PostgreSQL database, RabbitMQ for message queuing and
+OpenTelemetry Collector for metrics collection. You can run these dependencies using Docker Compose.
+
+```sh
+make docker-compose-dependencies-up
+```
+
+If you also want to see the Docker logs, instead run:
+
+```sh
+make docker-compose-dependencies-up-and-log
+```
+
+Then, run the registry itself:
+
+```sh
+go run ./cmd/registry/main.go
+```
+
+Alternatively, you can use Docker Compose to run the registry along with its dependencies, also 
+including Grafana for metrics visualization. 
+
+You can access the Grafana dashboards via the  
+URL http://localhost:3004. Use `admin/admin` for login and look for existing dashboards.
+```sh
+make docker-compose-up
+```
+
+If you also want to see the Docker logs, instead run
+
+```shell
+make docker-compose-up-and-log
+```
 
 ## Support, Feedback, Contributing
 

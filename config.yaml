@@ -101,8 +101,8 @@ telemetry:
     enabled: true
     protocol: grpc
     host:
-      source: env
-      env: OTEL_HOST
+      source: embedded
+      value: localhost:4317
     secretRef:
       type: insecure
 
@@ -112,8 +112,8 @@ telemetry:
     prometheus:
       enabled: true
     host:
-      source: env
-      env: OTEL_HOST
+      source: embedded
+      value: localhost:4317
     secretRef:
       type: insecure
 
@@ -121,7 +121,7 @@ telemetry:
     enabled: true
     protocol: grpc
     host:
-      source: env
-      env: OTEL_HOST
+      source: embedded
+      value: localhost:4317
     secretRef:
       type: insecure

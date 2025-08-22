@@ -48,20 +48,18 @@ db_pass = secret
 db_name = registry
 db_config = DB_USER=$(db_user) DB_PASS=$(db_pass) DB_NAME=$(db_name)
 
-OTEL_HOST=otel-collector:4317
-
 # Builds the registry binary for Linux AMD64 architecture. Needed for Docker image creation.
 go-build-for-docker:
-	GOOS=linux GOARCH=amd64 go build -trimpath ./cmd/registry-service
+	GOOS=linux GOARCH=amd64 go build -trimpath ./cmd/registry
 
 docker-build: go-build-for-docker
-	docker build --no-cache -f Dockerfile -t registry-service:dev .
+	docker build --no-cache -f Dockerfile -t registry:dev .
 
 docker-compose-dependencies-up: generate-certs
-	$(db_config) docker compose up postgres rabbitmq -d --wait
+	$(db_config) docker compose up postgres rabbitmq otel-collector -d --wait
 
-docker-compose-registry-service-up: docker-build
-	docker compose up registry-service -d
+docker-compose-registry-up: docker-build
+	docker compose up registry -d
 
 docker-compose-up: docker-build generate-certs
 	$(db_config) docker compose up -d
@@ -69,8 +67,8 @@ docker-compose-up: docker-build generate-certs
 docker-log:
 	$(db_config) docker compose logs --tail 10 -f
 
-# Prerequisite: see docker-compose-up 
-docker-compose-up-and-log: docker-compose-up 
+# Prerequisite: see docker-compose-up
+docker-compose-up-and-log: docker-compose-up
 	$(MAKE) docker-log
 
 docker-compose-dependencies-up-and-log: docker-compose-dependencies-up
@@ -112,18 +110,18 @@ all-tests-run-cover:
 	rm -r ./cover
 
 go-build-and-run:
-	go build $(cover_flag) -o registry-service ./cmd/registry-service
-	$(cover_dir_env) OTEL_HOST=localhost:4317 ./registry-service 1>/dev/null 2>/dev/null & echo $$! > pid.txt
+	go build $(cover_flag) -o registry ./cmd/registry
+	$(cover_dir_env) ./registry 1>/dev/null 2>/dev/null & echo $$! > pid.txt
 
 go-stop-and-remove:
 	kill -2 `cat pid.txt` && rm pid.txt
-	rm registry-service
+	rm registry
 
 clean-docker-compose:
 	$(db_config) docker compose down -v && $(db_config) docker compose rm -f -v
 
-# Required by piper pipeline in order to customize coverage report creation
-sonartest: docker-compose-dependencies-up all-tests-run-cover
+# Runs unit and integration tests with coverage, starts dependency containers, and generates coverage report
+integration-test: docker-compose-dependencies-up all-tests-run-cover
 
 generate-certs:
 	(cd local/rabbitmq && chmod +x generate-certs.sh && ./generate-certs.sh)

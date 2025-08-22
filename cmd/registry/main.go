@@ -186,7 +186,7 @@ func loadConfig() *config.Config {
 	handleErr("loading config", err)
 
 	err = commoncfg.UpdateConfigVersion(&cfg.BaseConfig, root.BuildVersion)
-	handleErr("loading version onf config", err)
+	handleErr("loading build version into config", err)
 
 	return cfg
 }
