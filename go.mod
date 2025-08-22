@@ -6,7 +6,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/openkcm/api-sdk v0.3.0
-	github.com/openkcm/common-sdk v1.2.1
+	github.com/openkcm/common-sdk v1.2.2
 	github.com/openkcm/orbital v0.1.1-0.20250808084726-6620158b125c
 	github.com/samber/oops v1.19.0
 	github.com/stretchr/testify v1.10.0
