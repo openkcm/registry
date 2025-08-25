@@ -31,5 +31,3 @@ junit.xml
 *.key
 *.srl
 .env
-
-build_version.json
