@@ -107,6 +107,7 @@ all-tests-run-cover:
 	go test -cover ./internal/... -args -test.gocoverdir="${PWD}/cover/unit"
 	echo "Creating coverage report"
 	go tool covdata textfmt -i=./cover/unit,./cover/integration -o cover.out
+	go tool cover --html=cover.out -o cover.html
 	rm -r ./cover
 
 go-build-and-run:
