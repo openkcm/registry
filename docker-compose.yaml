@@ -1,5 +1,5 @@
 networks:
-  registry-service:
+  registry:
 
 services:
   postgres:
@@ -19,7 +19,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - registry-service
+      - registry
 
   rabbitmq:
     image: rabbitmq:4
@@ -28,7 +28,7 @@ services:
       - "5672:5672"
       - "15672:15672"
     networks:
-      - registry-service
+      - registry
     healthcheck:
       test: rabbitmq-diagnostics -q ping
       interval: 5s
@@ -40,8 +40,8 @@ services:
       - ./local/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
       - ./local/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
 
-  registry-service:
-    image: registry-service:dev
+  registry:
+    image: registry:dev
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,7 +54,6 @@ services:
       - "8888:8888"
       - "9092:9092"
     environment:
-      OTEL_HOST: "otel-collector:4317"
       DATABASE_HOST: "postgres"
     healthcheck:
       test: ["CMD", "/grpc-health-probe", "-addr=localhost:9092"]
@@ -62,7 +61,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - registry-service
+      - registry
 
   prometheus:
     image: prom/prometheus:v3.5.0
@@ -75,7 +74,7 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--web.enable-lifecycle'
     networks:
-      - registry-service
+      - registry
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -89,7 +88,7 @@ services:
       - ./local/grafana/provisioning:/etc/grafana/provisioning
       - ./local/grafana/dashboards:/var/lib/grafana/dashboards
     networks:
-      - registry-service
+      - registry
 
   otel-collector:
     image: otel/opentelemetry-collector:latest
@@ -99,7 +98,7 @@ services:
     ports:
       - "4317:4317"
     networks:
-      - registry-service
+      - registry
 
 volumes:
   prometheus_data:
