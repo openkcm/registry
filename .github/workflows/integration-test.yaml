@@ -62,20 +62,6 @@ jobs:
           version: 3.x
           repo-token: ${{ steps.generate-token.outputs.token || github.token }}
 
-      - name: Set up environment
-        run: |
-          echo "repo_name=$(basename "$GITHUB_REPOSITORY")" >> $GITHUB_ENV
-          echo "version=$(task version)" >> $GITHUB_ENV
-
-      - name: Generate Build Version
-        uses: hashicorp/actions-generate-metadata@f1d852525201cb7bbbf031dd2e985fb4c22307fc #main
-        with:
-          repositoryOwner: ${{ github.repository_owner }}
-          repository: ${{ github.repository }}
-          version:  ${{ env.version }}
-          product: ${{ env.repo_name }}
-          metadataFileName: ${{ github.workspace }}/build_version.json
-
       - name: Run integration tests
         run: make integration-test
 
