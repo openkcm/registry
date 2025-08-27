@@ -7,7 +7,7 @@ metadata:
   labels:
     {{- include "registry.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
+  {{- if not .Values.hpa.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:
@@ -15,13 +15,13 @@ spec:
       {{- include "registry.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
+      {{- with .Values.pod.annotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
         {{- include "registry.labels" . | nindent 8 }}
-        {{- with .Values.podLabels }}
+        {{- with .Values.pod.labels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
@@ -30,7 +30,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "registry.serviceAccountName" . }}
-      {{- with .Values.podSecurityContext }}
+      {{- with .Values.pod.securityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -117,7 +117,11 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.pod.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
       {{- with .Values.tolerations }}
       tolerations:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml . | nindent 6 }}
       {{- end }}

@@ -1,5 +1,3 @@
-debugMode: true
-
 database:
   host: "localhost"
   port: 5432
@@ -17,6 +15,9 @@ application:
 
 grpcServer:
   address: :9092
+  flags:
+    health: true
+    reflection: true
   attributes:
     # maxConnectionIdle is a duration for the amount of time after which an idle connection would be closed by sending a GoAway.
     maxConnectionIdle: 300s # the default value is infinity.
@@ -42,11 +43,12 @@ grpcServer:
 
   maxRecvMsgSize: 4194304 # in bytes (4 MB), the default value is 4 MB.
 
-  clientAttributes:
-    # Defines how often the client sends keepalive pings to the server.
-    keepaliveTime: 1s
-    # Specifies how long the client waits for a response to a keepalive ping before considering the connection dead.
-    keepaliveTimeout: 1s
+  client:
+    attributes:
+      # Defines how often the client sends keepalive pings to the server.
+      keepaliveTime: 1s
+      # Specifies how long the client waits for a response to a keepalive ping before considering the connection dead.
+      keepaliveTimeout: 1s
 
 orbital:
   confirmJobDelay: 0
