@@ -109,11 +109,11 @@ spec:
       {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.nodeSelector }}
+      {{- with .Values.pod.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
+      {{- with .Values.pod.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -121,7 +121,7 @@ spec:
       topologySpreadConstraints:
         {{- toYaml . | nindent 6 }}
       {{- end }}
-      {{- with .Values.tolerations }}
+      {{- with .Values.pod.tolerations }}
       tolerations:
         {{- toYaml . | nindent 6 }}
       {{- end }}

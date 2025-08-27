@@ -113,6 +113,10 @@ pod:
     # +docs:property
     # +docs:type=unknown
     # maxUnavailable: 1
+  nodeSelector: { }
+  affinity: { }
+  topologySpreadConstraints: [ ]
+  tolerations: [ ]
 
 # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
@@ -181,11 +185,6 @@ extraVolumeMounts: []
 extraEnvs: []
 # Additional envsFrom on the output Deployment definition.
 extraEnvsFrom: []
-
-nodeSelector: {}
-affinity: {}
-topologySpreadConstraints: []
-tolerations: []
 
 
 ports:
