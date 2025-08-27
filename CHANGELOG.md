@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/openkcm/registry/compare/v1.0.0...v1.0.1) (2025-08-27)
+
+
+### Bug Fixes
+
+* Fix readiness probe ([#13](https://github.com/openkcm/registry/issues/13)) ([337c46a](https://github.com/openkcm/registry/commit/337c46a34741875e9cfa93530258227a7c12a74d))
+
 ## 1.0.0 (2025-08-21)
 
 
