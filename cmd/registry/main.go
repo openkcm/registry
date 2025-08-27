@@ -202,7 +202,7 @@ func startStatusServer(cfg *config.Config, ctx context.Context) {
 	healthOptions = append(healthOptions,
 		health.WithDisabledAutostart(),
 		health.WithStatusListener(func(ctx context.Context, state health.State) {
-			slogctx.Info(ctx, "readiness status changed", "status", state.Status)
+			slogctx.Info(ctx, "readiness status changed", "status", state.Status, "checkStates", state.CheckState)
 		}),
 	)
 
@@ -210,6 +210,10 @@ func startStatusServer(cfg *config.Config, ctx context.Context) {
 	grpcCfg := commoncfg.GRPCClient{
 		Address:    cfg.GRPCServer.Address,
 		Attributes: cfg.GRPCServer.ClientAttributes,
+		Pool: commoncfg.GRPCPool{
+			InitialCapacity: 1,
+			MaxCapacity:     3,
+		},
 	}
 	healthOptions = append(healthOptions, health.WithGRPCServerChecker(grpcCfg))
 
