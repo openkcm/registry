@@ -964,18 +964,7 @@ func TestTenantService(t *testing.T) {
 		})
 
 		t.Run("should fetch the tenant if tenant with the given ID exists", func(t *testing.T) {
-			req := &tenantgrpc.RegisterTenantRequest{
-				Name:      "SuccessFactor",
-				Id:        validRandID(),
-				Region:    "region",
-				OwnerId:   "customer-123",
-				OwnerType: "owner_type",
-				Role:      tenantgrpc.Role_ROLE_TEST,
-				Labels: map[string]string{
-					"key11": "value11",
-					"key12": "value12",
-				},
-			}
+			req := validRegisterTenantReq()
 			_, err := tSubj.RegisterTenant(ctx, req)
 			assert.NoError(t, err)
 			defer func() {
@@ -990,6 +979,16 @@ func TestTenantService(t *testing.T) {
 			assert.NoError(t, err)
 			assert.NotNil(t, resp)
 			assert.Equal(t, req.GetId(), resp.GetTenant().GetId())
+		})
+
+		t.Run("should return error if requested with empty ID", func(t *testing.T) {
+			resp, err := tSubj.GetTenant(ctx, &tenantgrpc.GetTenantRequest{
+				Id: "",
+			})
+
+			assert.Nil(t, resp)
+			assert.Error(t, err)
+			assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
 		})
 	})
 }
