@@ -114,7 +114,7 @@ helm-install-dependencies:
 helm-uninstall-dependencies:
 	./helm_dependencies.sh uninstall
 
-helm-install-registry: docker-build
+helm-install-registry:
 	./helm_registry.sh install
 
 # Uninstalls the registry-service from the local Kubernetes cluster using Helm.

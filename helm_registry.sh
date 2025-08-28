@@ -95,13 +95,14 @@ EOF
 
   echo "Deploying Registry Helm chart..."
   helm upgrade --install registry ./charts/registry \
-      --values /tmp/registry-helm-config/values.yaml \
-      --wait --timeout=300s
+      --values /tmp/registry-helm-config/values.yaml
 
+  kubectl logs -l app.kubernetes.io/name=registry -f
   echo "Cleaning up temporary files..."
   rm -rf /tmp/registry-helm-config
 
   echo "Registry Helm chart successfully deployed"
+
 }
 
 uninstall_registry() {

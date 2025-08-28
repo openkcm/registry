@@ -133,7 +133,7 @@ EOF
   helm upgrade --install rabbitmq bitnami/rabbitmq \
       --values /tmp/rabbitmq-helm-config/values.yaml \
       --version ${RABBITMQ_CHART_VERSION} \
-      --wait --timeout=300s
+      --wait --timeout=120s
 
   echo "Cleaning up temporary files..."
   rm -rf /tmp/rabbitmq-helm-config
@@ -177,7 +177,7 @@ install_otel_collector() {
       --set resources.limits.memory="512Mi" \
       --set resources.requests.cpu="100m" \
       --set resources.requests.memory="128Mi" \
-      --wait --timeout=60s
+      --wait --timeout=30s
 
   echo "OpenTelemetry Collector Helm chart successfully deployed"
 }
@@ -217,6 +217,8 @@ install() {
   install_postgres
   install_rabbitmq
   install_otel_collector
+  helm list
+  kubectl get pod
 }
 
 uninstall() {
