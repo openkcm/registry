@@ -95,9 +95,24 @@ EOF
 
   echo "Deploying Registry Helm chart..."
   helm upgrade --install registry ./charts/registry \
-      --values /tmp/registry-helm-config/values.yaml
+      --values /tmp/registry-helm-config/values.yaml \
+      --wait --timeout=60s
 
-  kubectl logs -l app.kubernetes.io/name=registry -f
+  if [ $? -ne 0 ]; then
+    echo "ERROR: Helm deployment failed!"
+    echo "Checking deployment status..."
+    kubectl get pods -l app.kubernetes.io/name=registry -o wide
+    kubectl describe pods -l app.kubernetes.io/name=registry
+    echo "Recent events:"
+    kubectl get events --sort-by=.metadata.creationTimestamp
+    echo "Pod logs:"
+    kubectl logs -l app.kubernetes.io/name=registry --tail=50
+    exit 1
+  fi
+
+  echo "Registry deployment successful! Showing recent logs:"
+  kubectl logs -l app.kubernetes.io/name=registry --tail=20
+
   echo "Cleaning up temporary files..."
   rm -rf /tmp/registry-helm-config
 
