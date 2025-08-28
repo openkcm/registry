@@ -20,7 +20,7 @@ compile-servicetest-pb:
 
 # Builds the registry binary for Linux AMD64 architecture. Needed for Docker image creation.
 go-build-for-docker:
-	GOOS=linux GOARCH=amd64 go build -trimpath -o registry ./cmd/registry
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o registry ./cmd/registry
 
 docker-build: go-build-for-docker
 	docker build --no-cache -f Dockerfile.dev -t registry:dev .
