@@ -23,7 +23,7 @@ go-build-for-docker:
 	GOOS=linux GOARCH=amd64 go build -trimpath ./cmd/registry
 
 docker-build: go-build-for-docker
-	docker build --no-cache -f Dockerfile.dev -t registry:dev .
+	docker build --no-cache -f Dockerfile.dev -o registry -t registry:dev .
 
 docker-compose-dependencies-up: generate-certs
 	docker compose up postgres rabbitmq otel-collector -d --wait

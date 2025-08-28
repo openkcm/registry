@@ -12,4 +12,4 @@ COPY registry .
 USER 1001:1001
 
 # Run the registry-service binary
-CMD ["./registry"]
+CMD ["/registry"]
