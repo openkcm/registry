@@ -125,8 +125,8 @@ github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
-github.com/openkcm/api-sdk v0.3.0 h1:TwYiojOeyqBzFKcJjxL9gPyp9bhsnqYtwchEGXudTRk=
-github.com/openkcm/api-sdk v0.3.0/go.mod h1:5EaRcMOmi1xT622Zf8ORqa2TpSScgUKi9m3/9CqEtyE=
+github.com/openkcm/api-sdk v0.4.0 h1:RxJwY3pZwP5Do+iRI54t+aZkLDGmlm0Y+1Zr5rt5RO0=
+github.com/openkcm/api-sdk v0.4.0/go.mod h1:2OB1HR1rq+hMi0e49ojKHsBoiL5vWfk7uHRwpiftBbU=
 github.com/openkcm/common-sdk v1.2.2 h1:CV6F5UmrVwnH9zlUc3hZQtLUR0qK4VsdgmNnHlzdcLU=
 github.com/openkcm/common-sdk v1.2.2/go.mod h1:vvo/LJmlpcXoygsJ7K/IVBqosL9AFHoF1MWmcpOkCl4=
 github.com/openkcm/orbital v0.1.1-0.20250808084726-6620158b125c h1:LfkEeHYjcsTU6NpO65+6li23MZaHobZsrJP4+macfqI=
