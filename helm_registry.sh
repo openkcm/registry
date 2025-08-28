@@ -6,7 +6,7 @@
 # deploys necessary configurations, and ensures that the service is set up correctly.
 ####################################################################################
 
-set -e
+#set -e
 
 # Configuration
 DB_USER="postgres"
