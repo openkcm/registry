@@ -62,11 +62,11 @@ var (
 type Config struct {
 	commoncfg.BaseConfig `mapstructure:",squash"`
 
-	GRPCServer GRPCServer
-
-	DebugMode bool `yaml:"debugMode" json:"debugMode"`
-	Database  DB   `yaml:"database" json:"database"`
-
+	// gRPC server configuration
+	GRPCServer GRPCServer `yaml:"grpcServer"`
+	// Database configuration
+	Database DB `yaml:"database" json:"database"`
+	// Orbital configuration
 	Orbital Orbital `yaml:"orbital" json:"orbital"`
 }
 
@@ -89,11 +89,12 @@ type Server struct {
 	Port string `yaml:"port"`
 }
 
+// GRPCServer configuration.
 type GRPCServer struct {
 	commoncfg.GRPCServer `mapstructure:",squash"`
 
 	// also embed client attributes for the gRPC health check client
-	ClientAttributes commoncfg.GRPCClientAttributes
+	Client commoncfg.GRPCClient `yaml:"client" json:"client"`
 }
 
 type Orbital struct {

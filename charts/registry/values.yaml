@@ -25,14 +25,14 @@ replicaCount: 1
 image:
   # The container registry to pull the image from.
   # For example:
-  #   registry: kms.common.repositories.cloud.sap
-  #   repository: cmk
+  #   registry: ghcr.io/openkcm
+  #   repository: images/checker
   # +docs:property
-  registry: kms.common.repositories.cloud.sap
+  registry: ghcr.io/openkcm
 
   # The container image
   # +docs:property
-  repository: registry
+  repository: images/registry
 
   # Override the image tag to deploy by setting this variable.
   # If no value is set, the chart's appVersion is used.
@@ -73,45 +73,50 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
-# This is for setting Kubernetes Annotations to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
-podAnnotations: {}
-# This is for setting Kubernetes Labels to a Pod.
-# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
-
-podSecurityContext: {}
-  # fsGroup: 2000
-
 securityContext: {}
   # capabilities:
   #   drop:
   #   - ALL
   # readOnlyRootFilesystem: true
   # runAsNonRoot: true
-  # runAsUser: 1000
+# runAsUser: 1000
 
-podDisruptionBudget:
-  # Enable or disable the PodDisruptionBudget resource.
-  #
-  # This prevents downtime during voluntary disruptions such as during a Node upgrade.
-  # For example, the PodDisruptionBudget will block `kubectl drain`
-  # Pod is currently running.
-  enabled: false
+pod:
+  # This is for setting Kubernetes Annotations to a Pod.
+  # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+  annotations: {}
+  # This is for setting Kubernetes Labels to a Pod.
+  # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+  labels: {}
 
-  # This configures the minimum available pods for disruptions. It can either be set to
-  # an integer (e.g. 1) or a percentage value (e.g. 25%).
-  # It cannot be used if `maxUnavailable` is set.
-  # +docs:property
-  # +docs:type=unknown
-  # minAvailable: 1
+  securityContext: {}
+    # fsGroup: 2000
 
-  # This configures the maximum unavailable pods for disruptions. It can either be set to
-  # an integer (e.g. 1) or a percentage value (e.g. 25%).
-  # it cannot be used if `minAvailable` is set.
-  # +docs:property
-  # +docs:type=unknown
-  # maxUnavailable: 1
+  disruptionBudget:
+    # Enable or disable the PodDisruptionBudget resource.
+    #
+    # This prevents downtime during voluntary disruptions such as during a Node upgrade.
+    # For example, the PodDisruptionBudget will block `kubectl drain`
+    # Pod is currently running.
+    enabled: false
+
+    # This configures the minimum available pods for disruptions. It can either be set to
+    # an integer (e.g. 1) or a percentage value (e.g. 25%).
+    # It cannot be used if `maxUnavailable` is set.
+    # +docs:property
+    # +docs:type=unknown
+    # minAvailable: 1
+
+    # This configures the maximum unavailable pods for disruptions. It can either be set to
+    # an integer (e.g. 1) or a percentage value (e.g. 25%).
+    # it cannot be used if `minAvailable` is set.
+    # +docs:property
+    # +docs:type=unknown
+    # maxUnavailable: 1
+  nodeSelector: { }
+  affinity: { }
+  topologySpreadConstraints: [ ]
+  tolerations: [ ]
 
 # This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
@@ -150,7 +155,7 @@ livenessProbe: {}
 readinessProbe: {}
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
-autoscaling:
+hpa:
   enabled: false
   minReplicas: 1
   maxReplicas: 10
@@ -181,9 +186,6 @@ extraEnvs: []
 # Additional envsFrom on the output Deployment definition.
 extraEnvsFrom: []
 
-nodeSelector: {}
-
-tolerations: []
 
 ports:
   - name: grpc
@@ -193,11 +195,7 @@ ports:
     containerPort: 8888
     protocol: TCP
 
-affinity: {}
-
 config:
-  # Debug mode for the service includes gRPC reflection
-  debugMode: true
   # Database configuration
   database:
     host: "to be set"
@@ -216,6 +214,9 @@ config:
 
   grpcServer:
     address: :9092
+    flags:
+      health: true
+      reflection: true
     attributes:
       # maxConnectionIdle is a duration for the amount of time after which an idle connection would be closed by sending a GoAway.
       maxConnectionIdle: 300s # the default value is infinity.
@@ -241,11 +242,12 @@ config:
 
     maxRecvMsgSize: 4194304 # in bytes (4 MB), the default value is 4 MB.
 
-    clientAttributes:
-      # Defines how often the client sends keepalive pings to the server.
-      keepaliveTime: 1s
-      # Specifies how long the client waits for a response to a keepalive ping before considering the connection dead.
-      keepaliveTimeout: 1s
+    client:
+      attributes:
+        # Defines how often the client sends keepalive pings to the server.
+        keepaliveTime: 1s
+        # Specifies how long the client waits for a response to a keepalive ping before considering the connection dead.
+        keepaliveTimeout: 1s
 
   # Configuration for the orbital service for tenant provisioning.
   orbital:
@@ -314,35 +316,12 @@ config:
 
   logger:
     level: info # one of: debug, info, warn, error
-    format: text # one of: json, text
-    source: false
+    format: json # one of: json, text
 
   telemetry:
     traces:
-      enabled: true
-      protocol: grpc
-      host:
-        source: env
-        env: OTEL_HOST
-      secretRef:
-        type: insecure
-
+      enabled: false
     metrics:
-      enabled: true
-      protocol: grpc
-      prometheus:
-        enabled: true
-      host:
-        source: env
-        env: OTEL_HOST
-      secretRef:
-        type: insecure
-
+      enabled: false
     logs:
-      enabled: true
-      protocol: grpc
-      host:
-        source: env
-        env: OTEL_HOST
-      secretRef:
-        type: insecure
+      enabled: false
