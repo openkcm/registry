@@ -5,8 +5,8 @@
 
 ### Bug Fixes
 
-* Fix readiness probe ([#13](https://github.com/openkcm/registry/issues/13)) ([337c46a](https://github.com/openkcm/registry/commit/337c46a34741875e9cfa93530258227a7c12a74d))
-* fix some chart configuration and version; Adjust the status for grpc server ([#14](https://github.com/openkcm/registry/issues/14)) ([6c086f4](https://github.com/openkcm/registry/commit/6c086f4e5c32cb9921b58bef4fd58472c6f283a0))
+* fix readiness probe ([#13](https://github.com/openkcm/registry/issues/13)) ([337c46a](https://github.com/openkcm/registry/commit/337c46a34741875e9cfa93530258227a7c12a74d))
+* fix some chart configuration and version; adjust the status for grpc server ([#14](https://github.com/openkcm/registry/issues/14)) ([6c086f4](https://github.com/openkcm/registry/commit/6c086f4e5c32cb9921b58bef4fd58472c6f283a0))
 
 ## 1.0.0 (2025-08-21)
 
