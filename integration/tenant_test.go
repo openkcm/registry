@@ -951,6 +951,46 @@ func TestTenantService(t *testing.T) {
 			})
 		})
 	})
+
+	t.Run("GetTenant", func(t *testing.T) {
+		t.Run("should return error if tenant with the given ID does not exist", func(t *testing.T) {
+			resp, err := tSubj.GetTenant(ctx, &tenantgrpc.GetTenantRequest{
+				Id: validRandID(),
+			})
+
+			assert.Nil(t, resp)
+			assert.Error(t, err)
+			assert.ErrorIs(t, service.ErrTenantNotFound, err)
+		})
+
+		t.Run("should fetch the tenant if tenant with the given ID exists", func(t *testing.T) {
+			req := validRegisterTenantReq()
+			_, err := tSubj.RegisterTenant(ctx, req)
+			assert.NoError(t, err)
+			defer func() {
+				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req.GetId())})
+				assert.NoError(t, err)
+			}()
+
+			resp, err := tSubj.GetTenant(ctx, &tenantgrpc.GetTenantRequest{
+				Id: req.GetId(),
+			})
+
+			assert.NoError(t, err)
+			assert.NotNil(t, resp)
+			assert.Equal(t, req.GetId(), resp.GetTenant().GetId())
+		})
+
+		t.Run("should return error if requested with empty ID", func(t *testing.T) {
+			resp, err := tSubj.GetTenant(ctx, &tenantgrpc.GetTenantRequest{
+				Id: "",
+			})
+
+			assert.Nil(t, resp)
+			assert.Error(t, err)
+			assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+		})
+	})
 }
 
 func TestListTenantsPagination(t *testing.T) {

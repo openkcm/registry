@@ -290,6 +290,26 @@ func (t *Tenant) RemoveTenantLabels(ctx context.Context, in *tenantgrpc.RemoveTe
 	}, nil
 }
 
+// GetTenant retrieves the details of a Tenant by its ID.
+// If the Tenant is found, its details will be returned, otherwise an error will be returned.
+func (t *Tenant) GetTenant(ctx context.Context, in *tenantgrpc.GetTenantRequest) (*tenantgrpc.GetTenantResponse, error) {
+	slogctx.Debug(ctx, "GetTenant called", "tenantId", in.GetId())
+
+	err := model.ID(in.GetId()).Validate()
+	if err != nil {
+		return nil, err
+	}
+
+	tenant, err := getTenant(ctx, t.repo, model.ID(in.GetId()))
+	if err != nil {
+		return nil, err
+	}
+
+	return &tenantgrpc.GetTenantResponse{
+		Tenant: tenant.ToProto(),
+	}, nil
+}
+
 // validateSetTenantLabelsRequest validates the SetTenantLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRequest) error {
