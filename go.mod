@@ -7,9 +7,9 @@ require (
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/openkcm/api-sdk v0.3.0
 	github.com/openkcm/common-sdk v1.2.2
-	github.com/openkcm/orbital v0.1.1-0.20250808084726-6620158b125c
+	github.com/openkcm/orbital v0.1.1-0.20250822134556-5915d2e87aed
 	github.com/samber/oops v1.19.0
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	github.com/veqryn/slog-context v0.8.0
 	go.opentelemetry.io/otel v1.37.0
 	go.opentelemetry.io/otel/metric v1.37.0
@@ -65,6 +65,7 @@ require (
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/bridges/otelslog v0.12.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.62.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.54.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.62.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.13.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.13.0 // indirect
