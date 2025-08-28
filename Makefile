@@ -107,7 +107,7 @@ helm-test: install-gotestsum
 	env TEST_ENV=make gotestsum --format testname -- -tags=helmtest -timeout=20m ./helmtest/...
 
 # Install dependencies with Helm
-helm-install-dependencies: generate-certs
+helm-install-dependencies:
 	./helm_dependencies.sh install
 
 # Uninstall dependencies with Helm

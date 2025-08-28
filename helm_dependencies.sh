@@ -58,6 +58,9 @@ install_rabbitmq() {
       return 0
   fi
 
+  echo "Generating RabbitMQ TLS certificates..."
+  (cd local/rabbitmq && chmod +x generate-certs.sh && ./generate-certs.sh)
+
   echo "Creating RabbitMQ configuration..."
   mkdir -p /tmp/rabbitmq-helm-config
   cp local/rabbitmq/definitions.json /tmp/rabbitmq-helm-config/
