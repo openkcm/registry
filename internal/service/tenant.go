@@ -295,8 +295,9 @@ func (t *Tenant) RemoveTenantLabels(ctx context.Context, in *tenantgrpc.RemoveTe
 func (t *Tenant) GetTenant(ctx context.Context, in *tenantgrpc.GetTenantRequest) (*tenantgrpc.GetTenantResponse, error) {
 	slogctx.Debug(ctx, "GetTenant called", "tenantId", in.GetId())
 
-	if in.GetId() == "" {
-		return nil, ErrTenantIDFormat
+	err := model.ID(in.GetId()).Validate()
+	if err != nil {
+		return nil, err
 	}
 
 	tenant, err := getTenant(ctx, t.repo, model.ID(in.GetId()))
