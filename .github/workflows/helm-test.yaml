@@ -64,5 +64,11 @@ jobs:
       - name: Import the Docker image
         run: k3d image import registry:dev -c k3scluster
 
+      - name: Install Dependencies
+        run: make helm-install-dependencies
+
+      - name: Install Registry
+        run: make helm-install-registry
+
       - name: Run Helm tests
         run: make helm-test
