@@ -1,0 +1,15 @@
+## This Dockerfile sets up the container for the registry application for
+## development and testing purposes.
+
+FROM scratch
+
+WORKDIR /
+
+# Copy the binary file into the container
+COPY registry .
+
+# Switch to non-privileged user
+USER 1001:1001
+
+# Run the registry-service binary
+CMD ["./registry"]
