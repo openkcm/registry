@@ -1,4 +1,4 @@
-name: Integration Test
+name: Helm Test
 
 on:
   push:
@@ -62,7 +62,7 @@ jobs:
           k3d cluster create k3scluster --wait --image=rancher/k3s:latest
           while ! kubectl get serviceaccount default >/dev/null; do sleep 2; done
       - name: Import the Docker image
-        run: k3d image import localhost/registry:dev -c k3scluster
+        run: k3d image import registry:dev -c k3scluster
 
       - name: Run Helm tests
         run: make helm-test
