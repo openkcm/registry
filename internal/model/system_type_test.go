@@ -14,11 +14,11 @@ func TestSystemTypeValidation(t *testing.T) {
 		expectErr bool
 	}{
 		"Valid system type": {
-			system:    "subaccount",
+			system:    "system",
 			expectErr: false,
 		},
 		"Invalid system type": {
-			system:    "invalid system type",
+			system:    "",
 			expectErr: true,
 		},
 	}

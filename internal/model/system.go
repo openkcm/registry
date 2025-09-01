@@ -10,7 +10,6 @@ import (
 )
 
 // System represents a customer-exposed "tenant" of any kind.
-// Systems are exposed to customer through SAP Formations.
 type System struct {
 	ExternalID    ExternalID `gorm:"column:external_id;primaryKey"`
 	TenantID      *string    `gorm:"column:tenant_id"` // related tenant id; optional

@@ -14,8 +14,8 @@ const (
 	ExternalIDField QueryField = "external_id"
 	OwnerIDField    QueryField = "owner_id"
 	OwnerTypeField  QueryField = "owner_type"
-	StatusField     QueryField = "status"
 	CreatedAtField  QueryField = "created_at"
+	TypeField       QueryField = "type"
 
 	NotEmpty QueryFieldValue = "not_empty"
 	Empty    QueryFieldValue = "empty"
