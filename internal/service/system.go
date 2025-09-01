@@ -111,6 +111,10 @@ func (s *System) ListSystems(ctx context.Context, in *systemgrpc.ListSystemsRequ
 		cond.Where(repository.RegionField, in.GetRegion())
 	}
 
+	if in.GetType() != "" {
+		cond.Where(repository.TypeField, in.GetType())
+	}
+
 	query.Where(cond)
 
 	var systems []model.System
