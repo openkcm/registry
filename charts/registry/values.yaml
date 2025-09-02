@@ -325,3 +325,12 @@ config:
       enabled: false
     logs:
       enabled: false
+
+  # Validation rules for configurable data fields
+  fieldValidation:
+    - fieldName: system.type
+      # rules is an array of validation rules to apply to the field.
+      # At the moment only enum type with an array of allowedValues is supported.
+      rules:
+        - type: enum
+          allowedValues: [ "system" ]

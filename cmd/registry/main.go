@@ -36,9 +36,7 @@ import (
 func main() {
 	ctx := context.Background()
 
-	cfg := loadConfig()
-	err := cfg.Validate()
-	handleErr("validating config", err)
+	cfg := initConfig()
 
 	initLogger(cfg)
 
@@ -143,7 +141,7 @@ func handleErr(msg string, err error) {
 	}
 }
 
-func loadConfig() *config.Config {
+func initConfig() *config.Config {
 	cfg := &config.Config{}
 	loader := commoncfg.NewLoader(cfg,
 		commoncfg.WithPaths("/etc/registry", "."),
@@ -153,6 +151,11 @@ func loadConfig() *config.Config {
 
 	err = commoncfg.UpdateConfigVersion(&cfg.BaseConfig, root.BuildVersion)
 	handleErr("loading build version into config", err)
+
+	err = cfg.Validate()
+	handleErr("validating config", err)
+
+	config.SetGlobalConfig(cfg)
 
 	return cfg
 }

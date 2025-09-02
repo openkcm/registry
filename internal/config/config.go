@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/openkcm/common-sdk/pkg/commoncfg"
@@ -56,6 +57,12 @@ var (
 	ErrMaxReconcileCountMustBeGreaterThanZero    = errors.New("max reconcile count must be greater than zero")
 	ErrBackoffBaseIntervalMustBeGreaterThanZero  = errors.New("backoff base interval must be greater than zero")
 	ErrBackoffMaxIntervalMustBeGreaterThanZero   = errors.New("backoff max interval must be greater than zero")
+	// FieldValidation specific errors.
+	ErrFieldNameMustNotBeEmpty             = errors.New("fieldName must not be empty")
+	ErrEnumValidationMustHaveAllowedValues = errors.New("enum validation must have at least one allowed value")
+	ErrUnsupportedValidationType           = errors.New("unsupported validation type")
+	ErrFieldIsRequired                     = errors.New("field is required")
+	ErrInvalidFieldValue                   = errors.New("invalid field value")
 )
 
 // Config holds all application configuration parameters.
@@ -68,11 +75,32 @@ type Config struct {
 	Database DB `yaml:"database" json:"database"`
 	// Orbital configuration
 	Orbital Orbital `yaml:"orbital" json:"orbital"`
+	// Field validation configuration - embedded directly as array
+	FieldValidation []FieldValidation `yaml:"fieldValidation" json:"fieldValidation"`
 }
 
-// Validate validates the configuration.
-func (c *Config) Validate() error {
-	return c.Orbital.Validate()
+// GlobalConfig holds the validation configuration.
+type GlobalConfig struct {
+	config *Config
+	mu     sync.RWMutex
+}
+
+var globalConfig = &GlobalConfig{}
+
+// SetGlobalConfig sets the configuration.
+func SetGlobalConfig(config *Config) {
+	globalConfig.mu.Lock()
+	defer globalConfig.mu.Unlock()
+
+	globalConfig.config = config
+}
+
+// GetGlobalConfig returns the configuration.
+func GetGlobalConfig() *Config {
+	globalConfig.mu.RLock()
+	defer globalConfig.mu.RUnlock()
+
+	return globalConfig.config
 }
 
 // DB holds DB config.
@@ -107,7 +135,61 @@ type Orbital struct {
 	Workers                []Worker      `yaml:"workers" json:"workers"`
 }
 
-func (o *Orbital) Validate() error {
+// FieldValidation holds validation rules for a specific field.
+type FieldValidation struct {
+	// FieldName is the name of the field to validate (e.g., "system.type")
+	FieldName string `yaml:"fieldName" json:"fieldName"`
+	// Rules contains the validation rules for this field
+	Rules []ValidationRule `yaml:"rules" json:"rules"`
+}
+
+// Validate validates the configuration.
+func (c *Config) Validate() error {
+	if err := c.ValidateOrbital(); err != nil {
+		return fmt.Errorf("orbital config error: %w", err)
+	}
+
+	if err := c.ValidateFieldValidation(); err != nil {
+		return fmt.Errorf("field validation config error: %w", err)
+	}
+
+	return nil
+}
+
+// ValidateOrbital validates the orbital configuration.
+func (c *Config) ValidateOrbital() error {
+	return c.Orbital.validate()
+}
+
+// ValidateFieldValidation validates the field validation configuration.
+func (c *Config) ValidateFieldValidation() error {
+	for _, fieldValidation := range c.FieldValidation {
+		if fieldValidation.FieldName == "" {
+			return ErrFieldNameMustNotBeEmpty
+		}
+
+		for _, rule := range fieldValidation.Rules {
+			if err := rule.validate(); err != nil {
+				return fmt.Errorf("invalid rule for field '%s': %w", fieldValidation.FieldName, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (o *Orbital) GetWorker(workerName string) *Worker {
+	for _, worker := range o.Workers {
+		if worker.Name == workerName {
+			return &worker
+		}
+	}
+
+	return nil
+}
+
+// ValidateField validates the Orbital configuration.
+func (o *Orbital) validate() error {
 	if o.ConfirmJobDelay < 0 {
 		return fmt.Errorf("%w: %v", ErrConfirmJobDelayMustBeEqualGreaterThanZero, o.ConfirmJobDelay)
 	}
@@ -139,16 +221,6 @@ func (o *Orbital) Validate() error {
 		err := worker.validate()
 		if err != nil {
 			return fmt.Errorf("invalid worker configuration for %s: %w", worker.Name, err)
-		}
-	}
-
-	return nil
-}
-
-func (o *Orbital) GetWorker(workerName string) *Worker {
-	for _, worker := range o.Workers {
-		if worker.Name == workerName {
-			return &worker
 		}
 	}
 
@@ -290,6 +362,84 @@ func (m *MTLS) validate() error {
 
 	if m.KeyFile == "" {
 		return ErrEmptyKeyFile
+	}
+
+	return nil
+}
+
+// ValidateField validates a value against the configured field validation rules.
+func (c *Config) ValidateField(fieldName, value string, required bool) error {
+	fieldValidation := c.getFieldValidation(fieldName)
+	if fieldValidation == nil {
+		// No validation configured for this field - allow any value
+		if value == "" && required {
+			return fmt.Errorf("%w: '%s'", ErrFieldIsRequired, fieldName)
+		}
+
+		return nil
+	}
+
+	if value == "" && required {
+		return fmt.Errorf("%w: '%s'", ErrFieldIsRequired, fieldName)
+	}
+
+	if value == "" && !required {
+		return nil
+	}
+
+	if err := c.applyFieldRules(fieldName, value, fieldValidation); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Config) applyFieldRules(fieldName string, value string, fieldValidation *FieldValidation) error {
+	for _, rule := range fieldValidation.Rules {
+		if rule.Type == "enum" {
+			// ValidateField against allowed values
+			for _, allowedValue := range rule.AllowedValues {
+				if value == allowedValue {
+					return nil
+				}
+			}
+
+			return fmt.Errorf("%w: '%s' for field '%s', allowed values: %v",
+				ErrInvalidFieldValue, value, fieldName, rule.AllowedValues)
+		}
+	}
+
+	return nil
+}
+
+// getFieldValidation returns the field validation for a given field name.
+func (c *Config) getFieldValidation(fieldName string) *FieldValidation {
+	for _, fieldValidation := range c.FieldValidation {
+		if fieldValidation.FieldName == fieldName {
+			return &fieldValidation
+		}
+	}
+
+	return nil
+}
+
+// ValidationRule defines a validation rule.
+type ValidationRule struct {
+	// Type defines the type of validation (e.g., "enum")
+	Type string `yaml:"type" json:"type"`
+	// AllowedValues contains the list of valid values for enum validation
+	AllowedValues []string `yaml:"allowedValues" json:"allowedValues"`
+}
+
+// validate validates a ValidationRule.
+func (r *ValidationRule) validate() error {
+	switch r.Type {
+	case "enum":
+		if len(r.AllowedValues) == 0 {
+			return ErrEnumValidationMustHaveAllowedValues
+		}
+	default:
+		return fmt.Errorf("%w: %s", ErrUnsupportedValidationType, r.Type)
 	}
 
 	return nil
