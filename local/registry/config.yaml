@@ -127,3 +127,9 @@ telemetry:
       value: localhost:4317
     secretRef:
       type: insecure
+
+fieldValidation:
+  - fieldName: system.type
+    rules:
+      - type: enum
+        allowedValues: [ "system", "test" ]

@@ -47,11 +47,6 @@ func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSyst
 		}
 	}
 
-	systemType := model.SystemTypeSystem
-	if in.GetType() != "" {
-		systemType = model.SystemType(in.GetType())
-	}
-
 	system := &model.System{
 		ExternalID:    model.ExternalID(in.GetExternalId()),
 		TenantID:      &tenantID,
@@ -59,7 +54,7 @@ func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSyst
 		HasL1KeyClaim: &claim,
 		Status:        model.Status(in.GetStatus().String()),
 		Region:        model.Region(in.GetRegion()),
-		Type:          systemType,
+		Type:          model.SystemType(in.GetType()),
 		Labels:        in.GetLabels(),
 	}
 

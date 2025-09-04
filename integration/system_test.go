@@ -353,7 +353,7 @@ func TestSystemService(t *testing.T) {
 
 		t.Run("when entries exist", func(t *testing.T) {
 			// given
-			externalID1, region1 := registerSystemWithType(t, ctx, sSubj, existingTenantID, false, "foo")
+			externalID1, region1 := registerSystemWithType(t, ctx, sSubj, existingTenantID, false, "test")
 			externalID2, region2 := registerSystem(t, ctx, sSubj, "", false)
 
 			// clean up
@@ -398,7 +398,7 @@ func TestSystemService(t *testing.T) {
 						name: "Type",
 						request: &systemgrpc.ListSystemsRequest{
 							TenantId: existingTenantID,
-							Type:     "foo",
+							Type:     "test",
 						},
 						expectedExternalID: externalID1,
 					},
