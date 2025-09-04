@@ -30,6 +30,10 @@ const (
 	WorkerNameNotifyEvent = "notify-event"
 )
 
+const (
+	RuleTypeEnum = "enum"
+)
+
 var (
 	ErrEmptyRegion               = errors.New("region must not be empty")
 	ErrNilConnection             = errors.New("connection configuration is missing")
@@ -371,7 +375,6 @@ func (m *MTLS) validate() error {
 func (c *Config) ValidateField(fieldName, value string, required bool) error {
 	fieldValidation := c.getFieldValidation(fieldName)
 	if fieldValidation == nil {
-		// No validation configured for this field - allow any value
 		if value == "" && required {
 			return fmt.Errorf("%w: '%s'", ErrFieldIsRequired, fieldName)
 		}
@@ -379,12 +382,12 @@ func (c *Config) ValidateField(fieldName, value string, required bool) error {
 		return nil
 	}
 
-	if value == "" && required {
-		return fmt.Errorf("%w: '%s'", ErrFieldIsRequired, fieldName)
-	}
-
-	if value == "" && !required {
-		return nil
+	if value == "" {
+		if required {
+			return fmt.Errorf("%w: '%s'", ErrFieldIsRequired, fieldName)
+		} else {
+			return nil
+		}
 	}
 
 	if err := c.applyFieldRules(fieldName, value, fieldValidation); err != nil {
@@ -396,8 +399,7 @@ func (c *Config) ValidateField(fieldName, value string, required bool) error {
 
 func (c *Config) applyFieldRules(fieldName string, value string, fieldValidation *FieldValidation) error {
 	for _, rule := range fieldValidation.Rules {
-		if rule.Type == "enum" {
-			// ValidateField against allowed values
+		if rule.Type == RuleTypeEnum {
 			for _, allowedValue := range rule.AllowedValues {
 				if value == allowedValue {
 					return nil
@@ -434,7 +436,7 @@ type ValidationRule struct {
 // validate validates a ValidationRule.
 func (r *ValidationRule) validate() error {
 	switch r.Type {
-	case "enum":
+	case RuleTypeEnum:
 		if len(r.AllowedValues) == 0 {
 			return ErrEnumValidationMustHaveAllowedValues
 		}
