@@ -29,6 +29,7 @@ import (
 	root "github.com/openkcm/registry"
 	"github.com/openkcm/registry/internal/config"
 	"github.com/openkcm/registry/internal/interceptor"
+	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository/sql"
 	"github.com/openkcm/registry/internal/service"
 )
@@ -155,7 +156,7 @@ func initConfig() *config.Config {
 	err = cfg.Validate()
 	handleErr("validating config", err)
 
-	config.SetGlobalConfig(cfg)
+	model.SetGlobalTypeValidators(&cfg.Validators)
 
 	return cfg
 }

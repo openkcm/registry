@@ -30,7 +30,7 @@ func (s *System) TableName() string {
 
 // Validate validates given System data.
 func (s *System) Validate() error {
-	return ValidateAll(s.ExternalID, s.Region, s.L2KeyID, s.Status, s.Type, &s.Labels)
+	return ValidateStruct(s, "system")
 }
 
 // IsLinkedToTenant returns true if the System is linked to the Tenant.

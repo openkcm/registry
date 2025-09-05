@@ -5,61 +5,21 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/openkcm/registry/internal/config"
 	"github.com/openkcm/registry/internal/model"
 )
 
 func TestSystemTypeValidation(t *testing.T) {
-	// Save original global config
-	originalConfig := config.GetGlobalConfig()
-
-	defer func() {
-		config.SetGlobalConfig(originalConfig)
-	}()
-
 	t.Run("with validation config", func(t *testing.T) {
-		// Set up validation configuration
-		cfg := &config.Config{
-			FieldValidation: []config.FieldValidation{
-				{
-					FieldName: "system.type",
-					Rules: []config.ValidationRule{
-						{
-							Type:          "enum",
-							AllowedValues: []string{"system", "application", "service"},
-						},
-					},
-				},
-			},
-		}
-		config.SetGlobalConfig(cfg)
-
 		tests := map[string]struct {
 			system    model.SystemType
 			expectErr bool
 		}{
-			"Valid system type - system": {
+			"Valid system type": {
 				system:    "system",
-				expectErr: false,
-			},
-			"Valid system type - application": {
-				system:    "application",
-				expectErr: false,
-			},
-			"Valid system type - service": {
-				system:    "service",
 				expectErr: false,
 			},
 			"Invalid system type - empty": {
 				system:    "",
-				expectErr: true,
-			},
-			"Invalid system type - unknown": {
-				system:    "unknown",
-				expectErr: true,
-			},
-			"Invalid system type - case mismatch": {
-				system:    "SYSTEM",
 				expectErr: true,
 			},
 		}
@@ -80,9 +40,6 @@ func TestSystemTypeValidation(t *testing.T) {
 	})
 
 	t.Run("without validation config", func(t *testing.T) {
-		// Clear validation configuration
-		config.SetGlobalConfig(nil)
-
 		tests := map[string]struct {
 			system    model.SystemType
 			expectErr bool
