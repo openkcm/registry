@@ -141,17 +141,17 @@ func (t *Tenant) ListTenants(ctx context.Context, in *tenantgrpc.ListTenantsRequ
 	}, nil
 }
 
-// ApplyTenantAuth applies authentication settings to a Tenant.
+// ApplyTenantAuth applies auth information to a Tenant.
 func (t *Tenant) ApplyTenantAuth(ctx context.Context, in *tenantgrpc.ApplyTenantAuthRequest) (*tenantgrpc.ApplyTenantAuthResponse, error) {
 	slogctx.Debug(ctx, "ApplyTenantAuth called", "tenantId", in.GetId())
 
-	id := model.ID(in.GetId())
-	if err := id.Validate(); err != nil {
+	err := validateApplyAuthRequest(in)
+	if err != nil {
 		return nil, err
 	}
 
-	err := t.patchTenant(ctx, patchTenantParams{
-		id:           id,
+	err = t.patchTenant(ctx, patchTenantParams{
+		id:           model.ID(in.GetId()),
 		validateFunc: checkTenantActive,
 		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
 			if tenant.Labels == nil {
@@ -336,6 +336,28 @@ func (t *Tenant) GetTenant(ctx context.Context, in *tenantgrpc.GetTenantRequest)
 	return &tenantgrpc.GetTenantResponse{
 		Tenant: tenant.ToProto(),
 	}, nil
+}
+
+// validateApplyAuthRequest validates the ApplyTenantAuthRequest.
+// If the request is valid, it returns nil, otherwise it returns an error.
+func validateApplyAuthRequest(in *tenantgrpc.ApplyTenantAuthRequest) error {
+	id := model.ID(in.GetId())
+	if err := id.Validate(); err != nil {
+		return err
+	}
+
+	info := in.GetAuthInfo()
+	if len(info) == 0 {
+		return ErrMissingLabels
+	}
+
+	labels := model.Labels(info)
+	err := labels.Validate()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // validateSetTenantLabelsRequest validates the SetTenantLabelsRequest.

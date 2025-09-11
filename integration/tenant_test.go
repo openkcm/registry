@@ -641,31 +641,63 @@ func TestTenantValidation(t *testing.T) {
 
 	t.Run("ApplyTenantAuth", func(t *testing.T) {
 		t.Run("should return an error if", func(t *testing.T) {
-			t.Run("ID is empty", func(t *testing.T) {
-				// when
-				resp, err := tSubj.ApplyTenantAuth(ctx, &tenantgrpc.ApplyTenantAuthRequest{
-					Id:       "",
-					AuthInfo: map[string]string{"auth_type": "OIDC"},
+			// given
+			tests := []struct {
+				name    string
+				req     *tenantgrpc.ApplyTenantAuthRequest
+				expErr  error
+				expCode codes.Code
+			}{
+				{
+					name: "ID is empty",
+					req: &tenantgrpc.ApplyTenantAuthRequest{
+						Id:       "",
+						AuthInfo: map[string]string{"auth_type": "OIDC"},
+					},
+					expErr:  model.ErrEmptyID,
+					expCode: codes.InvalidArgument,
+				},
+				{
+					name: "AuthInfo is empty",
+					req: &tenantgrpc.ApplyTenantAuthRequest{
+						Id:       validRandID(),
+						AuthInfo: map[string]string{},
+					},
+					expErr:  service.ErrMissingLabels,
+					expCode: codes.InvalidArgument,
+				},
+				{
+					name: "AuthInfo has empty key",
+					req: &tenantgrpc.ApplyTenantAuthRequest{
+						Id:       validRandID(),
+						AuthInfo: map[string]string{"": "OIDC"},
+					},
+					expErr:  model.ErrLabelsIncludeEmptyString,
+					expCode: codes.InvalidArgument,
+				},
+				{
+					name: "tenant cannot be found",
+					req: &tenantgrpc.ApplyTenantAuthRequest{
+						Id:       validRandID(),
+						AuthInfo: map[string]string{"auth_type": "OIDC"},
+					},
+					expErr:  service.ErrTenantNotFound,
+					expCode: codes.NotFound,
+				},
+			}
+
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					// when
+					resp, err := tSubj.ApplyTenantAuth(ctx, tt.req)
+
+					// then
+					assert.Error(t, err)
+					assert.ErrorIs(t, err, tt.expErr)
+					assert.Equal(t, tt.expCode, status.Code(err), err.Error())
+					assert.Nil(t, resp)
 				})
-
-				// then
-				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrEmptyID, err)
-				assert.Nil(t, resp)
-			})
-
-			t.Run("tenant cannot be found", func(t *testing.T) {
-				// when
-				resp, err := tSubj.ApplyTenantAuth(ctx, &tenantgrpc.ApplyTenantAuthRequest{
-					Id:       validRandID(),
-					AuthInfo: map[string]string{"auth_type": "OIDC"},
-				})
-
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
-				assert.Nil(t, resp)
-			})
+			}
 		})
 	})
 
