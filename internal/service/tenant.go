@@ -78,7 +78,7 @@ func (t *Tenant) RegisterTenant(ctx context.Context, in *tenantgrpc.RegisterTena
 			return err
 		}
 
-		err := t.orbital.PrepareJob(ctx, ProvisionTenant, tenant.ToProto())
+		err := t.orbital.PrepareTenantJob(ctx, tenant, ProvisionTenant)
 		if err != nil {
 			return status.Error(codes.Internal, "failed to start tenant provisioning job")
 		}
@@ -141,6 +141,34 @@ func (t *Tenant) ListTenants(ctx context.Context, in *tenantgrpc.ListTenantsRequ
 	}, nil
 }
 
+// ApplyTenantAuth applies authentication settings to a Tenant.
+func (t *Tenant) ApplyTenantAuth(ctx context.Context, in *tenantgrpc.ApplyTenantAuthRequest) (*tenantgrpc.ApplyTenantAuthResponse, error) {
+	slogctx.Debug(ctx, "ApplyTenantAuth called", "tenantId", in.GetId())
+
+	id := model.ID(in.GetId())
+	if err := id.Validate(); err != nil {
+		return nil, err
+	}
+
+	err := t.patchTenant(ctx, patchTenantParams{
+		id:           id,
+		validateFunc: checkTenantActive,
+		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
+			if tenant.Labels == nil {
+				tenant.Labels = make(model.Labels)
+			}
+			maps.Copy(tenant.Labels, in.GetAuthInfo())
+
+			return t.orbital.PrepareTenantJob(ctx, tenant, ApplyTenantAuth)
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &tenantgrpc.ApplyTenantAuthResponse{Success: true}, nil
+}
+
 // BlockTenant updates the status of a Tenant to BLOCKED.
 // If the update is successful, a success message will be returned, otherwise an error will be returned.
 //
@@ -160,7 +188,7 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 		},
 		validateFunc: validateTransition(tenantgrpc.Status_STATUS_BLOCKING),
 		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
-			return t.orbital.PrepareJob(ctx, BlockTenant, tenant.ToProto())
+			return t.orbital.PrepareTenantJob(ctx, tenant, BlockTenant)
 		},
 	})
 	if err != nil {
@@ -189,7 +217,7 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 		},
 		validateFunc: validateTransition(tenantgrpc.Status_STATUS_UNBLOCKING),
 		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
-			return t.orbital.PrepareJob(ctx, UnblockTenant, tenant.ToProto())
+			return t.orbital.PrepareTenantJob(ctx, tenant, UnblockTenant)
 		},
 	})
 	if err != nil {
@@ -220,7 +248,7 @@ func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTe
 		},
 		validateFunc: validateTransition(tenantgrpc.Status_STATUS_TERMINATING),
 		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
-			return t.orbital.PrepareJob(ctx, TerminateTenant, tenant.ToProto())
+			return t.orbital.PrepareTenantJob(ctx, tenant, TerminateTenant)
 		},
 	})
 	if err != nil {
@@ -373,21 +401,23 @@ func (t *Tenant) patchTenant(ctx context.Context, params patchTenantParams) erro
 			return err
 		}
 
-		params.updateFunc(tenant)
+		if params.updateFunc != nil {
+			params.updateFunc(tenant)
 
-		isPatched, err := r.Patch(ctx, tenant)
-		if err != nil {
-			return ErrTenantUpdate
-		}
+			isPatched, err := r.Patch(ctx, tenant)
+			if err != nil {
+				return ErrTenantUpdate
+			}
 
-		if !isPatched {
-			return ErrTenantNotFound
+			if !isPatched {
+				return ErrTenantNotFound
+			}
 		}
 
 		if params.jobFunc != nil {
 			err = params.jobFunc(ctx, tenant)
 			if err != nil {
-				return status.Error(codes.Internal, "failed to start orbital job")
+				return status.Errorf(codes.Internal, "failed to start orbital job: %v", err)
 			}
 		}
 

@@ -51,7 +51,7 @@ var (
 	ErrNumberOfWorkersMustBeGreaterThanZero = errors.New("number of workers must be greater than zero")
 	ErrTimeoutMustBeGreaterThanZero         = errors.New("timeout must be greater than zero")
 	// Orbital specific errors.
-	ErrConfirmJobDelayMustBeEqualGreaterThanZero = errors.New("confirm job delay must be equal or greater than zero")
+	ErrConfirmJobAfterMustBeEqualGreaterThanZero = errors.New("confirm job delay must be equal or greater than zero")
 	ErrTaskLimitNumMustBeGreaterThanZero         = errors.New("task limit number must be greater than zero")
 	ErrMaxReconcileCountMustBeGreaterThanZero    = errors.New("max reconcile count must be greater than zero")
 	ErrBackoffBaseIntervalMustBeGreaterThanZero  = errors.New("backoff base interval must be greater than zero")
@@ -98,7 +98,7 @@ type GRPCServer struct {
 }
 
 type Orbital struct {
-	ConfirmJobDelay        time.Duration `yaml:"confirmJobDelay" json:"confirmJobDelay"`
+	ConfirmJobAfter        time.Duration `yaml:"confirmJobAfter" json:"confirmJobAfter"`
 	TaskLimitNum           int           `yaml:"taskLimitNum" json:"taskLimitNum"`
 	MaxReconcileCount      int64         `yaml:"maxReconcileCount" json:"maxReconcileCount"`
 	BackoffBaseIntervalSec int64         `yaml:"backoffBaseIntervalSec" json:"backoffBaseIntervalSec"`
@@ -108,8 +108,8 @@ type Orbital struct {
 }
 
 func (o *Orbital) Validate() error {
-	if o.ConfirmJobDelay < 0 {
-		return fmt.Errorf("%w: %v", ErrConfirmJobDelayMustBeEqualGreaterThanZero, o.ConfirmJobDelay)
+	if o.ConfirmJobAfter < 0 {
+		return fmt.Errorf("%w: %v", ErrConfirmJobAfterMustBeEqualGreaterThanZero, o.ConfirmJobAfter)
 	}
 
 	if o.TaskLimitNum <= 0 {
