@@ -23,6 +23,7 @@ linters:
     - ireturn
     - noctx
     - mnd
+    - wsl_v5
   settings:
     tagliatelle:
       case:
