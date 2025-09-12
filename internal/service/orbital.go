@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/client/amqp"
@@ -26,6 +27,7 @@ import (
 //  2. Task types, which means the operator will process the task based on the job type.
 const (
 	ProvisionTenant JobType = "PROVISION_TENANT" // (Note: gRPC is called RegisterTenant)
+	ApplyTenantAuth JobType = "APPLY_TENANT_AUTH"
 	BlockTenant     JobType = "BLOCK_TENANT"
 	UnblockTenant   JobType = "UNBLOCK_TENANT"
 	TerminateTenant JobType = "TERMINATE_TENANT"
@@ -41,7 +43,7 @@ var (
 type JobType string
 
 func (j JobType) toStatus() (tenantgrpc.Status, error) {
-	switch j {
+	switch j { //nolint:exhaustive
 	case ProvisionTenant:
 		return tenantgrpc.Status_STATUS_PROVISIONING, nil
 	case BlockTenant:
@@ -122,24 +124,23 @@ func (o *Orbital) Init(ctx context.Context, db *gorm.DB, repo repository.Reposit
 	return nil
 }
 
-func (o *Orbital) PrepareJob(ctx context.Context, jobType JobType, msg proto.Message) error {
-	data, err := proto.Marshal(msg)
+func (o *Orbital) PrepareTenantJob(ctx context.Context, tenant *model.Tenant, jobType JobType) error {
+	ctx = slogctx.With(ctx, slog.String("jobType", string(jobType)), slog.String("tenantID", tenant.ID.String()))
+
+	data, err := proto.Marshal(tenant.ToProto())
 	if err != nil {
 		slogctx.Error(ctx, "failed to marshal job data", "error", err)
 		return err
 	}
 
-	job, err := o.manager.PrepareJob(ctx, orbital.NewJob(
-		string(jobType),
-		data,
-	))
+	job := orbital.NewJob(string(jobType), data).WithExternalID(tenant.ID.String())
+	job, err = o.manager.PrepareJob(ctx, job)
 	if err != nil {
 		slogctx.Error(ctx, "failed to prepare job", "error", err)
 		return err
 	}
 
-	slogctx.Debug(ctx, "Job prepared", "jobType", jobType, "jobId", job.ID)
-
+	slogctx.Debug(ctx, "Job prepared", "jobId", job.ID)
 	return nil
 }
 
@@ -202,7 +203,7 @@ func createAMQPClient(ctx context.Context, cfgTarget config.Target) (*amqp.AMQP,
 }
 
 func configureOrbital(ctx context.Context, cfg config.Orbital, manager *orbital.Manager) {
-	manager.Config.ConfirmJobDelay = cfg.ConfirmJobDelay
+	manager.Config.ConfirmJobAfter = cfg.ConfirmJobAfter
 	manager.Config.TaskLimitNum = cfg.TaskLimitNum
 	manager.Config.MaxReconcileCount = cfg.MaxReconcileCount
 	manager.Config.BackoffBaseIntervalSec = cfg.BackoffBaseIntervalSec
@@ -284,7 +285,7 @@ func confirmJob(repo repository.Repository) func(ctx context.Context, job orbita
 		}
 
 		switch JobType(job.Type) {
-		case ProvisionTenant:
+		case ProvisionTenant, ApplyTenantAuth:
 			return orbital.JobConfirmResult{Done: true}, nil
 		case BlockTenant, UnblockTenant, TerminateTenant:
 			status, err := JobType(job.Type).toStatus()
@@ -336,42 +337,44 @@ func handleTerminatedJob(ctx context.Context, job orbital.Job, repo repository.R
 }
 
 func applyJobDone(job orbital.Job, tenant *model.Tenant) error {
-	status, err := JobType(job.Type).toStatus()
-	if err != nil {
-		return err
-	}
-
-	switch status { //nolint:exhaustive
-	case tenantgrpc.Status_STATUS_PROVISIONING, tenantgrpc.Status_STATUS_UNBLOCKING:
+	switch JobType(job.Type) {
+	case ProvisionTenant, UnblockTenant:
 		tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()))
-	case tenantgrpc.Status_STATUS_BLOCKING:
+	case ApplyTenantAuth:
+		t := &tenantgrpc.Tenant{}
+
+		err := proto.Unmarshal(job.Data, t)
+		if err != nil {
+			return err
+		}
+
+		if tenant.Labels == nil {
+			tenant.Labels = make(model.Labels)
+		}
+		maps.Copy(tenant.Labels, t.GetLabels())
+	case BlockTenant:
 		tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String()))
-	case tenantgrpc.Status_STATUS_TERMINATING:
+	case TerminateTenant:
 		tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATED.String()))
 	default:
-		return fmt.Errorf("%w: %s", ErrUnexpectedStatus, job.Type)
+		return fmt.Errorf("%w: %s", ErrUnexpectedJobType, job.Type)
 	}
 
 	return nil
 }
 
 func applyJobAborted(job orbital.Job, tenant *model.Tenant) error {
-	status, err := JobType(job.Type).toStatus()
-	if err != nil {
-		return err
-	}
-
-	switch status { //nolint:exhaustive
-	case tenantgrpc.Status_STATUS_PROVISIONING:
+	switch JobType(job.Type) { //nolint:exhaustive
+	case ProvisionTenant:
 		tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_PROVISIONING_ERROR.String()))
-	case tenantgrpc.Status_STATUS_UNBLOCKING:
+	case UnblockTenant:
 		tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_UNBLOCKING_ERROR.String()))
-	case tenantgrpc.Status_STATUS_BLOCKING:
+	case BlockTenant:
 		tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKING_ERROR.String()))
-	case tenantgrpc.Status_STATUS_TERMINATING:
+	case TerminateTenant:
 		tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATION_ERROR.String()))
 	default:
-		return fmt.Errorf("%w: %s", ErrUnexpectedStatus, job.Type)
+		return fmt.Errorf("%w: %s", ErrUnexpectedJobType, job.Type)
 	}
 
 	return nil
