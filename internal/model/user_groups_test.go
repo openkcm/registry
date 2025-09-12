@@ -3,10 +3,11 @@ package model_test
 import (
 	"testing"
 
-	"github.com/openkcm/registry/internal/model"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/openkcm/registry/internal/model"
 )
 
 func TestUserGroupsValidate(t *testing.T) {

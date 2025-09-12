@@ -14,7 +14,7 @@ import (
 var ErrMarshalUserGroupValue = errors.New("failed to marshal user_group value")
 
 type (
-	UserGroups []string
+	UserGroups []string //nolint:recvcheck
 )
 
 // Validate validates given UserGroups of the tenant.
