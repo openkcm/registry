@@ -1172,76 +1172,65 @@ func TestSetTenantUserGroups(t *testing.T) {
 
 	t.Run("SetTenantUserGroups", func(t *testing.T) {
 		t.Run("should return error if", func(t *testing.T) {
-			t.Run("UserGroups is nil", func(t *testing.T) {
-				// given
+			tts := []struct {
+				name       string
+				tenantID   string
+				userGroups model.UserGroups
+				expCode    codes.Code
+			}{
+				{
+					name:       "UserGroups is nil",
+					tenantID:   "some-tenant-id",
+					userGroups: nil,
+					expCode:    codes.InvalidArgument,
+				},
+				{
+					name:       "UserGroups is empty",
+					tenantID:   "some-tenant-id",
+					userGroups: []string{},
+					expCode:    codes.InvalidArgument,
+				},
+				{
+					name:       "UserGroups has a empty string",
+					tenantID:   "some-tenant-id",
+					userGroups: []string{"admin", ""},
+					expCode:    codes.InvalidArgument,
+				},
+				{
+					name:       "UserGroups has a blank string",
+					tenantID:   "some-tenant-id",
+					userGroups: []string{"admin", " "},
+					expCode:    codes.InvalidArgument,
+				},
+				{
+					name:       "tenant is not present",
+					tenantID:   "some-tenant-id",
+					userGroups: []string{"admin", "audit"},
+					expCode:    codes.NotFound,
+				},
+				{
+					name:       "tenant is empty",
+					tenantID:   "",
+					userGroups: []string{"admin", "audit"},
+					expCode:    codes.InvalidArgument,
+				},
+			}
+			for _, tt := range tts {
+				t.Run(tt.name, func(t *testing.T) {
+					// given
 
-				// when
-				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
-					Id:         "some-tenant-id",
-					UserGroups: nil,
+					// when
+					res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
+						Id:         tt.tenantID,
+						UserGroups: tt.userGroups,
+					})
+
+					// then
+					assert.Error(t, err)
+					assert.Equal(t, tt.expCode, status.Code(err), err.Error())
+					assert.Nil(t, res)
 				})
-
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
-				assert.Nil(t, res)
-			})
-			t.Run("UserGroups is empty", func(t *testing.T) {
-				// given
-
-				// when
-				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
-					Id:         "some-tenant-id",
-					UserGroups: []string{},
-				})
-
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
-				assert.Nil(t, res)
-			})
-			t.Run("UserGroups has a empty string", func(t *testing.T) {
-				// given
-
-				// when
-				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
-					Id:         "some-tenant-id",
-					UserGroups: []string{"admin", ""},
-				})
-
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
-				assert.Nil(t, res)
-			})
-			t.Run("UserGroups has a blank string", func(t *testing.T) {
-				// given
-
-				// when
-				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
-					Id:         "some-tenant-id",
-					UserGroups: []string{"admin", " "},
-				})
-
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
-				assert.Nil(t, res)
-			})
-			t.Run("tenant is not present", func(t *testing.T) {
-				// given
-
-				// when
-				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
-					Id:         "some-tenant-id",
-					UserGroups: []string{"admin", "audit"},
-				})
-
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
-				assert.Nil(t, res)
-			})
+			}
 		})
 		t.Run("should succeed if", func(t *testing.T) {
 			t.Run("request is valid", func(t *testing.T) {
