@@ -360,6 +360,34 @@ func validateApplyAuthRequest(in *tenantgrpc.ApplyTenantAuthRequest) error {
 	return nil
 }
 
+func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTenantUserGroupsRequest) (*tenantgrpc.SetTenantUserGroupsResponse, error) {
+	slogctx.Debug(ctx, "SetTenantUserGroups called", "tenantId", in.GetId())
+	tenantID := model.ID(in.GetId())
+	err := tenantID.Validate()
+	if err != nil {
+		return nil, err
+	}
+
+	err = model.UserGroups(in.GetUserGroups()).Validate()
+	if err != nil {
+		return nil, err
+	}
+
+	err = t.patchTenant(ctx, patchTenantParams{
+		id: tenantID,
+		updateFunc: func(tenant *model.Tenant) {
+			tenant.UserGroups = in.GetUserGroups()
+		},
+		validateFunc: func(tenant *model.Tenant) error { return nil },
+		jobFunc:      nil,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &tenantgrpc.SetTenantUserGroupsResponse{Success: true}, nil
+}
+
 // validateSetTenantLabelsRequest validates the SetTenantLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRequest) error {
