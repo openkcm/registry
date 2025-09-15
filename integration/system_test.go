@@ -353,7 +353,7 @@ func TestSystemService(t *testing.T) {
 
 		t.Run("when entries exist", func(t *testing.T) {
 			// given
-			externalID1, region1 := registerSystem(t, ctx, sSubj, existingTenantID, false)
+			externalID1, region1 := registerSystemWithType(t, ctx, sSubj, existingTenantID, false, "foo")
 			externalID2, region2 := registerSystem(t, ctx, sSubj, "", false)
 
 			// clean up
@@ -394,6 +394,14 @@ func TestSystemService(t *testing.T) {
 						},
 						expectedExternalID: externalID1,
 					},
+					{
+						name: "Type",
+						request: &systemgrpc.ListSystemsRequest{
+							TenantId: existingTenantID,
+							Type:     "foo",
+						},
+						expectedExternalID: externalID1,
+					},
 				}
 
 				for _, tt := range tests {
@@ -426,6 +434,21 @@ func TestSystemService(t *testing.T) {
 						name:      "no tenantID and no externalID and region is provided in query",
 						request:   &systemgrpc.ListSystemsRequest{},
 						errorCode: codes.InvalidArgument,
+					},
+					{
+						name: "only system type is provided in query",
+						request: &systemgrpc.ListSystemsRequest{
+							Type: "system",
+						},
+						errorCode: codes.InvalidArgument,
+					},
+					{
+						name: "non-existent system type is provided in query",
+						request: &systemgrpc.ListSystemsRequest{
+							TenantId: existingTenantID,
+							Type:     "non-existent-type",
+						},
+						errorCode: codes.NotFound,
 					},
 				}
 
@@ -1227,9 +1250,14 @@ func getSystem(t *testing.T, ctx context.Context, subj systemgrpc.ServiceClient,
 }
 
 func registerSystem(t *testing.T, ctx context.Context, sSubj systemgrpc.ServiceClient, tenantID string, l1KeyClaim bool) (string, string) {
+	return registerSystemWithType(t, ctx, sSubj, tenantID, l1KeyClaim, "system")
+}
+
+func registerSystemWithType(t *testing.T, ctx context.Context, sSubj systemgrpc.ServiceClient, tenantID string, l1KeyClaim bool, systemType string) (string, string) {
 	req := validRegisterSystemReq()
 	req.TenantId = tenantID
 	req.HasL1KeyClaim = l1KeyClaim
+	req.Type = systemType
 	res, err := sSubj.RegisterSystem(ctx, req)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)

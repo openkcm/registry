@@ -26,6 +26,8 @@ import (
 	"github.com/openkcm/registry/internal/service"
 )
 
+type expStateFunc func(*tenantgrpc.Tenant) bool
+
 func TestTenantReconciliation(t *testing.T) {
 	// given
 	conn, err := newGRPCClientConn()
@@ -50,28 +52,34 @@ func TestTenantReconciliation(t *testing.T) {
 
 	t.Run("ProvisionTenant", func(t *testing.T) {
 		tests := []struct {
-			name           string
-			tenantID       string
-			region         string
-			expectedStatus tenantgrpc.Status
+			name     string
+			tenantID string
+			region   string
+			expState expStateFunc
 		}{
 			{
-				name:           "should change status to PROVISIONING_ERROR if region is not found",
-				tenantID:       "test-tenant-cancel",
-				region:         "non-existing-region",
-				expectedStatus: tenantgrpc.Status_STATUS_PROVISIONING_ERROR,
+				name:     "should change status to PROVISIONING_ERROR if region is not found",
+				tenantID: "test-tenant-cancel",
+				region:   "non-existing-region",
+				expState: func(t *tenantgrpc.Tenant) bool {
+					return t.GetStatus() == tenantgrpc.Status_STATUS_PROVISIONING_ERROR
+				},
 			},
 			{
-				name:           "should change status to PROVISIONING_ERROR if operator fails to process the request",
-				tenantID:       tenantIDFail,
-				region:         tenantRegion,
-				expectedStatus: tenantgrpc.Status_STATUS_PROVISIONING_ERROR,
+				name:     "should change status to PROVISIONING_ERROR if operator fails to process the request",
+				tenantID: tenantIDFail,
+				region:   tenantRegion,
+				expState: func(t *tenantgrpc.Tenant) bool {
+					return t.GetStatus() == tenantgrpc.Status_STATUS_PROVISIONING_ERROR
+				},
 			},
 			{
-				name:           "should change status to ACTIVE if tenant is provisioned successfully",
-				tenantID:       tenantIDSuccess,
-				region:         tenantRegion,
-				expectedStatus: tenantgrpc.Status_STATUS_ACTIVE,
+				name:     "should change status to ACTIVE if tenant is provisioned successfully",
+				tenantID: tenantIDSuccess,
+				region:   tenantRegion,
+				expState: func(t *tenantgrpc.Tenant) bool {
+					return t.GetStatus() == tenantgrpc.Status_STATUS_ACTIVE
+				},
 			},
 		}
 
@@ -91,27 +99,113 @@ func TestTenantReconciliation(t *testing.T) {
 				}()
 
 				// then
-				err = waitForReconciliation(ctx, tSubj, req.GetId(), tt.expectedStatus)
+				err = waitForReconciliation(ctx, tSubj, req.GetId(), tt.expState)
 				assert.NoError(t, err)
 			})
 		}
 	})
 
-	t.Run("BlockTenant", func(t *testing.T) {
+	t.Run("ApplyTenantAuth", func(t *testing.T) {
 		tests := []struct {
-			name           string
-			tenantID       string
-			expectedStatus tenantgrpc.Status
+			name     string
+			tenantID string
+			authInfo map[string]string
+			expState expStateFunc
 		}{
 			{
-				name:           "should change status to BLOCKING_ERROR if operator fails to process the request",
-				tenantID:       tenantIDFail,
-				expectedStatus: tenantgrpc.Status_STATUS_BLOCKING_ERROR,
+				name:     "should add auth info to labels if operator processes request successfully",
+				tenantID: tenantIDSuccess,
+				authInfo: map[string]string{
+					"auth_type": "OIDC",
+					"issuer":    "https://example.com",
+				},
+				expState: func(t *tenantgrpc.Tenant) bool {
+					l := t.GetLabels()
+					return l["auth_type"] == "OIDC" && l["issuer"] == "https://example.com"
+				},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// given
+				tenant := validTenant()
+				tenant.ID = model.ID(tt.tenantID)
+				tenant.Region = tenantRegion
+				err := createTenantInDB(ctx, db, tenant)
+				assert.NoError(t, err)
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				_, err = tSubj.ApplyTenantAuth(ctx, &tenantgrpc.ApplyTenantAuthRequest{
+					Id:       tt.tenantID,
+					AuthInfo: tt.authInfo,
+				})
+				assert.NoError(t, err)
+
+				// then
+				err = waitForReconciliation(ctx, tSubj, tenant.ID.String(), tt.expState)
+				assert.NoError(t, err)
+			})
+		}
+
+		t.Run("should prevent starting ApplyTenantAuth job if one is already in progress", func(t *testing.T) {
+			// given
+			tenantID := "test-tenant-in-progress"
+			tenant := validTenant()
+			tenant.ID = model.ID(tenantID)
+			tenant.Region = tenantRegion
+			err := createTenantInDB(ctx, db, tenant)
+			assert.NoError(t, err)
+			defer func() {
+				err = deleteTenantFromDB(ctx, db, tenant)
+				assert.NoError(t, err)
+			}()
+
+			_, err = tSubj.ApplyTenantAuth(ctx, &tenantgrpc.ApplyTenantAuthRequest{
+				Id: tenantID,
+				AuthInfo: map[string]string{
+					"auth_type": "OIDC",
+				},
+			})
+			assert.NoError(t, err)
+
+			// when
+			_, err = tSubj.ApplyTenantAuth(ctx, &tenantgrpc.ApplyTenantAuthRequest{
+				Id: tenantID,
+				AuthInfo: map[string]string{
+					"auth_type": "OIDC",
+				},
+			})
+
+			// then
+			assert.Error(t, err)
+			assert.Equal(t, codes.Internal, status.Code(err), err.Error())
+		})
+	})
+
+	t.Run("BlockTenant", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			tenantID string
+			expState expStateFunc
+		}{
+			{
+				name:     "should change status to BLOCKING_ERROR if operator fails to process the request",
+				tenantID: tenantIDFail,
+				expState: func(t *tenantgrpc.Tenant) bool {
+					return t.GetStatus() == tenantgrpc.Status_STATUS_BLOCKING_ERROR
+				},
 			},
 			{
-				name:           "should change status to BLOCKED if tenant is blocked successfully",
-				tenantID:       tenantIDSuccess,
-				expectedStatus: tenantgrpc.Status_STATUS_BLOCKED,
+				name:     "should change status to BLOCKED if tenant is blocked successfully",
+				tenantID: tenantIDSuccess,
+				expState: func(t *tenantgrpc.Tenant) bool {
+					return t.GetStatus() == tenantgrpc.Status_STATUS_BLOCKED
+				},
 			},
 		}
 
@@ -135,7 +229,7 @@ func TestTenantReconciliation(t *testing.T) {
 				assert.NoError(t, err)
 
 				// then
-				err = waitForReconciliation(ctx, tSubj, tenant.ID.String(), tt.expectedStatus)
+				err = waitForReconciliation(ctx, tSubj, tenant.ID.String(), tt.expState)
 				assert.NoError(t, err)
 			})
 		}
@@ -143,19 +237,23 @@ func TestTenantReconciliation(t *testing.T) {
 
 	t.Run("UnblockTenant", func(t *testing.T) {
 		tests := []struct {
-			name           string
-			tenantID       string
-			expectedStatus tenantgrpc.Status
+			name     string
+			tenantID string
+			expState expStateFunc
 		}{
 			{
-				name:           "should change status to UNBLOCKING_ERROR if operator fails to process the request",
-				tenantID:       tenantIDFail,
-				expectedStatus: tenantgrpc.Status_STATUS_UNBLOCKING_ERROR,
+				name:     "should change status to UNBLOCKING_ERROR if operator fails to process the request",
+				tenantID: tenantIDFail,
+				expState: func(t *tenantgrpc.Tenant) bool {
+					return t.GetStatus() == tenantgrpc.Status_STATUS_UNBLOCKING_ERROR
+				},
 			},
 			{
-				name:           "should change status to ACTIVE if tenant is unblocked successfully",
-				tenantID:       tenantIDSuccess,
-				expectedStatus: tenantgrpc.Status_STATUS_ACTIVE,
+				name:     "should change status to ACTIVE if tenant is unblocked successfully",
+				tenantID: tenantIDSuccess,
+				expState: func(t *tenantgrpc.Tenant) bool {
+					return t.GetStatus() == tenantgrpc.Status_STATUS_ACTIVE
+				},
 			},
 		}
 
@@ -180,7 +278,7 @@ func TestTenantReconciliation(t *testing.T) {
 				assert.NoError(t, err)
 
 				// then
-				err = waitForReconciliation(ctx, tSubj, tenant.ID.String(), tt.expectedStatus)
+				err = waitForReconciliation(ctx, tSubj, tenant.ID.String(), tt.expState)
 				assert.NoError(t, err)
 			})
 		}
@@ -188,19 +286,23 @@ func TestTenantReconciliation(t *testing.T) {
 
 	t.Run("TerminateTenant", func(t *testing.T) {
 		tests := []struct {
-			name           string
-			tenantID       string
-			expectedStatus tenantgrpc.Status
+			name     string
+			tenantID string
+			expState expStateFunc
 		}{
 			{
-				name:           "should change status to TERMINATION_ERROR if operator fails to process the request",
-				tenantID:       tenantIDFail,
-				expectedStatus: tenantgrpc.Status_STATUS_TERMINATION_ERROR,
+				name:     "should change status to TERMINATION_ERROR if operator fails to process the request",
+				tenantID: tenantIDFail,
+				expState: func(t *tenantgrpc.Tenant) bool {
+					return t.GetStatus() == tenantgrpc.Status_STATUS_TERMINATION_ERROR
+				},
 			},
 			{
-				name:           "should change status to TERMINATED if tenant is terminated successfully",
-				tenantID:       tenantIDSuccess,
-				expectedStatus: tenantgrpc.Status_STATUS_TERMINATED,
+				name:     "should change status to TERMINATED if tenant is terminated successfully",
+				tenantID: tenantIDSuccess,
+				expState: func(t *tenantgrpc.Tenant) bool {
+					return t.GetStatus() == tenantgrpc.Status_STATUS_TERMINATED
+				},
 			},
 		}
 
@@ -225,40 +327,40 @@ func TestTenantReconciliation(t *testing.T) {
 				assert.NoError(t, err)
 
 				// then
-				err = waitForReconciliation(ctx, tSubj, tenant.ID.String(), tt.expectedStatus)
+				err = waitForReconciliation(ctx, tSubj, tenant.ID.String(), tt.expState)
 				assert.NoError(t, err)
 			})
 		}
 	})
 }
 
-func waitForReconciliation(ctx context.Context, tSubj tenantgrpc.ServiceClient, tenantID string, expectedStatus tenantgrpc.Status) error {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+func waitForReconciliation(ctx context.Context, tSubj tenantgrpc.ServiceClient, tenantID string, expState expStateFunc) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	currentStatus := tenantgrpc.Status_STATUS_UNSPECIFIED
+	var currentTenant *tenantgrpc.Tenant
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("%w; expected status: %s; current status: %s", ctx.Err(), expectedStatus, currentStatus)
+			return fmt.Errorf("%w; tenant: %s", ctx.Err(), currentTenant)
 		default:
-			resp, err := tSubj.ListTenants(ctx, &tenantgrpc.ListTenantsRequest{
+			resp, err := tSubj.GetTenant(ctx, &tenantgrpc.GetTenantRequest{
 				Id: tenantID,
 			})
 			if err != nil {
 				return err
 			}
-			if resp.GetTenants()[0].GetStatus() == expectedStatus {
+			if expState(resp.GetTenant()) {
 				return nil
 			}
 
-			currentStatus = resp.GetTenants()[0].GetStatus()
+			currentTenant = resp.GetTenant()
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 }
 
-func TestTenantService(t *testing.T) {
+func TestTenantValidation(t *testing.T) {
 	// given
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
@@ -534,6 +636,68 @@ func TestTenantService(t *testing.T) {
 					})
 				}
 			})
+		})
+	})
+
+	t.Run("ApplyTenantAuth", func(t *testing.T) {
+		t.Run("should return an error if", func(t *testing.T) {
+			// given
+			tests := []struct {
+				name    string
+				req     *tenantgrpc.ApplyTenantAuthRequest
+				expErr  error
+				expCode codes.Code
+			}{
+				{
+					name: "ID is empty",
+					req: &tenantgrpc.ApplyTenantAuthRequest{
+						Id:       "",
+						AuthInfo: map[string]string{"auth_type": "OIDC"},
+					},
+					expErr:  model.ErrEmptyID,
+					expCode: codes.InvalidArgument,
+				},
+				{
+					name: "AuthInfo is empty",
+					req: &tenantgrpc.ApplyTenantAuthRequest{
+						Id:       validRandID(),
+						AuthInfo: map[string]string{},
+					},
+					expErr:  service.ErrMissingLabels,
+					expCode: codes.InvalidArgument,
+				},
+				{
+					name: "AuthInfo has empty key",
+					req: &tenantgrpc.ApplyTenantAuthRequest{
+						Id:       validRandID(),
+						AuthInfo: map[string]string{"": "OIDC"},
+					},
+					expErr:  model.ErrLabelsIncludeEmptyString,
+					expCode: codes.InvalidArgument,
+				},
+				{
+					name: "tenant cannot be found",
+					req: &tenantgrpc.ApplyTenantAuthRequest{
+						Id:       validRandID(),
+						AuthInfo: map[string]string{"auth_type": "OIDC"},
+					},
+					expErr:  service.ErrTenantNotFound,
+					expCode: codes.NotFound,
+				},
+			}
+
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					// when
+					resp, err := tSubj.ApplyTenantAuth(ctx, tt.req)
+
+					// then
+					assert.Error(t, err)
+					assert.ErrorIs(t, err, tt.expErr)
+					assert.Equal(t, tt.expCode, status.Code(err), err.Error())
+					assert.Nil(t, resp)
+				})
+			}
 		})
 	})
 
@@ -949,6 +1113,46 @@ func TestTenantService(t *testing.T) {
 				assert.ErrorIs(t, service.ErrTenantNotFound, err)
 				assert.Nil(t, res)
 			})
+		})
+	})
+
+	t.Run("GetTenant", func(t *testing.T) {
+		t.Run("should return error if tenant with the given ID does not exist", func(t *testing.T) {
+			resp, err := tSubj.GetTenant(ctx, &tenantgrpc.GetTenantRequest{
+				Id: validRandID(),
+			})
+
+			assert.Nil(t, resp)
+			assert.Error(t, err)
+			assert.ErrorIs(t, service.ErrTenantNotFound, err)
+		})
+
+		t.Run("should fetch the tenant if tenant with the given ID exists", func(t *testing.T) {
+			req := validRegisterTenantReq()
+			_, err := tSubj.RegisterTenant(ctx, req)
+			assert.NoError(t, err)
+			defer func() {
+				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req.GetId())})
+				assert.NoError(t, err)
+			}()
+
+			resp, err := tSubj.GetTenant(ctx, &tenantgrpc.GetTenantRequest{
+				Id: req.GetId(),
+			})
+
+			assert.NoError(t, err)
+			assert.NotNil(t, resp)
+			assert.Equal(t, req.GetId(), resp.GetTenant().GetId())
+		})
+
+		t.Run("should return error if requested with empty ID", func(t *testing.T) {
+			resp, err := tSubj.GetTenant(ctx, &tenantgrpc.GetTenantRequest{
+				Id: "",
+			})
+
+			assert.Nil(t, resp)
+			assert.Error(t, err)
+			assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
 		})
 	})
 }

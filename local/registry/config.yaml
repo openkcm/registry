@@ -51,7 +51,7 @@ grpcServer:
       keepaliveTimeout: 1s
 
 orbital:
-  confirmJobDelay: 0
+  confirmJobAfter: 0
   taskLimitNum: 10
   maxReconcileCount: 10
   backoffBaseIntervalSec: 2

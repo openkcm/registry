@@ -35,6 +35,23 @@ func TestApplyJobDone(t *testing.T) {
 			expErr: nil,
 		},
 		{
+			name: "Apply Tenant Auth job",
+			job: orbital.Job{
+				Type: string(service.ApplyTenantAuth),
+			},
+			tenant: &model.Tenant{
+				Labels: model.Labels{
+					"key1": "value1",
+				},
+			},
+			expTenant: model.Tenant{
+				Labels: model.Labels{
+					"key1": "value1",
+				},
+			},
+			expErr: nil,
+		},
+		{
 			name: "Blocking job",
 			job: orbital.Job{
 				Type: string(service.BlockTenant),
