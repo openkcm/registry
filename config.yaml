@@ -51,7 +51,7 @@ grpcServer:
       keepaliveTimeout: 1s
 
 orbital:
-  confirmJobDelay: 0
+  confirmJobAfter: 0
   taskLimitNum: 10
   maxReconcileCount: 10
   backoffBaseIntervalSec: 2
@@ -73,19 +73,19 @@ orbital:
   workers:
     - name: confirm-job
       noOfWorkers: 1
-      execInterval: 1s
+      execInterval: 100ms
       timeout: 5s
     - name: create-task
       noOfWorkers: 1
-      execInterval: 1s
+      execInterval: 100ms
       timeout: 5s
     - name: reconcile
       noOfWorkers: 1
-      execInterval: 1s
+      execInterval: 100ms
       timeout: 5s
     - name: notify-event
       noOfWorkers: 1
-      execInterval: 1s
+      execInterval: 100ms
       timeout: 5s
 
 status:

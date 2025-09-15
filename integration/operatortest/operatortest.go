@@ -65,6 +65,7 @@ func New(ctx context.Context) (*orbital.Operator, error) {
 
 	for _, jobType := range []string{
 		string(service.ProvisionTenant),
+		string(service.ApplyTenantAuth),
 		string(service.BlockTenant),
 		string(service.UnblockTenant),
 		string(service.TerminateTenant),
@@ -134,6 +135,6 @@ func handle(_ context.Context, handlerReq orbital.HandlerRequest) (orbital.Handl
 	}
 
 	return orbital.HandlerResponse{
-		Result: orbital.ResultDone,
+		Result: orbital.ResultProcessing,
 	}, nil
 }

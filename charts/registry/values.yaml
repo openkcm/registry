@@ -251,8 +251,8 @@ config:
 
   # Configuration for the orbital service for tenant provisioning.
   orbital:
-    # confirmJobDelay is the delay before confirming a job. Use time.Duration syntax, e.g. 10ms, 1s, 5m, etc.
-    confirmJobDelay: 0
+    # confirmJobAfter is the delay before confirming a job. Use time.Duration syntax, e.g. 10ms, 1s, 5m, etc.
+    confirmJobAfter: 0
     # taskLimitNum is the maximum number of tasks to process concurrently.
     taskLimitNum: 10
     # maxReconcileCount is the maximum number of times a task can be reconciled.

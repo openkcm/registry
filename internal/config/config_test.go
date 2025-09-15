@@ -167,7 +167,7 @@ func TestOrbital_ValidateTarget(t *testing.T) {
 			target := tt.patchTarget(validTarget)
 			c := config.Config{
 				Orbital: config.Orbital{
-					ConfirmJobDelay:        10 * time.Second,
+					ConfirmJobAfter:        10 * time.Second,
 					TaskLimitNum:           10,
 					MaxReconcileCount:      5,
 					BackoffBaseIntervalSec: 1,
@@ -276,7 +276,7 @@ func TestOrbital_ValidateWorker(t *testing.T) {
 			w := tt.patchWorker(validWorker)
 			c := config.Config{
 				Orbital: config.Orbital{
-					ConfirmJobDelay:        10 * time.Second,
+					ConfirmJobAfter:        10 * time.Second,
 					TaskLimitNum:           10,
 					MaxReconcileCount:      5,
 					BackoffBaseIntervalSec: 1,
@@ -298,7 +298,7 @@ func TestOrbital_ValidateWorker(t *testing.T) {
 
 func TestOrbital_ValidateFields(t *testing.T) {
 	validOrbital := config.Orbital{
-		ConfirmJobDelay:        10 * time.Second,
+		ConfirmJobAfter:        10 * time.Second,
 		TaskLimitNum:           10,
 		MaxReconcileCount:      5,
 		BackoffBaseIntervalSec: 1,
@@ -313,10 +313,10 @@ func TestOrbital_ValidateFields(t *testing.T) {
 		{
 			name: "negative confirm job delay",
 			patch: func(o config.Orbital) config.Orbital {
-				o.ConfirmJobDelay = -1 * time.Second
+				o.ConfirmJobAfter = -1 * time.Second
 				return o
 			},
-			expErr: config.ErrConfirmJobDelayMustBeEqualGreaterThanZero,
+			expErr: config.ErrConfirmJobAfterMustBeEqualGreaterThanZero,
 		},
 		{
 			name: "negative task limit num",
