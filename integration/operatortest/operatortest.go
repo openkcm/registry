@@ -20,7 +20,6 @@ import (
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 
 	"github.com/openkcm/registry/internal/config"
-	"github.com/openkcm/registry/internal/service"
 )
 
 var ErrNoTestRegion = errors.New("no test region found in configuration")
@@ -64,11 +63,11 @@ func New(ctx context.Context) (*orbital.Operator, error) {
 	}
 
 	for _, jobType := range []string{
-		string(service.ProvisionTenant),
-		string(service.ApplyTenantAuth),
-		string(service.BlockTenant),
-		string(service.UnblockTenant),
-		string(service.TerminateTenant),
+		tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String(),
+		tenantgrpc.ACTION_ACTION_APPLY_TENANT_AUTH.String(),
+		tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String(),
+		tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String(),
+		tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String(),
 	} {
 		err = operator.RegisterHandler(jobType, handle)
 		if err != nil {
