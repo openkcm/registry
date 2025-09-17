@@ -369,39 +369,6 @@ func (t *Tenant) GetTenant(ctx context.Context, in *tenantgrpc.GetTenantRequest)
 	}, nil
 }
 
-// validateApplyAuthRequest validates the ApplyTenantAuthRequest.
-// If the request is valid, it returns nil, otherwise it returns an error.
-func (t *Tenant) validateApplyAuthRequest(in *tenantgrpc.ApplyTenantAuthRequest) error {
-	tenantPtr := &model.Tenant{}
-	validationCtx, err := model.ValidationContextFromType(tenantPtr, &tenantPtr.ID)
-	if err != nil {
-		return err
-	}
-
-	id := model.ID(in.GetId())
-	if err := id.Validate(validationCtx); err != nil {
-		return err
-	}
-
-	info := in.GetAuthInfo()
-	if len(info) == 0 {
-		return ErrMissingLabels
-	}
-
-	validationCtx, err = model.ValidationContextFromType(tenantPtr, &tenantPtr.Labels)
-	if err != nil {
-		return err
-	}
-
-	labels := model.Labels(info)
-	err = labels.Validate(validationCtx)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTenantUserGroupsRequest) (*tenantgrpc.SetTenantUserGroupsResponse, error) {
 	slogctx.Debug(ctx, "SetTenantUserGroups called", "tenantId", in.GetId())
 
@@ -436,6 +403,39 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 	}
 
 	return &tenantgrpc.SetTenantUserGroupsResponse{Success: true}, nil
+}
+
+// validateApplyAuthRequest validates the ApplyTenantAuthRequest.
+// If the request is valid, it returns nil, otherwise it returns an error.
+func (t *Tenant) validateApplyAuthRequest(in *tenantgrpc.ApplyTenantAuthRequest) error {
+	tenantPtr := &model.Tenant{}
+	validationCtx, err := model.ValidationContextFromType(tenantPtr, &tenantPtr.ID)
+	if err != nil {
+		return err
+	}
+
+	id := model.ID(in.GetId())
+	if err := id.Validate(validationCtx); err != nil {
+		return err
+	}
+
+	info := in.GetAuthInfo()
+	if len(info) == 0 {
+		return ErrMissingLabels
+	}
+
+	validationCtx, err = model.ValidationContextFromType(tenantPtr, &tenantPtr.Labels)
+	if err != nil {
+		return err
+	}
+
+	labels := model.Labels(info)
+	err = labels.Validate(validationCtx)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // validateSetTenantLabelsRequest validates the SetTenantLabelsRequest.
