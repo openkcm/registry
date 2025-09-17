@@ -4,8 +4,8 @@ go 1.25.0
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.7.5
-	github.com/openkcm/api-sdk v0.6.0
+	github.com/jackc/pgx/v5 v5.7.6
+	github.com/openkcm/api-sdk v0.7.0
 	github.com/openkcm/common-sdk v1.3.0
 	github.com/openkcm/orbital v0.1.1-0.20250910121520-6d45bc67c71c
 	github.com/samber/oops v1.19.0
@@ -14,10 +14,10 @@ require (
 	go.opentelemetry.io/otel v1.38.0
 	go.opentelemetry.io/otel/metric v1.38.0
 	go.opentelemetry.io/otel/sdk/metric v1.38.0
-	google.golang.org/grpc v1.75.0
-	google.golang.org/protobuf v1.36.8
+	google.golang.org/grpc v1.75.1
+	google.golang.org/protobuf v1.36.9
 	gorm.io/driver/postgres v1.6.0
-	gorm.io/gorm v1.30.2
+	gorm.io/gorm v1.31.0
 )
 
 require (

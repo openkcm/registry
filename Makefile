@@ -20,10 +20,10 @@ compile-servicetest-pb:
 
 # Builds the registry binary for Linux AMD64 architecture. Needed for Docker image creation.
 go-build-for-docker:
-	GOOS=linux GOARCH=amd64 go build -trimpath ./cmd/registry
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o registry ./cmd/registry
 
 docker-build: go-build-for-docker
-	docker build --no-cache -f Dockerfile -t registry:dev .
+	docker build --no-cache -f Dockerfile.dev -t registry:dev .
 
 docker-compose-dependencies-up: generate-certs
 	docker compose up postgres rabbitmq otel-collector -d --wait
@@ -97,7 +97,26 @@ integration-test: docker-compose-dependencies-up all-tests-run-cover
 generate-certs:
 	(cd local/rabbitmq && chmod +x generate-certs.sh && ./generate-certs.sh)
 
-
 .PHONY: lint
 lint:
 	golangci-lint run -v --fix ./...
+
+# Helm chart tests using existing K8s cluster
+helm-test: install-gotestsum
+	@echo "Running Helm chart tests on existing Kubernetes cluster..."
+	env TEST_ENV=make gotestsum --format testname -- -tags=helmtest -timeout=20m ./helmtest/...
+
+# Install dependencies with Helm
+helm-install-dependencies:
+	./helm_dependencies.sh install
+
+# Uninstall dependencies with Helm
+helm-uninstall-dependencies:
+	./helm_dependencies.sh uninstall
+
+helm-install-registry:
+	./helm_registry.sh install
+
+# Uninstalls the registry-service from the local Kubernetes cluster using Helm.
+helm-uninstall-registry:
+	./helm_registry.sh uninstall

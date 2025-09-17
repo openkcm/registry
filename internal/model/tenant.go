@@ -19,6 +19,7 @@ type Tenant struct {
 	StatusUpdatedAt time.Time    `gorm:"column:status_updated_at"`
 	Role            Role         `gorm:"column:role"`
 	Labels          Labels       `gorm:"column:labels;type:jsonb"`
+	UserGroups      UserGroups   `gorm:"column:user_groups;type:jsonb"`
 	UpdatedAt       time.Time    `gorm:"column:updated_at;autoUpdateTime"`
 	CreatedAt       time.Time    `gorm:"column:created_at;autoCreateTime"`
 }
@@ -52,6 +53,7 @@ func (t *Tenant) ToProto() *tenantgrpc.Tenant {
 		StatusUpdatedAt: formatTime(t.StatusUpdatedAt),
 		Role:            tenantgrpc.Role(tenantgrpc.Role_value[string(t.Role)]),
 		Labels:          t.Labels,
+		UserGroups:      t.UserGroups,
 		UpdatedAt:       formatTime(t.UpdatedAt),
 		CreatedAt:       formatTime(t.CreatedAt),
 	}

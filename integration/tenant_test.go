@@ -576,8 +576,10 @@ func TestTenantValidation(t *testing.T) {
 				assert.Empty(t, resp.GetNextPageToken())
 				assertEqualValues(t, req1, resp.Tenants[1])
 				assert.Equal(t, tenantgrpc.Status_STATUS_PROVISIONING, resp.Tenants[1].Status)
+				assert.Empty(t, resp.Tenants[1].GetUserGroups())
 				assertEqualValues(t, req2, resp.Tenants[0])
 				assert.Equal(t, tenantgrpc.Status_STATUS_PROVISIONING, resp.Tenants[0].Status)
+				assert.Empty(t, resp.Tenants[0].GetUserGroups())
 			})
 
 			t.Run("should return tenant filtered by", func(t *testing.T) {
@@ -735,7 +737,6 @@ func TestTenantValidation(t *testing.T) {
 				assert.Error(t, err)
 				assert.Equal(t, codes.FailedPrecondition, status.Code(err), err.Error())
 			})
-
 		})
 
 		t.Run("should succeed if tenant is active", func(t *testing.T) {
@@ -1153,6 +1154,160 @@ func TestTenantValidation(t *testing.T) {
 			assert.Nil(t, resp)
 			assert.Error(t, err)
 			assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+		})
+	})
+}
+
+func TestSetTenantUserGroups(t *testing.T) {
+	conn, err := newGRPCClientConn()
+	require.NoError(t, err)
+	defer conn.Close()
+
+	tSubj := tenantgrpc.NewServiceClient(conn)
+
+	db, err := startDB()
+	require.NoError(t, err)
+
+	ctx := t.Context()
+
+	t.Run("SetTenantUserGroups", func(t *testing.T) {
+		t.Run("should return error if", func(t *testing.T) {
+			tts := []struct {
+				name       string
+				tenantID   string
+				userGroups model.UserGroups
+				expCode    codes.Code
+			}{
+				{
+					name:       "UserGroups is nil",
+					tenantID:   "some-tenant-id",
+					userGroups: nil,
+					expCode:    codes.InvalidArgument,
+				},
+				{
+					name:       "UserGroups is empty",
+					tenantID:   "some-tenant-id",
+					userGroups: []string{},
+					expCode:    codes.InvalidArgument,
+				},
+				{
+					name:       "UserGroups has a empty string",
+					tenantID:   "some-tenant-id",
+					userGroups: []string{"admin", ""},
+					expCode:    codes.InvalidArgument,
+				},
+				{
+					name:       "UserGroups has a blank string",
+					tenantID:   "some-tenant-id",
+					userGroups: []string{"admin", " "},
+					expCode:    codes.InvalidArgument,
+				},
+				{
+					name:       "tenant is not present",
+					tenantID:   "some-tenant-id",
+					userGroups: []string{"admin", "audit"},
+					expCode:    codes.NotFound,
+				},
+				{
+					name:       "tenant is empty",
+					tenantID:   "",
+					userGroups: []string{"admin", "audit"},
+					expCode:    codes.InvalidArgument,
+				},
+			}
+			for _, tt := range tts {
+				t.Run(tt.name, func(t *testing.T) {
+					// given
+
+					// when
+					res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
+						Id:         tt.tenantID,
+						UserGroups: tt.userGroups,
+					})
+
+					// then
+					assert.Error(t, err)
+					assert.Equal(t, tt.expCode, status.Code(err), err.Error())
+					assert.Nil(t, res)
+				})
+			}
+		})
+		t.Run("should succeed if", func(t *testing.T) {
+			t.Run("request is valid", func(t *testing.T) {
+				// given
+				// For creating a tenant
+				tenant, err := persistTenant(ctx, db, validRandID(),
+					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
+				assert.NoError(t, err)
+
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
+					Id: tenant.ID.String(),
+					UserGroups: []string{
+						"admin",
+						"audit",
+					},
+				})
+
+				// then
+				assert.NoError(t, err)
+				assert.NotNil(t, res)
+				assert.True(t, res.GetSuccess())
+				actTenants, err := listTenants(ctx, tSubj)
+				assert.NoError(t, err)
+				assert.Len(t, actTenants.GetTenants(), 1)
+				assert.Equal(t, []string{"admin", "audit"}, actTenants.GetTenants()[0].GetUserGroups())
+			})
+
+			t.Run("if UserGroups are updated twice", func(t *testing.T) {
+				// given
+				// For creating a tenant
+				tenant, err := persistTenant(ctx, db, validRandID(),
+					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
+				assert.NoError(t, err)
+
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
+					Id: tenant.ID.String(),
+					UserGroups: []string{
+						"admin",
+						"audit",
+					},
+				})
+
+				// then
+				assert.NoError(t, err)
+				assert.NotNil(t, res)
+				assert.True(t, res.GetSuccess())
+
+				// when
+				res, err = tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
+					Id: tenant.ID.String(),
+					UserGroups: []string{
+						"admin 1",
+						"audit 2",
+					},
+				})
+
+				// then
+				assert.NoError(t, err)
+				assert.NotNil(t, res)
+				assert.True(t, res.GetSuccess())
+				actTenants, err := listTenants(ctx, tSubj)
+				assert.NoError(t, err)
+				assert.Len(t, actTenants.GetTenants(), 1)
+				assert.Equal(t, []string{"admin 1", "audit 2"}, actTenants.GetTenants()[0].GetUserGroups())
+			})
 		})
 	})
 }
