@@ -147,6 +147,7 @@ func (t *Tenant) ApplyTenantAuth(ctx context.Context, in *tenantgrpc.ApplyTenant
 
 	err := t.validateApplyAuthRequest(in)
 	if err != nil {
+		slogctx.Error(ctx, "ApplyTenantAuth failed", "tenantId", in.GetId(), "error", err)
 		return nil, err
 	}
 
@@ -286,6 +287,7 @@ func (t *Tenant) SetTenantLabels(ctx context.Context, in *tenantgrpc.SetTenantLa
 	slogctx.Debug(ctx, "SetTenantLabels called", "tenantId", in.GetId())
 
 	if err := t.validateSetTenantLabelsRequest(in); err != nil {
+		slogctx.Error(ctx, "SetTenantLabels failed", "tenantId", in.GetId(), "error", err)
 		return nil, err
 	}
 
@@ -315,6 +317,7 @@ func (t *Tenant) RemoveTenantLabels(ctx context.Context, in *tenantgrpc.RemoveTe
 	slogctx.Debug(ctx, "RemoveTenantLabels called", "tenantId", in.GetId())
 
 	if err := t.validateRemoveTenantLabelsRequest(in); err != nil {
+		slogctx.Error(ctx, "RemoveTenantLabels failed", "tenantId", in.GetId(), "error", err)
 		return nil, err
 	}
 
@@ -401,8 +404,16 @@ func (t *Tenant) validateApplyAuthRequest(in *tenantgrpc.ApplyTenantAuthRequest)
 
 func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTenantUserGroupsRequest) (*tenantgrpc.SetTenantUserGroupsResponse, error) {
 	slogctx.Debug(ctx, "SetTenantUserGroups called", "tenantId", in.GetId())
+
+	tenant := &model.Tenant{}
+	validationCtx, err := model.ValidationContextFromType(tenant, &tenant.ID)
+	if err != nil {
+		slogctx.Error(ctx, "SetTenantUserGroups failed", "tenantId", in.GetId(), "error", err)
+		return nil, ErrInternalValidation
+	}
+
 	tenantID := model.ID(in.GetId())
-	err := tenantID.Validate()
+	err = tenantID.Validate(validationCtx)
 	if err != nil {
 		return nil, err
 	}
