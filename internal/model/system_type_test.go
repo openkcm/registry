@@ -8,6 +8,15 @@ import (
 	"github.com/openkcm/registry/internal/model"
 )
 
+type CustomValidationContext struct{}
+
+func (c CustomValidationContext) ValidateField(fieldValue any) error {
+	if fieldValue != "system" {
+		return model.ErrInvalidFieldValue
+	}
+	return nil
+}
+
 func TestSystemTypeValidation(t *testing.T) {
 	t.Run("with validation config", func(t *testing.T) {
 		tests := map[string]struct {
@@ -27,7 +36,7 @@ func TestSystemTypeValidation(t *testing.T) {
 		for name, test := range tests {
 			t.Run(name, func(t *testing.T) {
 				// when
-				err := test.system.Validate()
+				err := test.system.Validate(CustomValidationContext{})
 
 				// then
 				if test.expectErr {
@@ -57,7 +66,7 @@ func TestSystemTypeValidation(t *testing.T) {
 		for name, test := range tests {
 			t.Run(name, func(t *testing.T) {
 				// when
-				err := test.system.Validate()
+				err := test.system.Validate(model.EmptyValidationContext)
 
 				// then
 				if test.expectErr {

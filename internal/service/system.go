@@ -8,6 +8,9 @@ import (
 	"maps"
 	"slices"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	slogctx "github.com/veqryn/slog-context"
 
@@ -58,9 +61,9 @@ func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSyst
 		Labels:        in.GetLabels(),
 	}
 
-	err := system.Validate()
+	err := system.Validate(model.EmptyValidationContext)
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	err = s.repo.Create(ctx, system)
@@ -341,7 +344,14 @@ func (s *System) UpdateSystemStatus(ctx context.Context, in *systemgrpc.UpdateSy
 		return nil, ErrRegionIsEmpty
 	}
 
-	if err := model.Status(in.GetStatus().String()).Validate(); err != nil {
+	systemPtr := &model.System{}
+	validationCtx, err := model.ValidationContextFromType(systemPtr, &systemPtr.Status)
+	if err != nil {
+		slogctx.Error(ctx, "validation of system status failed", err)
+		return nil, ErrInternalValidation
+	}
+
+	if err := model.Status(in.GetStatus().String()).Validate(validationCtx); err != nil {
 		return nil, err
 	}
 
@@ -367,7 +377,7 @@ func (s *System) UpdateSystemStatus(ctx context.Context, in *systemgrpc.UpdateSy
 func (s *System) SetSystemLabels(ctx context.Context, in *systemgrpc.SetSystemLabelsRequest) (*systemgrpc.SetSystemLabelsResponse, error) {
 	slogctx.Debug(ctx, "SetSystemLabels called", "external_id", in.GetExternalId(), "region", in.GetRegion())
 
-	if err := s.validateSetSystemLabelsRequest(in); err != nil {
+	if err := s.validateSetSystemLabelsRequest(ctx, in); err != nil {
 		return nil, err
 	}
 
@@ -417,7 +427,7 @@ func (s *System) RemoveSystemLabels(ctx context.Context, in *systemgrpc.RemoveSy
 
 // validateSetSystemLabelsRequest validates the SetSystemLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
-func (s *System) validateSetSystemLabelsRequest(in *systemgrpc.SetSystemLabelsRequest) error {
+func (s *System) validateSetSystemLabelsRequest(ctx context.Context, in *systemgrpc.SetSystemLabelsRequest) error {
 	if in.GetExternalId() == "" {
 		return ErrExternalIDIsEmpty
 	}
@@ -432,7 +442,14 @@ func (s *System) validateSetSystemLabelsRequest(in *systemgrpc.SetSystemLabelsRe
 
 	labels := model.Labels(in.GetLabels())
 
-	err := labels.Validate()
+	systemPtr := &model.System{}
+	validationCtx, err := model.ValidationContextFromType(systemPtr, &systemPtr.Labels)
+	if err != nil {
+		slogctx.Error(ctx, "validation of system labels failed", err)
+		return ErrInternalValidation
+	}
+
+	err = labels.Validate(validationCtx)
 	if err != nil {
 		return err
 	}

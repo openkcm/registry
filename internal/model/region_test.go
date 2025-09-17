@@ -25,7 +25,7 @@ func TestRegionValidation(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := test.region.Validate()
+			err := test.region.Validate(model.EmptyValidationContext)
 			if test.expectErr {
 				assert.Error(t, err)
 			} else {

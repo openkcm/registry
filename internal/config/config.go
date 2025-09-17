@@ -61,6 +61,7 @@ var (
 	ErrBackoffBaseIntervalMustBeGreaterThanZero  = errors.New("backoff base interval must be greater than zero")
 	ErrBackoffMaxIntervalMustBeGreaterThanZero   = errors.New("backoff max interval must be greater than zero")
 	// FieldValidation specific errors.
+	ErrTypeNameMustNotBeEmpty              = errors.New("typeName must not be empty")
 	ErrFieldNameMustNotBeEmpty             = errors.New("fieldName must not be empty")
 	ErrEnumValidationMustHaveAllowedValues = errors.New("enum validation must have at least one allowed value")
 	ErrUnsupportedValidationType           = errors.New("unsupported validation type")
@@ -135,7 +136,7 @@ func (o *Orbital) GetWorker(workerName string) *Worker {
 	return nil
 }
 
-// ValidateField validates the Orbital configuration.
+// validate validates the Orbital configuration.
 func (o *Orbital) validate() error {
 	if o.ConfirmJobAfter < 0 {
 		return fmt.Errorf("%w: %v", ErrConfirmJobAfterMustBeEqualGreaterThanZero, o.ConfirmJobAfter)
@@ -314,19 +315,28 @@ func (m *MTLS) validate() error {
 	return nil
 }
 
-type TypeValidators map[string]FieldValidators
+type TypeValidators []TypeValidator
+
+type TypeValidator struct {
+	TypeName string
+	Fields   FieldValidators
+}
 
 // validate validates the TypeValidators configuration.
 func (v *TypeValidators) validate() error {
-	for typeName, fieldValidators := range *v {
-		for _, fieldValidators := range fieldValidators {
+	for _, typeValidator := range *v {
+		if typeValidator.TypeName == "" {
+			return ErrTypeNameMustNotBeEmpty
+		}
+
+		for _, fieldValidators := range typeValidator.Fields {
 			if fieldValidators.FieldName == "" {
 				return ErrFieldNameMustNotBeEmpty
 			}
 
 			for _, rule := range fieldValidators.Rules {
 				if err := rule.validate(); err != nil {
-					return fmt.Errorf("invalid rule for type '%s' and field '%s': %w", typeName, fieldValidators.FieldName, err)
+					return fmt.Errorf("invalid rule for type '%s' and field '%s': %w", typeValidator.TypeName, fieldValidators.FieldName, err)
 				}
 			}
 		}

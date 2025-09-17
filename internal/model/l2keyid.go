@@ -9,9 +9,9 @@ import (
 type L2KeyID string
 
 // Validate validates given L2KeyID of the system.
-func (l L2KeyID) Validate() error {
+func (l L2KeyID) Validate(_ ValidationContext) error {
 	if l == "" {
-		return status.Error(codes.InvalidArgument, "L2KeyID cannot be empty")
+		return status.Error(codes.InvalidArgument, "L2KeyID is empty")
 	}
 
 	return nil

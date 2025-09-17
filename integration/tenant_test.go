@@ -517,7 +517,7 @@ func TestTenantValidation(t *testing.T) {
 					result, err := tSubj.ListTenants(ctx, tt.request)
 
 					// then
-					assert.Error(t, err)
+					require.Error(t, err)
 					assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
 					assert.Nil(t, result)
 				})

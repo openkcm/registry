@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strings"
 	"sync"
 
 	"google.golang.org/grpc/codes"
@@ -14,8 +13,11 @@ import (
 )
 
 var (
-	ErrInvalidFieldValue = errors.New("invalid field value")
-	ErrNoPointerToStruct = errors.New("expected a pointer to struct")
+	ErrInvalidFieldValue      = errors.New("invalid field value")
+	ErrNoPointerToStruct      = errors.New("expected a pointer to struct")
+	ErrNoPointerToField       = errors.New("expected a pointer to field")
+	ErrFieldValueIsNotString  = errors.New("field value is not a string")
+	ErrFieldIsNotStructMember = errors.New("field is not a struct member")
 )
 
 // GlobalTypeValidators holds the validation configuration.
@@ -42,28 +44,35 @@ func GetGlobalTypeValidators() *config.TypeValidators {
 	return globalValidators.validators
 }
 
-// Validator defines the methods for validation.
-type Validator interface {
-	Validate() error
+// ValidationContext provides context for field validation.
+type ValidationContext interface {
+	ValidateField(fieldValue any) error
 }
 
-// ValidateAll goes through the given validators and calls their Validate method.
-// It stops and returns at the first error encountered, if any. If all validate successfully, it returns nil.
-func ValidateAll(v ...Validator) error {
-	for i := range v {
-		err := v[i].Validate()
-		if err != nil {
-			return err
-		}
-	}
+// EmptyValidationContext is global ValidationContext that performs no validation.
+// Used for types that do not support configurable validation.
+var EmptyValidationContext = EmptyValidationCtx{}
 
+// EmptyValidationCtx is a ValidationContext that performs no validation.
+type EmptyValidationCtx struct {
+	ValidationContext
+}
+
+// ValidateField always returns nil, performing no validation.
+func (EmptyValidationCtx) ValidateField(_ any) error {
 	return nil
 }
 
+// Validator defines the methods for validation.
+type Validator interface {
+	Validate(ctx ValidationContext) error
+}
+
 // ValidateStruct validates a struct using reflection to automatically match field names
-// with the configured validators. It extracts field names from GORM column tags.
-// If no specific validators are configured for a type, it falls back to validating all fields.
-func ValidateStruct(structPtr interface{}, typeName string) error {
+// with the configured validators.
+// It will call the Validate method on all fields that implement the Validator interface.
+// structPtr must be a pointer to a struct.
+func ValidateStruct(structPtr any) error {
 	v := reflect.ValueOf(structPtr)
 	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
 		return fmt.Errorf("%w, got %T", ErrNoPointerToStruct, structPtr)
@@ -72,49 +81,14 @@ func ValidateStruct(structPtr interface{}, typeName string) error {
 	structValue := v.Elem()
 	structType := structValue.Type()
 
-	err := applyConfiguredFieldValidators(typeName, structType, structValue)
-	if err != nil {
-		return err
-	}
-
 	return invokeValidators(structType, structValue)
-}
-
-// applyConfiguredFieldValidators applies field validators based on the configuration.
-func applyConfiguredFieldValidators(typeName string, structType reflect.Type, structValue reflect.Value) error {
-	// Get validators for this specific type
-	typeValidators := getValidatorsForType(typeName)
-
-	for i := range structValue.NumField() {
-		field := structType.Field(i)
-		fieldValue := structValue.Field(i)
-
-		// Skip unexported fields
-		if !fieldValue.CanInterface() {
-			continue
-		}
-
-		// Extract field name from GORM tag
-		fieldName := extractFieldNameFromTag(field)
-		if fieldName == "" {
-			continue
-		}
-
-		// Find validator for this specific field
-		if validator := getFieldValidator(fieldName, typeValidators); validator != nil {
-			if err := validateField(validator, fieldName, fieldValue); err != nil {
-				return status.Error(codes.InvalidArgument, err.Error())
-			}
-		}
-	}
-
-	return nil
 }
 
 // invokeValidators calls the Validate method on all fields that implement the Validator interface.
 func invokeValidators(structType reflect.Type, structValue reflect.Value) error {
-	// Call Validate on all fields that implement Validator interface
-	var validators []Validator
+	typeName := structType.String()
+
+	fieldValidators := getValidatorsForType(typeName)
 
 	for i := range structValue.NumField() {
 		fieldValue := structValue.Field(i)
@@ -125,50 +99,147 @@ func invokeValidators(structType reflect.Type, structValue reflect.Value) error 
 			continue
 		}
 
-		// Handle pointer fields
-		if fieldValue.Kind() == reflect.Ptr {
-			if !fieldValue.IsNil() {
-				if validatorInterface, ok := fieldValue.Interface().(Validator); ok {
-					validators = append(validators, validatorInterface)
-				}
-			}
-		} else {
-			// Handle non-pointer fields
-			if validatorInterface, ok := fieldValue.Interface().(Validator); ok {
-				validators = append(validators, validatorInterface)
-			}
+		// Get the Validator interface if the field implements it
+		validatorInterface := getValidatorInterface(fieldValue)
 
-			// Special handling for Labels field - need to get its address
-			if fieldType.Name == "Labels" {
-				// Get the address of the field so we can validate it as a pointer
-				if fieldValue.CanAddr() {
-					addrValue := fieldValue.Addr()
-					if validatorInterface, ok := addrValue.Interface().(Validator); ok {
-						validators = append(validators, validatorInterface)
-					}
-				}
+		validationContext := FieldValidationContext{}
+		if validatorInterface != nil {
+			fieldName := getFieldName(fieldType)
+
+			// Find validator for this specific field
+			if validator := getFieldValidator(fieldName, fieldValidators); validator != nil {
+				validationContext.fieldValidator = *validator
+			}
+		}
+
+		if validatorInterface != nil {
+			err := validatorInterface.Validate(validationContext)
+			if err != nil {
+				return err
 			}
 		}
 	}
 
-	return ValidateAll(validators...)
+	return nil
+}
+
+func getValidatorInterface(fieldValue reflect.Value) Validator {
+	// Skip unexported fields
+	if !fieldValue.CanInterface() {
+		return nil
+	}
+
+	// Handle pointer fields
+	var validatorInterface Validator
+	if fieldValue.Kind() == reflect.Ptr {
+		if !fieldValue.IsNil() {
+			if v, ok := fieldValue.Interface().(Validator); ok {
+				validatorInterface = v
+			}
+		}
+	}
+
+	if validatorInterface == nil {
+		// Handle non-pointer fields
+		if v, ok := fieldValue.Interface().(Validator); ok {
+			validatorInterface = v
+		}
+	}
+
+	if validatorInterface == nil {
+		// Get the address of the field so we can validate it as a pointer
+		if fieldValue.CanAddr() {
+			addrValue := fieldValue.Addr()
+			if v, ok := addrValue.Interface().(Validator); ok {
+				validatorInterface = v
+			}
+		}
+	}
+
+	return validatorInterface
+}
+
+// FieldValidationContext provides context for field validation.
+type FieldValidationContext struct {
+	ValidationContext
+
+	fieldValidator config.FieldValidator
+}
+
+// ValidateField validates a field value against the configured field validation rules.
+func (v FieldValidationContext) ValidateField(fieldValue any) error {
+	if err := validateField(&v.fieldValidator, fieldValue); err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	return nil
+}
+
+// ValidationContextFromType creates a ValidationContext for a specific struct type and field.
+// structPtr must be a pointer to a struct.
+// fieldPtr must be a pointer to a field within the struct.
+func ValidationContextFromType(structPtr any, fieldPtr any) (ValidationContext, error) {
+	v := reflect.ValueOf(structPtr)
+	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
+		return nil, fmt.Errorf("%w, got %T", ErrNoPointerToStruct, structPtr)
+	}
+
+	structValue := v.Elem()
+	structType := structValue.Type()
+	typeName := structType.String()
+	fieldPtrValue := reflect.ValueOf(fieldPtr)
+
+	// Get validators for this specific type
+	fieldValidators := getValidatorsForType(typeName)
+
+	context, err := getValidationContextForFieldValue(structValue, fieldPtrValue, fieldValidators)
+	if err != nil {
+		return nil, err
+	}
+	return context, nil
+}
+
+// getValidationContextForFieldValue finds the field in the struct and returns a ValidationContext for it.
+func getValidationContextForFieldValue(structValue reflect.Value, fieldPtrValue reflect.Value, fieldValidators config.FieldValidators) (ValidationContext, error) {
+	if fieldPtrValue.Kind() == reflect.Ptr {
+		validationContext := FieldValidationContext{}
+		structType := structValue.Type()
+
+		for i := range structValue.NumField() {
+			field := structValue.Field(i)
+			if field.CanAddr() && field.Addr().Pointer() == fieldPtrValue.Pointer() {
+				fieldName := structType.Field(i).Name
+				if validator := getFieldValidator(fieldName, fieldValidators); validator != nil {
+					validationContext.fieldValidator = *validator
+				}
+				return validationContext, nil
+			}
+		}
+
+		return nil, fmt.Errorf("%w struct: %s, field: %s", ErrFieldIsNotStructMember, structValue.String(), fieldPtrValue.String())
+	}
+
+	return nil, fmt.Errorf("%w: %T", ErrNoPointerToField, fieldPtrValue.String())
 }
 
 // ValidateField validates a value against the configured field validation rules.
-func validateField(fieldValidator *config.FieldValidator, fieldName string, fieldValue reflect.Value) error {
+func validateField(fieldValidator *config.FieldValidator, fieldValue any) error {
 	if fieldValidator == nil {
 		return nil
 	}
 
-	if err := applyFieldValidationRules(fieldName, fieldValue, *fieldValidator); err != nil {
+	if err := applyFieldValidationRules(fieldValue, *fieldValidator); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func applyFieldValidationRules(fieldName string, fieldValue reflect.Value, validator config.FieldValidator) error {
-	fieldValueAsString := fieldValue.String()
+// applyFieldValidationRules applies the validation rules to the field value.
+func applyFieldValidationRules(fieldValue any, validator config.FieldValidator) error {
+	fieldValueAsString, ok := fieldValue.(string)
+	if !ok {
+		return fmt.Errorf("%w: %v", ErrFieldValueIsNotString, fieldValue)
+	}
 	for _, rule := range validator.Rules {
 		if rule.Type == config.RuleTypeEnum {
 			for _, allowedValue := range rule.AllowedValues {
@@ -178,14 +249,14 @@ func applyFieldValidationRules(fieldName string, fieldValue reflect.Value, valid
 			}
 
 			return fmt.Errorf("%w: '%s' for field '%s', allowed values: %v",
-				ErrInvalidFieldValue, fieldValue, fieldName, rule.AllowedValues)
+				ErrInvalidFieldValue, fieldValue, validator.FieldName, rule.AllowedValues)
 		}
 	}
 
 	return nil
 }
 
-// getFieldValidator returns the field validation for a given field name.
+// getFieldValidator returns the FieldValidator for a given field name.
 func getFieldValidator(fieldName string, fieldValidators config.FieldValidators) *config.FieldValidator {
 	for _, fieldValidator := range fieldValidators {
 		if fieldValidator.FieldName == fieldName {
@@ -196,26 +267,11 @@ func getFieldValidator(fieldName string, fieldValidators config.FieldValidators)
 	return nil
 }
 
-// extractFieldNameFromTag extracts the column name from GORM tag or falls back to field name.
-func extractFieldNameFromTag(field reflect.StructField) string {
-	gormTag := field.Tag.Get("gorm")
-	if gormTag == "" {
-		return ""
-	}
-
-	// Parse GORM tag to find column name
-	parts := strings.Split(gormTag, ";")
-	for _, part := range parts {
-		if strings.HasPrefix(part, "column:") {
-			columnName := strings.TrimPrefix(part, "column:")
-			return columnName
-		}
-	}
-
-	return ""
+func getFieldName(fieldType reflect.StructField) string {
+	return fieldType.Name
 }
 
-// getValidatorsForType returns validators for a specific type.
+// getValidatorsForType returns FieldValidators for a specific type.
 func getValidatorsForType(typeName string) config.FieldValidators {
 	// Get global validators and filter by type
 	globalValidators := GetGlobalTypeValidators()
@@ -223,8 +279,10 @@ func getValidatorsForType(typeName string) config.FieldValidators {
 		return nil
 	}
 
-	if typeValidators, exists := (*globalValidators)[typeName]; exists {
-		return typeValidators
+	for _, typeValidator := range *globalValidators {
+		if typeValidator.TypeName == typeName {
+			return typeValidator.Fields
+		}
 	}
 
 	return nil

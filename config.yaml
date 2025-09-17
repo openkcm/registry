@@ -129,9 +129,10 @@ telemetry:
       type: insecure
 
 validators:
-  system:
-  - fieldName: type
-    rules:
-      - type: enum
-        allowedValues: ["system", "test"]
+  - typeName: model.System
+    fields:
+    - fieldName: Type
+      rules:
+        - type: enum
+          allowedValues: ["system", "test"]
 

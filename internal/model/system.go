@@ -29,8 +29,8 @@ func (s *System) TableName() string {
 }
 
 // Validate validates given System data.
-func (s *System) Validate() error {
-	return ValidateStruct(s, "system")
+func (s *System) Validate(_ ValidationContext) error {
+	return ValidateStruct(s)
 }
 
 // IsLinkedToTenant returns true if the System is linked to the Tenant.

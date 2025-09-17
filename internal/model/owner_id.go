@@ -9,7 +9,7 @@ import (
 type OwnerID string
 
 // Validate validates given OwnerID of the model.
-func (o OwnerID) Validate() error {
+func (o OwnerID) Validate(_ ValidationContext) error {
 	if len(o) == 0 {
 		return status.Error(codes.InvalidArgument, "OwnerID is empty")
 	}

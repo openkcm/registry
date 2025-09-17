@@ -406,22 +406,25 @@ func TestFieldValidation_Validate(t *testing.T) {
 			name: "valid field validation configuration",
 			config: config.Config{
 				Validators: config.TypeValidators{
-					"type-a": config.FieldValidators{
-						{
-							FieldName: "field1",
-							Rules: []config.ValidationRule{
-								{
-									Type:          "enum",
-									AllowedValues: []string{"value1", "value2"},
+					{
+						TypeName: "type-a",
+						Fields: config.FieldValidators{
+							{
+								FieldName: "field1",
+								Rules: []config.ValidationRule{
+									{
+										Type:          "enum",
+										AllowedValues: []string{"value1", "value2"},
+									},
 								},
 							},
-						},
-						{
-							FieldName: "field2",
-							Rules: []config.ValidationRule{
-								{
-									Type:          "enum",
-									AllowedValues: []string{"a", "b", "c"},
+							{
+								FieldName: "field2",
+								Rules: []config.ValidationRule{
+									{
+										Type:          "enum",
+										AllowedValues: []string{"a", "b", "c"},
+									},
 								},
 							},
 						},
@@ -434,13 +437,16 @@ func TestFieldValidation_Validate(t *testing.T) {
 			name: "empty field name",
 			config: config.Config{
 				Validators: config.TypeValidators{
-					"type-a": config.FieldValidators{
-						{
-							FieldName: "",
-							Rules: []config.ValidationRule{
-								{
-									Type:          "enum",
-									AllowedValues: []string{"value1", "value2"},
+					{
+						TypeName: "type-a",
+						Fields: config.FieldValidators{
+							{
+								FieldName: "",
+								Rules: []config.ValidationRule{
+									{
+										Type:          "enum",
+										AllowedValues: []string{"value1", "value2"},
+									},
 								},
 							},
 						},
@@ -454,13 +460,16 @@ func TestFieldValidation_Validate(t *testing.T) {
 			name: "empty allowed values in enum rule",
 			config: config.Config{
 				Validators: config.TypeValidators{
-					"type-a": config.FieldValidators{
-						{
-							FieldName: "field1",
-							Rules: []config.ValidationRule{
-								{
-									Type:          "enum",
-									AllowedValues: []string{},
+					{
+						TypeName: "type-a",
+						Fields: config.FieldValidators{
+							{
+								FieldName: "field1",
+								Rules: []config.ValidationRule{
+									{
+										Type:          "enum",
+										AllowedValues: []string{},
+									},
 								},
 							},
 						},
@@ -474,13 +483,16 @@ func TestFieldValidation_Validate(t *testing.T) {
 			name: "unsupported validation type",
 			config: config.Config{
 				Validators: config.TypeValidators{
-					"type-a": config.FieldValidators{
-						{
-							FieldName: "field1",
-							Rules: []config.ValidationRule{
-								{
-									Type:          "regex",
-									AllowedValues: []string{},
+					{
+						TypeName: "type-a",
+						Fields: config.FieldValidators{
+							{
+								FieldName: "field1",
+								Rules: []config.ValidationRule{
+									{
+										Type:          "regex",
+										AllowedValues: []string{},
+									},
 								},
 							},
 						},
@@ -494,7 +506,10 @@ func TestFieldValidation_Validate(t *testing.T) {
 			name: "empty field validation array",
 			config: config.Config{
 				Validators: config.TypeValidators{
-					"type-a": config.FieldValidators{},
+					{
+						TypeName: "type-a",
+						Fields:   config.FieldValidators{},
+					},
 				},
 			},
 			expectError: false,

@@ -29,7 +29,7 @@ func TestRoleValidation(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := test.role.Validate()
+			err := test.role.Validate(model.EmptyValidationContext)
 			if test.expectErr {
 				assert.Error(t, err)
 			} else {

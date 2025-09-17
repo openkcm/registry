@@ -47,8 +47,23 @@ func TestSystemService(t *testing.T) {
 				result, err := sSubj.RegisterSystem(ctx, &systemgrpc.RegisterSystemRequest{})
 
 				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err))
+				assert.Contains(t, status.Convert(err).Message(), "ExternalID is empty")
+				assert.Nil(t, result)
+			})
+			t.Run("for invalid system type", func(t *testing.T) {
+				// given
+				req := validRegisterSystemReq()
+				req.Type = "invalid-type"
+
+				// when
+				result, err := sSubj.RegisterSystem(ctx, req)
+
+				// then
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err))
+				assert.Contains(t, status.Convert(err).Message(), "invalid field value: 'invalid-type' for field 'Type'")
 				assert.Nil(t, result)
 			})
 			t.Run("if Tenant doesn't exist", func(t *testing.T) {
@@ -58,8 +73,9 @@ func TestSystemService(t *testing.T) {
 				res, err := sSubj.RegisterSystem(ctx, req)
 
 				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+				require.Error(t, err)
+				assert.Equal(t, codes.NotFound, status.Code(err))
+				assert.Contains(t, status.Convert(err).Message(), "tenant not found")
 				assert.Nil(t, res)
 			})
 		})

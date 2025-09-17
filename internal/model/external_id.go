@@ -8,7 +8,7 @@ import (
 // ExternalID represents the external ID of the system.
 type ExternalID string
 
-func (e ExternalID) Validate() error {
+func (e ExternalID) Validate(_ ValidationContext) error {
 	if len(e) == 0 {
 		return status.Error(codes.InvalidArgument, "ExternalID is empty")
 	}

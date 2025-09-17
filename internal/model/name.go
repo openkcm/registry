@@ -9,7 +9,7 @@ import (
 type Name string
 
 // Validate validates given name of the tenant.
-func (n Name) Validate() error {
+func (n Name) Validate(_ ValidationContext) error {
 	if n == "" {
 		return status.Error(codes.InvalidArgument, "Name is empty")
 	}

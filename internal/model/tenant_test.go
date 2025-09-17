@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	tenantpb "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 
@@ -17,6 +18,7 @@ func TestTenantValidation(t *testing.T) {
 	tests := map[string]struct {
 		tenant    model.Tenant
 		expectErr bool
+		errMsg    string
 	}{
 		"Valid tenant data": {
 			tenant: model.Tenant{
@@ -41,8 +43,9 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
+			errMsg:    "Name is empty",
 		},
-		"Tenant data missing ID": {
+		"Tenant data empty ID": {
 			tenant: model.Tenant{
 				Name:      "SuccessFactor",
 				ID:        "",
@@ -53,8 +56,9 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
+			errMsg:    "ID is empty",
 		},
-		"Empty id": {
+		"Tenant data missing id": {
 			tenant: model.Tenant{
 				Name:      "SuccessFactor",
 				Region:    "CMK_REGION_EU",
@@ -64,6 +68,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
+			errMsg:    "ID is empty",
 		},
 		"Tenant data missing region": {
 			tenant: model.Tenant{
@@ -75,8 +80,9 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
+			errMsg:    "Region is empty",
 		},
-		"Tenant data wrong owner type": {
+		"Tenant data empty owner type": {
 			tenant: model.Tenant{
 				Name:      "SuccessFactor",
 				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
@@ -87,6 +93,32 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
+			errMsg:    "Owner type is empty",
+		},
+		"Tenant data missing owner type": {
+			tenant: model.Tenant{
+				Name:    "SuccessFactor",
+				ID:      "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
+				Region:  "CMK_REGION_EU",
+				Status:  tenantStatusActive,
+				OwnerID: "customer_id",
+				Role:    "ROLE_TRIAL",
+			},
+			expectErr: true,
+			errMsg:    "Owner type is empty",
+		},
+		"Tenant data empty owner id": {
+			tenant: model.Tenant{
+				Name:      "SuccessFactor",
+				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
+				Region:    "CMK_REGION_EU",
+				Status:    tenantStatusActive,
+				OwnerType: "some_owner",
+				OwnerID:   "",
+				Role:      "ROLE_TRIAL",
+			},
+			expectErr: true,
+			errMsg:    "OwnerID is empty",
 		},
 		"Tenant data missing owner id": {
 			tenant: model.Tenant{
@@ -98,8 +130,9 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
+			errMsg:    "OwnerID is empty",
 		},
-		"Tenant data missing role": {
+		"Tenant data empty role": {
 			tenant: model.Tenant{
 				Name:      "SuccessFactor",
 				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
@@ -110,8 +143,9 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "",
 			},
 			expectErr: true,
+			errMsg:    "Role is not correct",
 		},
-		"Tenant data missing label key": {
+		"Tenant data empty label key": {
 			tenant: model.Tenant{
 				Name:      "SuccessFactor",
 				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
@@ -125,14 +159,32 @@ func TestTenantValidation(t *testing.T) {
 				},
 			},
 			expectErr: true,
+			errMsg:    "labels include empty string",
+		},
+		"Tenant data empty label value": {
+			tenant: model.Tenant{
+				Name:      "SuccessFactor",
+				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
+				Region:    "CMK_REGION_EU",
+				Status:    tenantStatusActive,
+				OwnerType: "owner_type",
+				OwnerID:   "customer_id",
+				Role:      "ROLE_TRIAL",
+				Labels: map[string]string{
+					"key": "",
+				},
+			},
+			expectErr: true,
+			errMsg:    "labels include empty string",
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := test.tenant.Validate()
+			err := test.tenant.Validate(model.EmptyValidationContext)
 			if test.expectErr {
-				assert.Error(t, err)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), test.errMsg)
 			} else {
 				assert.NoError(t, err)
 			}

@@ -327,10 +327,14 @@ config:
       enabled: false
 
   # Validation rules for configurable data fields
-  fieldValidation:
-    - fieldName: system.type
-      # rules is an array of validation rules to apply to the field.
-      # At the moment only enum type with an array of allowedValues is supported.
-      rules:
-        - type: enum
-          allowedValues: [ "system" ]
+  validators:
+    # typeName is the name of the struct type to validate, including package name, e.g. model.System
+    - typeName: model.System
+      fields:
+        # fieldName is the name of the field to validate, as defined in the type.
+        - fieldName: Type
+          # rules is an array of validation rules to apply to the field.
+          # At the moment only enum type with an array of allowedValues is supported.
+          rules:
+            - type: enum
+              allowedValues: [ "system", "test" ]

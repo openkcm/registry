@@ -6,19 +6,45 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	typespb "github.com/openkcm/api-sdk/proto/kms/api/cmk/types/v1"
 
+	"github.com/openkcm/registry/internal/config"
 	"github.com/openkcm/registry/internal/model"
 )
 
 func TestSystemValidation(t *testing.T) {
 	// given
+	// Setup validators for SystemType which uses the new validation system
+	testValidators := &config.TypeValidators{
+		{
+			TypeName: "model.System",
+			Fields: config.FieldValidators{
+				{
+					FieldName: "Type",
+					Rules: []config.ValidationRule{
+						{
+							Type:          "enum",
+							AllowedValues: []string{"system", "app", "api"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Set global validators
+	model.SetGlobalTypeValidators(testValidators)
+
+	defer model.SetGlobalTypeValidators(&config.TypeValidators{})
+
 	claimTrue := true
 	tenantID := uuid.New().String()
 	tests := map[string]struct {
 		system    model.System
 		expectErr bool
+		errMsg    string
 	}{
 		"Valid system data": {
 			system: model.System{
@@ -29,6 +55,10 @@ func TestSystemValidation(t *testing.T) {
 				HasL1KeyClaim: &claimTrue,
 				Status:        model.Status(typespb.Status_STATUS_AVAILABLE.String()),
 				Type:          "system",
+				Labels: map[string]string{
+					"key1": "value1",
+					"key2": "value2",
+				},
 			},
 			expectErr: false,
 		},
@@ -42,6 +72,7 @@ func TestSystemValidation(t *testing.T) {
 				Type:          "system",
 			},
 			expectErr: true,
+			errMsg:    "ExternalID is empty",
 		},
 		"System data missing L2KeyID": {
 			system: model.System{
@@ -53,6 +84,7 @@ func TestSystemValidation(t *testing.T) {
 				Type:          "system",
 			},
 			expectErr: true,
+			errMsg:    "L2KeyID is empty",
 		},
 		"System data missing Region": {
 			system: model.System{
@@ -64,6 +96,7 @@ func TestSystemValidation(t *testing.T) {
 				Type:          "system",
 			},
 			expectErr: true,
+			errMsg:    "Region is empty",
 		},
 		"System data empty Region": {
 			system: model.System{
@@ -76,6 +109,7 @@ func TestSystemValidation(t *testing.T) {
 				Type:          "system",
 			},
 			expectErr: true,
+			errMsg:    "Region is empty",
 		},
 		"System status unspecified": {
 			system: model.System{
@@ -87,6 +121,20 @@ func TestSystemValidation(t *testing.T) {
 				Type:          "system",
 			},
 			expectErr: true,
+			errMsg:    "Status is not correct",
+		},
+		"System type missing": {
+			system: model.System{
+				ExternalID:    "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
+				TenantID:      &tenantID,
+				Region:        "REGION_EU",
+				L2KeyID:       "d2c16bd0-1398-43ca-aa76-580e9b0c3713",
+				HasL1KeyClaim: &claimTrue,
+				Type:          model.SystemType(""),
+				Status:        model.Status(typespb.Status_STATUS_AVAILABLE.String()),
+			},
+			expectErr: true,
+			errMsg:    "System type is empty",
 		},
 		"System type incorrect": {
 			system: model.System{
@@ -96,8 +144,10 @@ func TestSystemValidation(t *testing.T) {
 				L2KeyID:       "d2c16bd0-1398-43ca-aa76-580e9b0c3713",
 				HasL1KeyClaim: &claimTrue,
 				Type:          "invalid_type",
+				Status:        model.Status(typespb.Status_STATUS_AVAILABLE.String()),
 			},
 			expectErr: true,
+			errMsg:    "invalid field value: 'invalid_type' for field 'Type'",
 		},
 		"Missing label key": {
 			system: model.System{
@@ -106,23 +156,42 @@ func TestSystemValidation(t *testing.T) {
 				Region:        "REGION_EU",
 				L2KeyID:       "d2c16bd0-1398-43ca-aa76-580e9b0c3713",
 				HasL1KeyClaim: &claimTrue,
-				Type:          "invalid_type",
+				Type:          "system",
+				Status:        model.Status(typespb.Status_STATUS_AVAILABLE.String()),
 				Labels: map[string]string{
 					"": "value",
 				},
 			},
 			expectErr: true,
+			errMsg:    "labels include empty string",
+		},
+		"Missing label value": {
+			system: model.System{
+				ExternalID:    "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
+				TenantID:      &tenantID,
+				Region:        "REGION_EU",
+				L2KeyID:       "d2c16bd0-1398-43ca-aa76-580e9b0c3713",
+				HasL1KeyClaim: &claimTrue,
+				Type:          "system",
+				Status:        model.Status(typespb.Status_STATUS_AVAILABLE.String()),
+				Labels: map[string]string{
+					"key": "",
+				},
+			},
+			expectErr: true,
+			errMsg:    "labels include empty string",
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// when
-			err := test.system.Validate()
+			err := test.system.Validate(model.EmptyValidationContext)
 
 			// then
 			if test.expectErr {
-				assert.Error(t, err)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), test.errMsg)
 			} else {
 				assert.NoError(t, err)
 			}

@@ -25,7 +25,7 @@ func init() {
 }
 
 // Validate validates given role of the tenant.
-func (r Role) Validate() error {
+func (r Role) Validate(_ ValidationContext) error {
 	if _, ok := validRoles[r]; !ok {
 		return status.Error(codes.InvalidArgument, "Role is not correct")
 	}

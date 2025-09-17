@@ -21,7 +21,7 @@ var (
 type Labels map[string]string
 
 // Validate validates given labels data.
-func (l *Labels) Validate() error {
+func (l *Labels) Validate(_ ValidationContext) error {
 	for k, v := range *l {
 		if k == "" || v == "" {
 			return ErrLabelsIncludeEmptyString

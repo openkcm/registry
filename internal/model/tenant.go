@@ -29,8 +29,8 @@ func (t *Tenant) TableName() string {
 }
 
 // Validate validates given tenant data.
-func (t *Tenant) Validate() error {
-	return ValidateStruct(t, "tenant")
+func (t *Tenant) Validate(_ ValidationContext) error {
+	return ValidateStruct(t)
 }
 
 // PaginationKey returns the fields used for pagination.

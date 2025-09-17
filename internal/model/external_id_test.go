@@ -25,7 +25,7 @@ func TestExternalID_Validate(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := test.externalID.Validate()
+			err := test.externalID.Validate(model.EmptyValidationContext)
 			if test.expectErr {
 				assert.Error(t, err)
 			} else {

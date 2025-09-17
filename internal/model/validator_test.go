@@ -13,29 +13,41 @@ import (
 // TestFieldType is a simple type that implements the Validator interface for testing.
 type TestFieldType string
 
-func (t TestFieldType) Validate() error {
+func (t TestFieldType) Validate(ctx model.ValidationContext) error {
 	if t == "" {
 		return model.ErrInvalidFieldValue
 	}
+	if err := ctx.ValidateField(string(t)); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func TestValidateStruct(t *testing.T) {
 	// Create a test struct
 	type TestStruct struct {
-		TestField  TestFieldType `gorm:"column:test_field"`
-		OtherField string        `gorm:"column:other_field"`
+		TestField       TestFieldType
+		OtherField      string
+		unexportedField int
+	}
+
+	type OtherStruct struct {
+		TestField TestFieldType
 	}
 
 	// Setup test validators
 	testValidators := &config.TypeValidators{
-		"test_struct": config.FieldValidators{
-			{
-				FieldName: "test_field",
-				Rules: []config.ValidationRule{
-					{
-						Type:          "enum",
-						AllowedValues: []string{"valid_value1", "valid_value2"},
+		{
+			TypeName: "model_test.TestStruct",
+			Fields: config.FieldValidators{
+				{
+					FieldName: "TestField",
+					Rules: []config.ValidationRule{
+						{
+							Type:          "enum",
+							AllowedValues: []string{"valid_value1", "valid_value2"},
+						},
 					},
 				},
 			},
@@ -45,43 +57,40 @@ func TestValidateStruct(t *testing.T) {
 	// Set global validators
 	model.SetGlobalTypeValidators(testValidators)
 
+	defer model.SetGlobalTypeValidators(&config.TypeValidators{})
+
 	tests := map[string]struct {
-		structPtr interface{}
-		typeName  string
+		structPtr any
 		expectErr bool
 		errMsg    string
 	}{
 		"Valid struct with valid field": {
 			structPtr: &TestStruct{
-				TestField: TestFieldType("valid_value1"),
+				TestField:       TestFieldType("valid_value1"),
+				unexportedField: 0, // irrelevant for validation, should be ignored
 			},
-			typeName:  "test_struct",
 			expectErr: false,
 		},
-		"Invalid struct with invalid field": {
+		"Valid struct with invalid field": {
 			structPtr: &TestStruct{
 				TestField: TestFieldType("invalid_value"),
 			},
-			typeName:  "test_struct",
 			expectErr: true,
 			errMsg:    "invalid field value",
 		},
 		"Struct with no validators configured": {
-			structPtr: &TestStruct{
+			structPtr: &OtherStruct{
 				TestField: TestFieldType("any_value"),
 			},
-			typeName:  "unknown_type",
 			expectErr: false,
 		},
 		"Non-struct pointer should return error": {
 			structPtr: "not a struct",
-			typeName:  "test_struct",
 			expectErr: true,
 			errMsg:    "expected a pointer to struct",
 		},
 		"Non-pointer should return error": {
 			structPtr: TestStruct{},
-			typeName:  "test_struct",
 			expectErr: true,
 			errMsg:    "expected a pointer to struct",
 		},
@@ -89,10 +98,10 @@ func TestValidateStruct(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := model.ValidateStruct(test.structPtr, test.typeName)
+			err := model.ValidateStruct(test.structPtr)
 
 			if test.expectErr {
-				assert.Error(t, err)
+				require.Error(t, err)
 
 				if test.errMsg != "" {
 					assert.Contains(t, err.Error(), test.errMsg)
@@ -104,115 +113,62 @@ func TestValidateStruct(t *testing.T) {
 	}
 }
 
-// TestValidateStructWithRealModels tests the ValidateStruct function with actual model types.
-func TestValidateStructWithRealModels(t *testing.T) {
-	// Setup validators for SystemType which uses the new validation system
-	testValidators := &config.TypeValidators{
-		"system": config.FieldValidators{
-			{
-				FieldName: "type",
-				Rules: []config.ValidationRule{
-					{
-						Type:          "enum",
-						AllowedValues: []string{"web", "mobile", "api"},
-					},
-				},
-			},
-		},
+func TestValidationContextFromType(t *testing.T) {
+	type TestStruct struct {
+		TestField TestFieldType
 	}
 
-	// Set global validators
-	model.SetGlobalTypeValidators(testValidators)
+	test := &TestStruct{TestField: TestFieldType("valid_value1")}
 
+	// Setup test validators
 	tests := map[string]struct {
-		structPtr interface{}
-		expectErr bool
+		structPtr    any
+		fieldPtr     any
+		expectErr    bool
+		expectErrMsg string
 	}{
-		"Valid system with valid type": {
-			structPtr: &model.System{
-				ExternalID: model.ExternalID("1234567890-asdfghjkl~qwertyuiop"),
-				Region:     model.Region("REGION_EU"),
-				L2KeyID:    model.L2KeyID("l2keyid-1234567890"),
-				Type:       model.SystemType("web"),
-				Status:     model.Status("STATUS_AVAILABLE"), // Valid protobuf status
-			},
+		"Valid struct and field": {
+			structPtr: test,
+			fieldPtr:  &test.TestField, // Pointer to string for field name
 			expectErr: false,
 		},
-		"Invalid system with invalid type": {
-			structPtr: &model.System{
-				ExternalID: model.ExternalID("1234567890-asdfghjkl~qwertyuiop"),
-				Region:     model.Region("REGION_EU"),
-				L2KeyID:    model.L2KeyID("l2keyid-1234567890"),
-				Type:       model.SystemType("desktop"),      // Invalid according to our config
-				Status:     model.Status("STATUS_AVAILABLE"), // Valid protobuf status
-			},
-			expectErr: true,
+		"Non-pointer struct should return error": {
+			structPtr:    *test,
+			fieldPtr:     &test.TestField,
+			expectErr:    true,
+			expectErrMsg: "expected a pointer to struct",
 		},
-		"Invalid system with empty type": {
-			structPtr: &model.System{
-				ExternalID: model.ExternalID("1234567890-asdfghjkl~qwertyuiop"),
-				Region:     model.Region("REGION_EU"),
-				L2KeyID:    model.L2KeyID("l2keyid-1234567890"),
-				Type:       model.SystemType(""),             // Empty type
-				Status:     model.Status("STATUS_AVAILABLE"), // Valid protobuf status
-			},
-			expectErr: true,
+		"Non-struct pointer should return error": {
+			structPtr:    new(int),
+			fieldPtr:     new(string),
+			expectErr:    true,
+			expectErrMsg: "expected a pointer to struct",
+		},
+		"Non-pointer field should return error": {
+			structPtr:    test,
+			fieldPtr:     test.TestField,
+			expectErr:    true,
+			expectErrMsg: "expected a pointer to field",
+		},
+		"Field not in struct should return error": {
+			structPtr:    test,
+			fieldPtr:     new(string),
+			expectErr:    true,
+			expectErrMsg: "field is not a struct member",
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := model.ValidateStruct(test.structPtr, "system")
+			ctx, err := model.ValidationContextFromType(test.structPtr, test.fieldPtr)
 
 			if test.expectErr {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "invalid field value")
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), test.expectErrMsg)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
+				assert.NotNil(t, ctx)
 			}
 		})
 	}
-}
-
-func TestExtractFieldNameFromTag(t *testing.T) {
-	// This test verifies the GORM tag parsing logic
-	// Since extractFieldNameFromTag is not exported, we test it indirectly through ValidateStruct
-
-	// Create a test struct with GORM tags
-	type TestStruct struct {
-		FieldWithColumn    model.SystemType `gorm:"column:type;not null"`
-		FieldWithoutColumn string           `gorm:"not null"`
-		FieldNoGormTag     string
-	}
-
-	// Setup validator for "type" field
-	testValidators := &config.TypeValidators{
-		"test": config.FieldValidators{
-			{
-				FieldName: "type",
-				Rules: []config.ValidationRule{
-					{
-						Type:          "enum",
-						AllowedValues: []string{"valid"},
-					},
-				},
-			},
-		},
-	}
-
-	model.SetGlobalTypeValidators(testValidators)
-
-	testStruct := &TestStruct{
-		FieldWithColumn: model.SystemType("valid"),
-	}
-
-	// Should not error because "type" field has valid value
-	err := model.ValidateStruct(testStruct, "test")
-	assert.NoError(t, err)
-
-	// Test with invalid value
-	testStruct.FieldWithColumn = model.SystemType("invalid")
-	err = model.ValidateStruct(testStruct, "test")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid field value")
 }

@@ -128,8 +128,10 @@ telemetry:
     secretRef:
       type: insecure
 
-fieldValidation:
-  - fieldName: system.type
-    rules:
-      - type: enum
-        allowedValues: [ "system", "test" ]
+validators:
+  - typeName: model.System
+    fields:
+      - fieldName: Type
+        rules:
+          - type: enum
+            allowedValues: ["system", "test"]

@@ -9,7 +9,7 @@ import (
 type Region string
 
 // Validate validates given region of the model.
-func (r Region) Validate() error {
+func (r Region) Validate(_ ValidationContext) error {
 	if len(r) == 0 {
 		return status.Error(codes.InvalidArgument, "Region is empty")
 	}

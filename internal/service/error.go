@@ -13,19 +13,16 @@ import (
 const (
 	SelectTenantErrMsg      = "could not select tenant"
 	UpdateTenantErrMsg      = "could not update tenant"
-	DeleteTenantErrMsg      = "could not delete tenant"
 	TenantNotFoundMsg       = "tenant not found"
 	TenantUnavailableErrMsg = "tenant is unavailable"
 )
 
 const (
-	SelectSystemErrMsg                  = "could not select system"
-	UpdateSystemErrMsg                  = "could not update system"
-	DeleteSystemErrMsg                  = "could not delete system"
-	SystemNotFoundMsg                   = "system not found"
-	SystemUnavailableErrMsg             = "system is unavailable"
-	TenantStatusTransitionNotAllowedMsg = "tenant status transition not allowed"
-	InvalidTenantStatusMsg              = "invalid tenant status"
+	SelectSystemErrMsg      = "could not select system"
+	UpdateSystemErrMsg      = "could not update system"
+	DeleteSystemErrMsg      = "could not delete system"
+	SystemNotFoundMsg       = "system not found"
+	SystemUnavailableErrMsg = "system is unavailable"
 )
 
 const (
@@ -35,14 +32,10 @@ const (
 )
 
 var (
-	ErrTenantSelect                     = status.Error(codes.Internal, SelectTenantErrMsg)
-	ErrTenantUpdate                     = status.Error(codes.Internal, UpdateTenantErrMsg)
-	ErrTenantDelete                     = status.Error(codes.Internal, DeleteTenantErrMsg)
-	ErrTenantIDFormat                   = status.Error(codes.InvalidArgument, "tenant ID is not valid")
-	ErrTenantNotFound                   = status.Error(codes.NotFound, TenantNotFoundMsg)
-	ErrTenantUnavailable                = status.Error(codes.FailedPrecondition, TenantUnavailableErrMsg)
-	ErrTenantStatusTransitionNotAllowed = errors.New(TenantStatusTransitionNotAllowedMsg)
-	ErrInvalidTenantStatus              = errors.New(InvalidTenantStatusMsg)
+	ErrTenantSelect      = status.Error(codes.Internal, SelectTenantErrMsg)
+	ErrTenantUpdate      = status.Error(codes.Internal, UpdateTenantErrMsg)
+	ErrTenantNotFound    = status.Error(codes.NotFound, TenantNotFoundMsg)
+	ErrTenantUnavailable = status.Error(codes.FailedPrecondition, TenantUnavailableErrMsg)
 )
 
 var (
@@ -68,6 +61,7 @@ var (
 	ErrMissingLabelKeys        = status.Error(codes.InvalidArgument, MissingLabelKeysMsg)
 	ErrMissingLabels           = status.Error(codes.InvalidArgument, MissingLabelsMsg)
 	ErrEmptyLabelKeys          = status.Error(codes.InvalidArgument, EmptyLabelKeysMsg)
+	ErrInternalValidation      = status.Error(codes.Internal, "internal validation error")
 )
 
 // ErrorWithParams will return an error with new message,
