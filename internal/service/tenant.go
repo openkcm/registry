@@ -145,9 +145,8 @@ func (t *Tenant) ListTenants(ctx context.Context, in *tenantgrpc.ListTenantsRequ
 func (t *Tenant) ApplyTenantAuth(ctx context.Context, in *tenantgrpc.ApplyTenantAuthRequest) (*tenantgrpc.ApplyTenantAuthResponse, error) {
 	slogctx.Debug(ctx, "ApplyTenantAuth called", "tenantId", in.GetId())
 
-	err := t.validateApplyAuthRequest(in)
+	err := t.validateApplyAuthRequest(ctx, in)
 	if err != nil {
-		slogctx.Error(ctx, "ApplyTenantAuth failed", "tenantId", in.GetId(), "error", err)
 		return nil, err
 	}
 
@@ -180,7 +179,7 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 	tenant := &model.Tenant{}
 	validationCtx, err := model.ValidationContextFromType(tenant, &tenant.ID)
 	if err != nil {
-		slogctx.Error(ctx, "BlockTenant failed", "tenantId", in.GetId(), "error", err)
+		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
 		return nil, ErrInternalValidation
 	}
 
@@ -216,7 +215,7 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 	tenant := &model.Tenant{}
 	validationCtx, err := model.ValidationContextFromType(tenant, &tenant.ID)
 	if err != nil {
-		slogctx.Error(ctx, "UnblockTenant failed", "tenantId", in.GetId(), "error", err)
+		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
 		return nil, ErrInternalValidation
 	}
 
@@ -250,7 +249,7 @@ func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTe
 	tenant := &model.Tenant{}
 	validationCtx, err := model.ValidationContextFromType(tenant, &tenant.ID)
 	if err != nil {
-		slogctx.Error(ctx, "TerminateTenant failed", "tenantId", in.GetId(), "error", err)
+		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
 		return nil, ErrInternalValidation
 	}
 
@@ -286,8 +285,7 @@ func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTe
 func (t *Tenant) SetTenantLabels(ctx context.Context, in *tenantgrpc.SetTenantLabelsRequest) (*tenantgrpc.SetTenantLabelsResponse, error) {
 	slogctx.Debug(ctx, "SetTenantLabels called", "tenantId", in.GetId())
 
-	if err := t.validateSetTenantLabelsRequest(in); err != nil {
-		slogctx.Error(ctx, "SetTenantLabels failed", "tenantId", in.GetId(), "error", err)
+	if err := t.validateSetTenantLabelsRequest(ctx, in); err != nil {
 		return nil, err
 	}
 
@@ -316,8 +314,7 @@ func (t *Tenant) SetTenantLabels(ctx context.Context, in *tenantgrpc.SetTenantLa
 func (t *Tenant) RemoveTenantLabels(ctx context.Context, in *tenantgrpc.RemoveTenantLabelsRequest) (*tenantgrpc.RemoveTenantLabelsResponse, error) {
 	slogctx.Debug(ctx, "RemoveTenantLabels called", "tenantId", in.GetId())
 
-	if err := t.validateRemoveTenantLabelsRequest(in); err != nil {
-		slogctx.Error(ctx, "RemoveTenantLabels failed", "tenantId", in.GetId(), "error", err)
+	if err := t.validateRemoveTenantLabelsRequest(ctx, in); err != nil {
 		return nil, err
 	}
 
@@ -350,7 +347,7 @@ func (t *Tenant) GetTenant(ctx context.Context, in *tenantgrpc.GetTenantRequest)
 	tenantPtr := &model.Tenant{}
 	validationCtx, err := model.ValidationContextFromType(tenantPtr, &tenantPtr.ID)
 	if err != nil {
-		slogctx.Error(ctx, "GetTenant failed", "tenantId", in.GetId(), "error", err)
+		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
 		return nil, ErrInternalValidation
 	}
 
@@ -375,7 +372,7 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 	tenant := &model.Tenant{}
 	validationCtx, err := model.ValidationContextFromType(tenant, &tenant.ID)
 	if err != nil {
-		slogctx.Error(ctx, "SetTenantUserGroups failed", "tenantId", in.GetId(), "error", err)
+		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
 		return nil, ErrInternalValidation
 	}
 
@@ -407,11 +404,12 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 
 // validateApplyAuthRequest validates the ApplyTenantAuthRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
-func (t *Tenant) validateApplyAuthRequest(in *tenantgrpc.ApplyTenantAuthRequest) error {
+func (t *Tenant) validateApplyAuthRequest(ctx context.Context, in *tenantgrpc.ApplyTenantAuthRequest) error {
 	tenantPtr := &model.Tenant{}
 	validationCtx, err := model.ValidationContextFromType(tenantPtr, &tenantPtr.ID)
 	if err != nil {
-		return err
+		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
+		return ErrInternalValidation
 	}
 
 	id := model.ID(in.GetId())
@@ -426,7 +424,8 @@ func (t *Tenant) validateApplyAuthRequest(in *tenantgrpc.ApplyTenantAuthRequest)
 
 	validationCtx, err = model.ValidationContextFromType(tenantPtr, &tenantPtr.Labels)
 	if err != nil {
-		return err
+		slogctx.Error(ctx, "validation of tenant labels failed", "tenantId", in.GetId(), "error", err)
+		return ErrInternalValidation
 	}
 
 	labels := model.Labels(info)
@@ -440,10 +439,11 @@ func (t *Tenant) validateApplyAuthRequest(in *tenantgrpc.ApplyTenantAuthRequest)
 
 // validateSetTenantLabelsRequest validates the SetTenantLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
-func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRequest) error {
+func (t *Tenant) validateSetTenantLabelsRequest(ctx context.Context, in *tenantgrpc.SetTenantLabelsRequest) error {
 	tenantPtr := &model.Tenant{}
 	idValCtx, err := model.ValidationContextFromType(tenantPtr, &tenantPtr.ID)
 	if err != nil {
+		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
 		return ErrInternalValidation
 	}
 
@@ -461,6 +461,7 @@ func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRe
 
 	labelValCtx, err := model.ValidationContextFromType(tenantPtr, &tenantPtr.Labels)
 	if err != nil {
+		slogctx.Error(ctx, "validation of tenant labels failed", "tenantId", in.GetId(), "error", err)
 		return ErrInternalValidation
 	}
 
@@ -474,10 +475,11 @@ func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRe
 
 // validateRemoveTenantLabelsRequest validates the RemoveTenantLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
-func (t *Tenant) validateRemoveTenantLabelsRequest(in *tenantgrpc.RemoveTenantLabelsRequest) error {
+func (t *Tenant) validateRemoveTenantLabelsRequest(ctx context.Context, in *tenantgrpc.RemoveTenantLabelsRequest) error {
 	tenantPtr := &model.Tenant{}
 	idValCtx, err := model.ValidationContextFromType(tenantPtr, &tenantPtr.ID)
 	if err != nil {
+		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
 		return ErrInternalValidation
 	}
 
