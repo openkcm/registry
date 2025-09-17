@@ -25,9 +25,17 @@ func init() {
 }
 
 // Validate validates given status of the tenant.
-func (s Status) Validate(_ ValidationContext) error {
+func (s Status) Validate(ctx ValidationContext) error {
 	if _, ok := validStatuses[s]; !ok {
 		return status.Error(codes.InvalidArgument, "Status is not correct")
+	}
+
+	if ctx == nil {
+		return nil
+	}
+
+	if err := ctx.ValidateField(string(s)); err != nil {
+		return err
 	}
 
 	return nil

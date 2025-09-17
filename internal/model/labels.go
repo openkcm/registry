@@ -21,11 +21,19 @@ var (
 type Labels map[string]string
 
 // Validate validates given labels data.
-func (l *Labels) Validate(_ ValidationContext) error {
+func (l *Labels) Validate(ctx ValidationContext) error {
 	for k, v := range *l {
 		if k == "" || v == "" {
 			return ErrLabelsIncludeEmptyString
 		}
+	}
+
+	if ctx == nil {
+		return nil
+	}
+
+	if err := ctx.ValidateField((map[string]string)(*l)); err != nil {
+		return err
 	}
 
 	return nil

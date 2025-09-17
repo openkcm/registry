@@ -236,12 +236,12 @@ func validateField(fieldValidator *config.FieldValidator, fieldValue any) error 
 
 // applyFieldValidationRules applies the validation rules to the field value.
 func applyFieldValidationRules(fieldValue any, validator config.FieldValidator) error {
-	fieldValueAsString, ok := fieldValue.(string)
-	if !ok {
-		return fmt.Errorf("%w: %v", ErrFieldValueIsNotString, fieldValue)
-	}
 	for _, rule := range validator.Rules {
 		if rule.Type == config.RuleTypeEnum {
+			fieldValueAsString, ok := fieldValue.(string)
+			if !ok {
+				return fmt.Errorf("%w: %v", ErrFieldValueIsNotString, fieldValue)
+			}
 			for _, allowedValue := range rule.AllowedValues {
 				if fieldValueAsString == allowedValue {
 					return nil

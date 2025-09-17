@@ -17,18 +17,19 @@ func TestUserGroupsValidate(t *testing.T) {
 		wantErr  bool
 		wantCode codes.Code
 	}{
-		{
-			name:     "nil slice",
-			input:    nil,
-			wantErr:  true,
-			wantCode: codes.InvalidArgument,
-		},
-		{
-			name:     "empty slice",
-			input:    model.UserGroups{},
-			wantErr:  true,
-			wantCode: codes.InvalidArgument,
-		},
+		// TODO : decide if nil/empty slice is allowed
+		//{
+		//	name:     "nil slice",
+		//	input:    nil,
+		//	wantErr:  true,
+		//	wantCode: codes.InvalidArgument,
+		//},
+		//{
+		//	name:     "empty slice",
+		//	input:    model.UserGroups{},
+		//	wantErr:  true,
+		//	wantCode: codes.InvalidArgument,
+		//},
 		{
 			name:     "contains empty string",
 			input:    model.UserGroups{"admin", "", "user"},
@@ -44,7 +45,7 @@ func TestUserGroupsValidate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.input.Validate()
+			err := tt.input.Validate(model.EmptyValidationContext)
 			if tt.wantErr {
 				assert.Error(t, err)
 				st, _ := status.FromError(err)

@@ -9,9 +9,17 @@ import (
 type OwnerID string
 
 // Validate validates given OwnerID of the model.
-func (o OwnerID) Validate(_ ValidationContext) error {
+func (o OwnerID) Validate(ctx ValidationContext) error {
 	if len(o) == 0 {
 		return status.Error(codes.InvalidArgument, "OwnerID is empty")
+	}
+
+	if ctx == nil {
+		return nil
+	}
+
+	if err := ctx.ValidateField(string(o)); err != nil {
+		return err
 	}
 
 	return nil

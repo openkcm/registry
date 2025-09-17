@@ -8,9 +8,17 @@ import (
 // OwnerType represents the type of owner for the tenant model.
 type OwnerType string
 
-func (o OwnerType) Validate(_ ValidationContext) error {
+func (o OwnerType) Validate(ctx ValidationContext) error {
 	if o == "" {
 		return status.Error(codes.InvalidArgument, "Owner type is empty")
+	}
+
+	if ctx == nil {
+		return nil
+	}
+
+	if err := ctx.ValidateField(string(o)); err != nil {
+		return err
 	}
 
 	return nil

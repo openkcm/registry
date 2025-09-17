@@ -370,19 +370,25 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 	slogctx.Debug(ctx, "SetTenantUserGroups called", "tenantId", in.GetId())
 
 	tenant := &model.Tenant{}
-	validationCtx, err := model.ValidationContextFromType(tenant, &tenant.ID)
+	idValCtx, err := model.ValidationContextFromType(tenant, &tenant.ID)
 	if err != nil {
 		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
 		return nil, ErrInternalValidation
 	}
 
 	tenantID := model.ID(in.GetId())
-	err = tenantID.Validate(validationCtx)
+	err = tenantID.Validate(idValCtx)
 	if err != nil {
 		return nil, err
 	}
 
-	err = model.UserGroups(in.GetUserGroups()).Validate()
+	groupValCtx, err := model.ValidationContextFromType(tenant, &tenant.UserGroups)
+	if err != nil {
+		slogctx.Error(ctx, "validation of tenant user groups failed", "tenantId", in.GetId(), "error", err)
+		return nil, ErrInternalValidation
+	}
+
+	err = model.UserGroups(in.GetUserGroups()).Validate(groupValCtx)
 	if err != nil {
 		return nil, err
 	}
