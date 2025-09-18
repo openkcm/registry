@@ -78,7 +78,7 @@ func (t *Tenant) RegisterTenant(ctx context.Context, in *tenantgrpc.RegisterTena
 			return err
 		}
 
-		err := t.orbital.PrepareTenantJob(ctx, tenant, ProvisionTenant)
+		err := t.orbital.PrepareTenantJob(ctx, tenant, tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String())
 		if err != nil {
 			return status.Error(codes.Internal, "failed to start tenant provisioning job")
 		}
@@ -159,7 +159,7 @@ func (t *Tenant) ApplyTenantAuth(ctx context.Context, in *tenantgrpc.ApplyTenant
 			}
 			maps.Copy(tenant.Labels, in.GetAuthInfo())
 
-			return t.orbital.PrepareTenantJob(ctx, tenant, ApplyTenantAuth)
+			return t.orbital.PrepareTenantJob(ctx, tenant, tenantgrpc.ACTION_ACTION_APPLY_TENANT_AUTH.String())
 		},
 	})
 	if err != nil {
@@ -188,7 +188,7 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 		},
 		validateFunc: validateTransition(tenantgrpc.Status_STATUS_BLOCKING),
 		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
-			return t.orbital.PrepareTenantJob(ctx, tenant, BlockTenant)
+			return t.orbital.PrepareTenantJob(ctx, tenant, tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String())
 		},
 	})
 	if err != nil {
@@ -217,7 +217,7 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 		},
 		validateFunc: validateTransition(tenantgrpc.Status_STATUS_UNBLOCKING),
 		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
-			return t.orbital.PrepareTenantJob(ctx, tenant, UnblockTenant)
+			return t.orbital.PrepareTenantJob(ctx, tenant, tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String())
 		},
 	})
 	if err != nil {
@@ -248,7 +248,7 @@ func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTe
 		},
 		validateFunc: validateTransition(tenantgrpc.Status_STATUS_TERMINATING),
 		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
-			return t.orbital.PrepareTenantJob(ctx, tenant, TerminateTenant)
+			return t.orbital.PrepareTenantJob(ctx, tenant, tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String())
 		},
 	})
 	if err != nil {

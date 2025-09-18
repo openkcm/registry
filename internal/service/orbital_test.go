@@ -24,7 +24,7 @@ func TestApplyJobDone(t *testing.T) {
 		{
 			name: "Provisioning job",
 			job: orbital.Job{
-				Type: string(service.ProvisionTenant),
+				Type: tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String(),
 			},
 			tenant: &model.Tenant{
 				Status: model.TenantStatus(tenantgrpc.Status_STATUS_PROVISIONING.String()),
@@ -37,7 +37,7 @@ func TestApplyJobDone(t *testing.T) {
 		{
 			name: "Apply Tenant Auth job",
 			job: orbital.Job{
-				Type: string(service.ApplyTenantAuth),
+				Type: tenantgrpc.ACTION_ACTION_APPLY_TENANT_AUTH.String(),
 			},
 			tenant: &model.Tenant{
 				Labels: model.Labels{
@@ -54,7 +54,7 @@ func TestApplyJobDone(t *testing.T) {
 		{
 			name: "Blocking job",
 			job: orbital.Job{
-				Type: string(service.BlockTenant),
+				Type: tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String(),
 			},
 			tenant: &model.Tenant{
 				Status: model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKING.String()),
@@ -67,7 +67,7 @@ func TestApplyJobDone(t *testing.T) {
 		{
 			name: "Unblocking job",
 			job: orbital.Job{
-				Type: string(service.UnblockTenant),
+				Type: tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String(),
 			},
 			tenant: &model.Tenant{
 				Status: model.TenantStatus(tenantgrpc.Status_STATUS_UNBLOCKING.String()),
@@ -80,7 +80,7 @@ func TestApplyJobDone(t *testing.T) {
 		{
 			name: "Terminating job",
 			job: orbital.Job{
-				Type: string(service.TerminateTenant),
+				Type: tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String(),
 			},
 			tenant: &model.Tenant{
 				Status: model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATING.String()),
@@ -124,7 +124,7 @@ func TestApplyJobAborted(t *testing.T) {
 		{
 			name: "Provisioning job",
 			job: orbital.Job{
-				Type: string(service.ProvisionTenant),
+				Type: tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String(),
 			},
 			tenant: &model.Tenant{
 				Status: model.TenantStatus(tenantgrpc.Status_STATUS_PROVISIONING.String()),
@@ -137,7 +137,7 @@ func TestApplyJobAborted(t *testing.T) {
 		{
 			name: "Blocking job",
 			job: orbital.Job{
-				Type: string(service.BlockTenant),
+				Type: tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String(),
 			},
 			tenant: &model.Tenant{
 				Status: model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKING.String()),
@@ -150,7 +150,7 @@ func TestApplyJobAborted(t *testing.T) {
 		{
 			name: "Unblocking job",
 			job: orbital.Job{
-				Type: string(service.UnblockTenant),
+				Type: tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String(),
 			},
 			tenant: &model.Tenant{
 				Status: model.TenantStatus(tenantgrpc.Status_STATUS_UNBLOCKING.String()),
@@ -163,7 +163,7 @@ func TestApplyJobAborted(t *testing.T) {
 		{
 			name: "Terminating job",
 			job: orbital.Job{
-				Type: string(service.TerminateTenant),
+				Type: tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String(),
 			},
 			tenant: &model.Tenant{
 				Status: model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATING.String()),
