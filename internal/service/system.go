@@ -740,7 +740,6 @@ func (s *System) validateAndGetSystems(ctx context.Context, in []*systemgrpc.Sys
 	systems := make([]*model.System, 0, len(in))
 
 	for _, system := range in {
-
 		if err := s.validateSystemIdentifier(ctx, model.ExternalID(system.GetExternalId()), model.Region(system.GetRegion())); err != nil {
 			return nil, nil, err
 		}
