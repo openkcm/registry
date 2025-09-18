@@ -335,7 +335,7 @@ func applyJobDone(job orbital.Job, tenant *model.Tenant) error {
 }
 
 func applyJobAborted(job orbital.Job, tenant *model.Tenant) error {
-	switch job.Type { //nolint:exhaustive
+	switch job.Type {
 	case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String():
 		tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_PROVISIONING_ERROR.String()))
 	case tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String():
@@ -376,7 +376,7 @@ func getTenantForJob(ctx context.Context, job orbital.Job, repo repository.Repos
 }
 
 func jobTypeToStatus(jobType string) (tenantgrpc.Status, error) {
-	switch jobType { //nolint:exhaustive
+	switch jobType {
 	case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String():
 		return tenantgrpc.Status_STATUS_PROVISIONING, nil
 	case tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String():
