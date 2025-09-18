@@ -43,7 +43,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "Name is empty",
+			errMsg:    "name is empty",
 		},
 		"Tenant data empty ID": {
 			tenant: model.Tenant{
@@ -56,7 +56,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "ID is empty",
+			errMsg:    "id is empty",
 		},
 		"Tenant data missing id": {
 			tenant: model.Tenant{
@@ -68,7 +68,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "ID is empty",
+			errMsg:    "id is empty",
 		},
 		"Tenant data missing region": {
 			tenant: model.Tenant{
@@ -80,7 +80,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "Region is empty",
+			errMsg:    "region is empty",
 		},
 		"Tenant data empty owner type": {
 			tenant: model.Tenant{
@@ -93,7 +93,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "Owner type is empty",
+			errMsg:    "owner type is empty",
 		},
 		"Tenant data missing owner type": {
 			tenant: model.Tenant{
@@ -105,7 +105,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:    "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "Owner type is empty",
+			errMsg:    "owner type is empty",
 		},
 		"Tenant data empty owner id": {
 			tenant: model.Tenant{
@@ -118,7 +118,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "OwnerID is empty",
+			errMsg:    "owner id is empty",
 		},
 		"Tenant data missing owner id": {
 			tenant: model.Tenant{
@@ -130,7 +130,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "OwnerID is empty",
+			errMsg:    "owner id is empty",
 		},
 		"Tenant data empty role": {
 			tenant: model.Tenant{
@@ -143,7 +143,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "",
 			},
 			expectErr: true,
-			errMsg:    "Role is not correct",
+			errMsg:    "role is invalid",
 		},
 		"Tenant data empty label key": {
 			tenant: model.Tenant{

@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	ErrEmptyID = status.Error(codes.InvalidArgument, "ID is empty")
+	ErrEmptyID = status.Error(codes.InvalidArgument, "id is empty")
 )
 
 // ID represents the ID of a resource.

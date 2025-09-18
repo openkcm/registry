@@ -221,8 +221,8 @@ func TestSystemMetrics(t *testing.T) {
 
 				// When
 				resp, err := sSubj.RegisterSystem(ctx, req)
-				assert.NoError(t, err, err.Error())
-				assert.NotNil(t, resp)
+				require.NoError(t, err)
+				require.NotNil(t, resp)
 				assert.True(t, resp.Success)
 
 				defer func() {

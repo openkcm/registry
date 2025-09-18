@@ -5,12 +5,16 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var (
+	ErrExternalIDIsEmpty = status.Error(codes.InvalidArgument, "external id is empty")
+)
+
 // ExternalID represents the external ID of the system.
 type ExternalID string
 
 func (e ExternalID) Validate(_ ValidationContext) error {
 	if len(e) == 0 {
-		return status.Error(codes.InvalidArgument, "ExternalID is empty")
+		return ErrExternalIDIsEmpty
 	}
 
 	return nil

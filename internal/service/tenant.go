@@ -176,19 +176,12 @@ func (t *Tenant) ApplyTenantAuth(ctx context.Context, in *tenantgrpc.ApplyTenant
 func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequest) (*tenantgrpc.BlockTenantResponse, error) {
 	slogctx.Debug(ctx, "BlockTenant called", "tenantId", in.GetId())
 
-	tenant := &model.Tenant{}
-	validationCtx, err := model.ValidationContextFromType(tenant, &tenant.ID)
-	if err != nil {
-		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
-		return nil, ErrInternalValidation
-	}
-
 	id := model.ID(in.GetId())
-	if err := id.Validate(validationCtx); err != nil {
+	if err := t.validateTenantId(ctx, id); err != nil {
 		return nil, err
 	}
 
-	err = t.patchTenant(ctx, patchTenantParams{
+	err := t.patchTenant(ctx, patchTenantParams{
 		id: id,
 		updateFunc: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKING.String()))
@@ -212,19 +205,12 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenantRequest) (*tenantgrpc.UnblockTenantResponse, error) {
 	slogctx.Debug(ctx, "UnblockTenant called", "tenantId", in.GetId())
 
-	tenant := &model.Tenant{}
-	validationCtx, err := model.ValidationContextFromType(tenant, &tenant.ID)
-	if err != nil {
-		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
-		return nil, ErrInternalValidation
-	}
-
 	id := model.ID(in.GetId())
-	if err := id.Validate(validationCtx); err != nil {
+	if err := t.validateTenantId(ctx, id); err != nil {
 		return nil, err
 	}
 
-	err = t.patchTenant(ctx, patchTenantParams{
+	err := t.patchTenant(ctx, patchTenantParams{
 		id: id,
 		updateFunc: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_UNBLOCKING.String()))
@@ -246,15 +232,8 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTenantRequest) (*tenantgrpc.TerminateTenantResponse, error) {
 	slogctx.Debug(ctx, "TerminateTenant called", "tenantId", in.GetId())
 
-	tenant := &model.Tenant{}
-	validationCtx, err := model.ValidationContextFromType(tenant, &tenant.ID)
-	if err != nil {
-		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
-		return nil, ErrInternalValidation
-	}
-
 	id := model.ID(in.GetId())
-	if err := id.Validate(validationCtx); err != nil {
+	if err := t.validateTenantId(ctx, id); err != nil {
 		return nil, err
 	}
 
@@ -262,7 +241,7 @@ func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTe
 		return nil, err
 	}
 
-	err = t.patchTenant(ctx, patchTenantParams{
+	err := t.patchTenant(ctx, patchTenantParams{
 		id: id,
 		updateFunc: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATING.String()))
@@ -344,19 +323,12 @@ func (t *Tenant) RemoveTenantLabels(ctx context.Context, in *tenantgrpc.RemoveTe
 func (t *Tenant) GetTenant(ctx context.Context, in *tenantgrpc.GetTenantRequest) (*tenantgrpc.GetTenantResponse, error) {
 	slogctx.Debug(ctx, "GetTenant called", "tenantId", in.GetId())
 
-	tenantPtr := &model.Tenant{}
-	validationCtx, err := model.ValidationContextFromType(tenantPtr, &tenantPtr.ID)
-	if err != nil {
-		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
-		return nil, ErrInternalValidation
-	}
-
-	err = model.ID(in.GetId()).Validate(validationCtx)
-	if err != nil {
+	id := model.ID(in.GetId())
+	if err := t.validateTenantId(ctx, id); err != nil {
 		return nil, err
 	}
 
-	tenant, err := getTenant(ctx, t.repo, model.ID(in.GetId()))
+	tenant, err := getTenant(ctx, t.repo, id)
 	if err != nil {
 		return nil, err
 	}
@@ -369,32 +341,18 @@ func (t *Tenant) GetTenant(ctx context.Context, in *tenantgrpc.GetTenantRequest)
 func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTenantUserGroupsRequest) (*tenantgrpc.SetTenantUserGroupsResponse, error) {
 	slogctx.Debug(ctx, "SetTenantUserGroups called", "tenantId", in.GetId())
 
-	tenant := &model.Tenant{}
-	idValCtx, err := model.ValidationContextFromType(tenant, &tenant.ID)
-	if err != nil {
-		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
-		return nil, ErrInternalValidation
-	}
-
-	tenantID := model.ID(in.GetId())
-	err = tenantID.Validate(idValCtx)
-	if err != nil {
+	id := model.ID(in.GetId())
+	if err := t.validateTenantId(ctx, id); err != nil {
 		return nil, err
 	}
 
-	groupValCtx, err := model.ValidationContextFromType(tenant, &tenant.UserGroups)
-	if err != nil {
-		slogctx.Error(ctx, "validation of tenant user groups failed", "tenantId", in.GetId(), "error", err)
-		return nil, ErrInternalValidation
-	}
-
-	err = model.UserGroups(in.GetUserGroups()).Validate(groupValCtx)
-	if err != nil {
+	userGroups := model.UserGroups(in.GetUserGroups())
+	if err := t.validateUserGroups(ctx, id, userGroups); err != nil {
 		return nil, err
 	}
 
-	err = t.patchTenant(ctx, patchTenantParams{
-		id: tenantID,
+	err := t.patchTenant(ctx, patchTenantParams{
+		id: id,
 		updateFunc: func(tenant *model.Tenant) {
 			tenant.UserGroups = in.GetUserGroups()
 		},
@@ -411,15 +369,8 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 // validateApplyAuthRequest validates the ApplyTenantAuthRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (t *Tenant) validateApplyAuthRequest(ctx context.Context, in *tenantgrpc.ApplyTenantAuthRequest) error {
-	tenantPtr := &model.Tenant{}
-	validationCtx, err := model.ValidationContextFromType(tenantPtr, &tenantPtr.ID)
-	if err != nil {
-		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
-		return ErrInternalValidation
-	}
-
 	id := model.ID(in.GetId())
-	if err := id.Validate(validationCtx); err != nil {
+	if err := t.validateTenantId(ctx, id); err != nil {
 		return err
 	}
 
@@ -428,14 +379,53 @@ func (t *Tenant) validateApplyAuthRequest(ctx context.Context, in *tenantgrpc.Ap
 		return ErrMissingLabels
 	}
 
-	validationCtx, err = model.ValidationContextFromType(tenantPtr, &tenantPtr.Labels)
+	labels := model.Labels(info)
+	if err := t.validateLabels(ctx, id, labels); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (t *Tenant) validateTenantId(ctx context.Context, tenantID model.ID) error {
+	tenantPtr := &model.Tenant{}
+	validationCtx, err := model.ValidationContextFromType(tenantPtr, &tenantPtr.ID)
 	if err != nil {
-		slogctx.Error(ctx, "validation of tenant labels failed", "tenantId", in.GetId(), "error", err)
+		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", tenantID, "error", err)
 		return ErrInternalValidation
 	}
 
-	labels := model.Labels(info)
+	if err := tenantID.Validate(validationCtx); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *Tenant) validateLabels(ctx context.Context, tenantID model.ID, labels model.Labels) error {
+	tenantPtr := &model.Tenant{}
+	validationCtx, err := model.ValidationContextFromType(tenantPtr, &tenantPtr.Labels)
+	if err != nil {
+		slogctx.Error(ctx, "validation of tenant labels failed", "tenantId", tenantID, "error", err)
+		return ErrInternalValidation
+	}
+
 	err = labels.Validate(validationCtx)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (t *Tenant) validateUserGroups(ctx context.Context, tenantID model.ID, userGroups model.UserGroups) error {
+	tenantPtr := &model.Tenant{}
+	validationCtx, err := model.ValidationContextFromType(tenantPtr, &tenantPtr.UserGroups)
+	if err != nil {
+		slogctx.Error(ctx, "validation of tenant user groups failed", "tenantId", tenantID, "error", err)
+		return ErrInternalValidation
+	}
+
+	err = userGroups.Validate(validationCtx)
 	if err != nil {
 		return err
 	}
@@ -446,16 +436,8 @@ func (t *Tenant) validateApplyAuthRequest(ctx context.Context, in *tenantgrpc.Ap
 // validateSetTenantLabelsRequest validates the SetTenantLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (t *Tenant) validateSetTenantLabelsRequest(ctx context.Context, in *tenantgrpc.SetTenantLabelsRequest) error {
-	tenantPtr := &model.Tenant{}
-	idValCtx, err := model.ValidationContextFromType(tenantPtr, &tenantPtr.ID)
-	if err != nil {
-		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
-		return ErrInternalValidation
-	}
-
 	id := model.ID(in.GetId())
-	err = id.Validate(idValCtx)
-	if err != nil {
+	if err := t.validateTenantId(ctx, id); err != nil {
 		return err
 	}
 
@@ -464,15 +446,7 @@ func (t *Tenant) validateSetTenantLabelsRequest(ctx context.Context, in *tenantg
 	}
 
 	labels := model.Labels(in.GetLabels())
-
-	labelValCtx, err := model.ValidationContextFromType(tenantPtr, &tenantPtr.Labels)
-	if err != nil {
-		slogctx.Error(ctx, "validation of tenant labels failed", "tenantId", in.GetId(), "error", err)
-		return ErrInternalValidation
-	}
-
-	err = labels.Validate(labelValCtx)
-	if err != nil {
+	if err := t.validateLabels(ctx, id, labels); err != nil {
 		return err
 	}
 
@@ -482,16 +456,8 @@ func (t *Tenant) validateSetTenantLabelsRequest(ctx context.Context, in *tenantg
 // validateRemoveTenantLabelsRequest validates the RemoveTenantLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (t *Tenant) validateRemoveTenantLabelsRequest(ctx context.Context, in *tenantgrpc.RemoveTenantLabelsRequest) error {
-	tenantPtr := &model.Tenant{}
-	idValCtx, err := model.ValidationContextFromType(tenantPtr, &tenantPtr.ID)
-	if err != nil {
-		slogctx.Error(ctx, "validation of tenant id failed", "tenantId", in.GetId(), "error", err)
-		return ErrInternalValidation
-	}
-
 	id := model.ID(in.GetId())
-	err = id.Validate(idValCtx)
-	if err != nil {
+	if err := t.validateTenantId(ctx, id); err != nil {
 		return err
 	}
 

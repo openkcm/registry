@@ -27,7 +27,7 @@ func (u UserGroups) Validate(ctx ValidationContext) error {
 	// }
 	for _, group := range u {
 		if strings.ReplaceAll(group, " ", "") == "" {
-			return status.Error(codes.InvalidArgument, "UserGroups should not have empty values")
+			return status.Error(codes.InvalidArgument, "user groups should not have empty values")
 		}
 	}
 

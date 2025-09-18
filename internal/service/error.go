@@ -42,8 +42,6 @@ var (
 	ErrSystemSelect              = status.Error(codes.Internal, SelectSystemErrMsg)
 	ErrSystemUpdate              = status.Error(codes.Internal, UpdateSystemErrMsg)
 	ErrSystemDelete              = status.Error(codes.Internal, DeleteSystemErrMsg)
-	ErrExternalIDIsEmpty         = status.Error(codes.InvalidArgument, "external ID cannot be empty")
-	ErrRegionIsEmpty             = status.Error(codes.InvalidArgument, "region cannot be empty")
 	ErrSystemNotFound            = status.Error(codes.NotFound, SystemNotFoundMsg)
 	ErrSystemIsLinkedToTenant    = status.Error(codes.FailedPrecondition, "system is linked to the tenant")
 	ErrSystemIsNotLinkedToTenant = status.Error(codes.FailedPrecondition, "system is not linked to the tenant")

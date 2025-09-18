@@ -72,7 +72,7 @@ func TestSystemValidation(t *testing.T) {
 				Type:          "system",
 			},
 			expectErr: true,
-			errMsg:    "ExternalID is empty",
+			errMsg:    "external id is empty",
 		},
 		"System data missing L2KeyID": {
 			system: model.System{
@@ -84,7 +84,7 @@ func TestSystemValidation(t *testing.T) {
 				Type:          "system",
 			},
 			expectErr: true,
-			errMsg:    "L2KeyID is empty",
+			errMsg:    "l2 key id is empty",
 		},
 		"System data missing Region": {
 			system: model.System{
@@ -96,7 +96,7 @@ func TestSystemValidation(t *testing.T) {
 				Type:          "system",
 			},
 			expectErr: true,
-			errMsg:    "Region is empty",
+			errMsg:    "region is empty",
 		},
 		"System data empty Region": {
 			system: model.System{
@@ -109,7 +109,7 @@ func TestSystemValidation(t *testing.T) {
 				Type:          "system",
 			},
 			expectErr: true,
-			errMsg:    "Region is empty",
+			errMsg:    "region is empty",
 		},
 		"System status unspecified": {
 			system: model.System{
@@ -121,7 +121,7 @@ func TestSystemValidation(t *testing.T) {
 				Type:          "system",
 			},
 			expectErr: true,
-			errMsg:    "Status is not correct",
+			errMsg:    "status is invalid",
 		},
 		"System type missing": {
 			system: model.System{
@@ -134,7 +134,7 @@ func TestSystemValidation(t *testing.T) {
 				Status:        model.Status(typespb.Status_STATUS_AVAILABLE.String()),
 			},
 			expectErr: true,
-			errMsg:    "System type is empty",
+			errMsg:    "system type is empty",
 		},
 		"System type incorrect": {
 			system: model.System{

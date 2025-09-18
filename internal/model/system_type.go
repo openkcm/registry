@@ -11,7 +11,7 @@ type SystemType string
 // Validate checks if the SystemType is valid based on the field validation configuration.
 func (s SystemType) Validate(ctx ValidationContext) error {
 	if s == "" {
-		return status.Error(codes.InvalidArgument, "System type is empty")
+		return status.Error(codes.InvalidArgument, "system type is empty")
 	}
 
 	if ctx == nil {

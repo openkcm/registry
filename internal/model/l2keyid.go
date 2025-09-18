@@ -11,7 +11,7 @@ type L2KeyID string
 // Validate validates given L2KeyID of the system.
 func (l L2KeyID) Validate(ctx ValidationContext) error {
 	if l == "" {
-		return status.Error(codes.InvalidArgument, "L2KeyID is empty")
+		return status.Error(codes.InvalidArgument, "l2 key id is empty")
 	}
 
 	if ctx == nil {

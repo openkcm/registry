@@ -11,7 +11,7 @@ type Name string
 // Validate validates given name of the tenant.
 func (n Name) Validate(ctx ValidationContext) error {
 	if n == "" {
-		return status.Error(codes.InvalidArgument, "Name is empty")
+		return status.Error(codes.InvalidArgument, "name is empty")
 	}
 
 	if ctx == nil {

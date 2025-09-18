@@ -49,7 +49,7 @@ func TestSystemService(t *testing.T) {
 				// then
 				require.Error(t, err)
 				assert.Equal(t, codes.InvalidArgument, status.Code(err))
-				assert.Contains(t, status.Convert(err).Message(), "ExternalID is empty")
+				assert.Contains(t, status.Convert(err).Message(), "external id is empty")
 				assert.Nil(t, result)
 			})
 			t.Run("for invalid system type", func(t *testing.T) {
@@ -571,7 +571,7 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				expErr := service.ErrExternalIDIsEmpty.Error()
+				expErr := model.ErrExternalIDIsEmpty.Error()
 				assert.Error(t, err)
 				assert.Equal(t, expErr, err.Error())
 				assert.Nil(t, res)
@@ -587,7 +587,7 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				expErr := service.ErrRegionIsEmpty.Error()
+				expErr := model.ErrRegionIsEmpty.Error()
 				assert.Error(t, err)
 				assert.Equal(t, expErr, err.Error())
 				assert.Nil(t, res)
@@ -735,7 +735,7 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				expErr := service.ErrExternalIDIsEmpty.Error()
+				expErr := model.ErrExternalIDIsEmpty.Error()
 				assert.Error(t, err)
 				assert.Equal(t, expErr, err.Error())
 				assert.Nil(t, res)
@@ -967,7 +967,7 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrExternalIDIsEmpty, err)
+				assert.ErrorIs(t, model.ErrExternalIDIsEmpty, err)
 				assert.Nil(t, res)
 			})
 
@@ -1037,7 +1037,7 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrExternalIDIsEmpty, err)
+				assert.ErrorIs(t, model.ErrExternalIDIsEmpty, err)
 				assert.Nil(t, res)
 			})
 			t.Run("region is empty", func(t *testing.T) {
@@ -1052,7 +1052,7 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrRegionIsEmpty, err)
+				assert.ErrorIs(t, model.ErrRegionIsEmpty, err)
 				assert.Nil(t, res)
 			})
 			t.Run("labels are empty", func(t *testing.T) {
@@ -1183,7 +1183,7 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrExternalIDIsEmpty, err)
+				assert.ErrorIs(t, model.ErrExternalIDIsEmpty, err)
 				assert.Nil(t, res)
 			})
 			t.Run("region is empty", func(t *testing.T) {
@@ -1196,7 +1196,7 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrRegionIsEmpty, err)
+				assert.ErrorIs(t, model.ErrRegionIsEmpty, err)
 				assert.Nil(t, res)
 			})
 			t.Run("labels keys are empty", func(t *testing.T) {

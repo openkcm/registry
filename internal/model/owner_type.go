@@ -10,7 +10,7 @@ type OwnerType string
 
 func (o OwnerType) Validate(ctx ValidationContext) error {
 	if o == "" {
-		return status.Error(codes.InvalidArgument, "Owner type is empty")
+		return status.Error(codes.InvalidArgument, "owner type is empty")
 	}
 
 	if ctx == nil {

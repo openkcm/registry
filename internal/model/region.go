@@ -5,13 +5,17 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var (
+	ErrRegionIsEmpty = status.Error(codes.InvalidArgument, "region is empty")
+)
+
 // Region represents the region of the model.
 type Region string
 
 // Validate validates given region of the model.
 func (r Region) Validate(ctx ValidationContext) error {
 	if len(r) == 0 {
-		return status.Error(codes.InvalidArgument, "Region is empty")
+		return ErrRegionIsEmpty
 	}
 
 	if ctx == nil {

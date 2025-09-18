@@ -27,7 +27,7 @@ func init() {
 // Validate validates given status of the tenant.
 func (s Status) Validate(ctx ValidationContext) error {
 	if _, ok := validStatuses[s]; !ok {
-		return status.Error(codes.InvalidArgument, "Status is not correct")
+		return status.Error(codes.InvalidArgument, "status is invalid")
 	}
 
 	if ctx == nil {
