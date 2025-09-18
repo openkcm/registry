@@ -19,12 +19,6 @@ type (
 
 // Validate validates given UserGroups of the tenant.
 func (u UserGroups) Validate(ctx ValidationContext) error {
-	// TODO decide if nil/empty slice is allowed
-	// as currently it is at tenant creation time and
-	// not at user group update time
-	// if len(u) == 0 {
-	//	 return status.Error(codes.InvalidArgument, "UserGroups is empty")
-	// }
 	for _, group := range u {
 		if strings.ReplaceAll(group, " ", "") == "" {
 			return status.Error(codes.InvalidArgument, "user groups should not have empty values")

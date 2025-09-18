@@ -17,19 +17,16 @@ func TestUserGroupsValidate(t *testing.T) {
 		wantErr  bool
 		wantCode codes.Code
 	}{
-		// TODO decide if nil/empty slice is allowed
-		// {
-		//	 name:     "nil slice",
-		//	 input:    nil,
-		//	 wantErr:  true,
-		//	 wantCode: codes.InvalidArgument,
-		// },
-		// {
-		//	 name:     "empty slice",
-		//	 input:    model.UserGroups{},
-		//	 wantErr:  true,
-		//	 wantCode: codes.InvalidArgument,
-		// },
+		{
+			name:    "nil slice",
+			input:   nil,
+			wantErr: false,
+		},
+		{
+			name:    "empty slice",
+			input:   model.UserGroups{},
+			wantErr: false,
+		},
 		{
 			name:     "contains empty string",
 			input:    model.UserGroups{"admin", "", "user"},
