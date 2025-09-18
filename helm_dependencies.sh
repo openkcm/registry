@@ -7,7 +7,7 @@
 # that the services are set up correctly.
 ######################################################################
 
-set -e
+#set -e
 
 # Configuration
 POSTGRES_CHART_VERSION="16.7.26"
@@ -37,7 +37,21 @@ install_postgres() {
   		--set resources.limits.memory="1Gi" \
   		--set resources.requests.cpu="250m" \
   		--set resources.requests.memory="256Mi" \
+  		--set image.repository="bitnamilegacy/postgresql" \
+  		--set global.security.allowInsecureImages=true \
   		--wait --timeout=60s
+
+    if [ $? -ne 0 ]; then
+      echo "ERROR: Helm deployment failed!"
+      echo "Checking deployment status..."
+      kubectl get pods -l app.kubernetes.io/name=postgresql -o wide
+      kubectl describe pods -l app.kubernetes.io/name=postgresql
+      echo "Recent events:"
+      kubectl get events --sort-by=.metadata.creationTimestamp
+      echo "Pod logs:"
+      kubectl logs -l app.kubernetes.io/name=postgresql --tail=50
+      exit 1
+    fi
 
   echo "PostgreSQL Helm chart successfully deployed"
 }
@@ -133,7 +147,21 @@ EOF
   helm upgrade --install rabbitmq bitnami/rabbitmq \
       --values /tmp/rabbitmq-helm-config/values.yaml \
       --version ${RABBITMQ_CHART_VERSION} \
+      --set image.repository="bitnamilegacy/rabbitmq" \
+      --set global.security.allowInsecureImages=true \
       --wait --timeout=120s
+
+  if [ $? -ne 0 ]; then
+    echo "ERROR: Helm deployment failed!"
+    echo "Checking deployment status..."
+    kubectl get pods -l app.kubernetes.io/name=rabbitmq -o wide
+    kubectl describe pods -l app.kubernetes.io/name=rabbitmq
+    echo "Recent events:"
+    kubectl get events --sort-by=.metadata.creationTimestamp
+    echo "Pod logs:"
+    kubectl logs -l app.kubernetes.io/name=rabbitmq --tail=50
+    exit 1
+  fi
 
   echo "Cleaning up temporary files..."
   rm -rf /tmp/rabbitmq-helm-config
@@ -178,6 +206,18 @@ install_otel_collector() {
       --set resources.requests.cpu="100m" \
       --set resources.requests.memory="128Mi" \
       --wait --timeout=30s
+
+  if [ $? -ne 0 ]; then
+      echo "ERROR: Helm deployment failed!"
+      echo "Checking deployment status..."
+      kubectl get pods -l app.kubernetes.io/name=opentelemetry-collector -o wide
+      kubectl describe pods -l app.kubernetes.io/name=opentelemetry-collector
+      echo "Recent events:"
+      kubectl get events --sort-by=.metadata.creationTimestamp
+      echo "Pod logs:"
+      kubectl logs -l app.kubernetes.io/name=opentelemetry-collector --tail=50
+      exit 1
+    fi
 
   echo "OpenTelemetry Collector Helm chart successfully deployed"
 }
