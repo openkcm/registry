@@ -517,7 +517,7 @@ func TestTenantValidation(t *testing.T) {
 					result, err := tSubj.ListTenants(ctx, tt.request)
 
 					// then
-					assert.Error(t, err)
+					require.Error(t, err)
 					assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
 					assert.Nil(t, result)
 				})
@@ -1179,18 +1179,6 @@ func TestSetTenantUserGroups(t *testing.T) {
 				expCode    codes.Code
 			}{
 				{
-					name:       "UserGroups is nil",
-					tenantID:   "some-tenant-id",
-					userGroups: nil,
-					expCode:    codes.InvalidArgument,
-				},
-				{
-					name:       "UserGroups is empty",
-					tenantID:   "some-tenant-id",
-					userGroups: []string{},
-					expCode:    codes.InvalidArgument,
-				},
-				{
 					name:       "UserGroups has a empty string",
 					tenantID:   "some-tenant-id",
 					userGroups: []string{"admin", ""},
@@ -1233,6 +1221,59 @@ func TestSetTenantUserGroups(t *testing.T) {
 			}
 		})
 		t.Run("should succeed if", func(t *testing.T) {
+			t.Run("nil UserGroups are provided", func(t *testing.T) {
+				// given
+				// For creating a tenant
+				tenant, err := persistTenant(ctx, db, validRandID(),
+					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
+				assert.NoError(t, err)
+
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
+					Id: tenant.ID.String(),
+				})
+
+				// then
+				assert.NoError(t, err)
+				assert.NotNil(t, res)
+				assert.True(t, res.GetSuccess())
+				actTenants, err := listTenants(ctx, tSubj)
+				assert.NoError(t, err)
+				assert.Len(t, actTenants.GetTenants(), 1)
+				assert.Empty(t, actTenants.GetTenants()[0].GetUserGroups())
+			})
+			t.Run("empty UserGroups are provided", func(t *testing.T) {
+				// given
+				// For creating a tenant
+				tenant, err := persistTenant(ctx, db, validRandID(),
+					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
+				assert.NoError(t, err)
+
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
+					Id:         tenant.ID.String(),
+					UserGroups: []string{},
+				})
+
+				// then
+				assert.NoError(t, err)
+				assert.NotNil(t, res)
+				assert.True(t, res.GetSuccess())
+				actTenants, err := listTenants(ctx, tSubj)
+				assert.NoError(t, err)
+				assert.Len(t, actTenants.GetTenants(), 1)
+				assert.Empty(t, actTenants.GetTenants()[0].GetUserGroups())
+			})
 			t.Run("request is valid", func(t *testing.T) {
 				// given
 				// For creating a tenant

@@ -30,7 +30,7 @@ func TestOwnerTypeValidation(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// when
-			err := test.ownerType.Validate()
+			err := test.ownerType.Validate(model.EmptyValidationContext)
 
 			// then
 			if test.expectErr {

@@ -30,8 +30,8 @@ func (t *Tenant) TableName() string {
 }
 
 // Validate validates given tenant data.
-func (t *Tenant) Validate() error {
-	return ValidateAll(t.Name, t.ID, t.Region, t.OwnerID, t.OwnerType, t.Role, &t.Labels)
+func (t *Tenant) Validate(_ ValidationContext) error {
+	return ValidateStruct(t)
 }
 
 // PaginationKey returns the fields used for pagination.

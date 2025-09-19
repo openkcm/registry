@@ -30,7 +30,7 @@ func TestOwnerIDValidation(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// when
-			err := test.ownerID.Validate()
+			err := test.ownerID.Validate(model.EmptyValidationContext)
 
 			// then
 			if test.expectErr {

@@ -47,8 +47,23 @@ func TestSystemService(t *testing.T) {
 				result, err := sSubj.RegisterSystem(ctx, &systemgrpc.RegisterSystemRequest{})
 
 				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err))
+				assert.Contains(t, status.Convert(err).Message(), "external id is empty")
+				assert.Nil(t, result)
+			})
+			t.Run("for invalid system type", func(t *testing.T) {
+				// given
+				req := validRegisterSystemReq()
+				req.Type = "invalid-type"
+
+				// when
+				result, err := sSubj.RegisterSystem(ctx, req)
+
+				// then
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err))
+				assert.Contains(t, status.Convert(err).Message(), "invalid field value: 'invalid-type' for field 'Type'")
 				assert.Nil(t, result)
 			})
 			t.Run("if Tenant doesn't exist", func(t *testing.T) {
@@ -58,8 +73,9 @@ func TestSystemService(t *testing.T) {
 				res, err := sSubj.RegisterSystem(ctx, req)
 
 				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+				require.Error(t, err)
+				assert.Equal(t, codes.NotFound, status.Code(err))
+				assert.Contains(t, status.Convert(err).Message(), "tenant not found")
 				assert.Nil(t, res)
 			})
 		})
@@ -353,7 +369,7 @@ func TestSystemService(t *testing.T) {
 
 		t.Run("when entries exist", func(t *testing.T) {
 			// given
-			externalID1, region1 := registerSystemWithType(t, ctx, sSubj, existingTenantID, false, "foo")
+			externalID1, region1 := registerSystemWithType(t, ctx, sSubj, existingTenantID, false, "test")
 			externalID2, region2 := registerSystem(t, ctx, sSubj, "", false)
 
 			// clean up
@@ -398,7 +414,7 @@ func TestSystemService(t *testing.T) {
 						name: "Type",
 						request: &systemgrpc.ListSystemsRequest{
 							TenantId: existingTenantID,
-							Type:     "foo",
+							Type:     "test",
 						},
 						expectedExternalID: externalID1,
 					},
@@ -555,7 +571,7 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				expErr := service.ErrExternalIDIsEmpty.Error()
+				expErr := model.ErrExternalIDIsEmpty.Error()
 				assert.Error(t, err)
 				assert.Equal(t, expErr, err.Error())
 				assert.Nil(t, res)
@@ -571,7 +587,7 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				expErr := service.ErrRegionIsEmpty.Error()
+				expErr := model.ErrRegionIsEmpty.Error()
 				assert.Error(t, err)
 				assert.Equal(t, expErr, err.Error())
 				assert.Nil(t, res)
@@ -719,7 +735,7 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				expErr := service.ErrExternalIDIsEmpty.Error()
+				expErr := model.ErrExternalIDIsEmpty.Error()
 				assert.Error(t, err)
 				assert.Equal(t, expErr, err.Error())
 				assert.Nil(t, res)
@@ -951,7 +967,7 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrExternalIDIsEmpty, err)
+				assert.ErrorIs(t, model.ErrExternalIDIsEmpty, err)
 				assert.Nil(t, res)
 			})
 
@@ -1021,7 +1037,7 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrExternalIDIsEmpty, err)
+				assert.ErrorIs(t, model.ErrExternalIDIsEmpty, err)
 				assert.Nil(t, res)
 			})
 			t.Run("region is empty", func(t *testing.T) {
@@ -1036,7 +1052,7 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrRegionIsEmpty, err)
+				assert.ErrorIs(t, model.ErrRegionIsEmpty, err)
 				assert.Nil(t, res)
 			})
 			t.Run("labels are empty", func(t *testing.T) {
@@ -1167,7 +1183,7 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrExternalIDIsEmpty, err)
+				assert.ErrorIs(t, model.ErrExternalIDIsEmpty, err)
 				assert.Nil(t, res)
 			})
 			t.Run("region is empty", func(t *testing.T) {
@@ -1180,7 +1196,7 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrRegionIsEmpty, err)
+				assert.ErrorIs(t, model.ErrRegionIsEmpty, err)
 				assert.Nil(t, res)
 			})
 			t.Run("labels keys are empty", func(t *testing.T) {

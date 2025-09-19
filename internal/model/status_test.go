@@ -31,7 +31,7 @@ func TestStatusValidation(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := test.status.Validate()
+			err := test.status.Validate(model.EmptyValidationContext)
 			if test.expectErr {
 				assert.Error(t, err)
 			} else {

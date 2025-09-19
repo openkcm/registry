@@ -37,7 +37,7 @@ func TestLabelsValidation(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := test.labels.Validate()
+			err := test.labels.Validate(model.EmptyValidationContext)
 			if test.expectErr {
 				assert.Error(t, err)
 			} else {
