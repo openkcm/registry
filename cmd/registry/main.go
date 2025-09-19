@@ -157,6 +157,10 @@ func initConfig() *config.Config {
 	handleErr("validating config", err)
 
 	model.SetGlobalTypeValidators(&cfg.Validators)
+	model.RegisterValidatorsForTypes(
+		model.Tenant{},
+		model.System{},
+	)
 
 	return cfg
 }

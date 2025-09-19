@@ -5,39 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var (
-	ErrMarshalLabelValue        = errors.New("failed to marshal label value")
-	ErrLabelsIncludeEmptyString = status.Error(codes.InvalidArgument, "labels include empty string")
+	ErrMarshalLabelValue = errors.New("failed to marshal label value")
 )
 
 // Labels are key/value pairs attached to resources such as tenants.
 // Labels enable clients to map their own organizational structure onto resources
 // in a loosely coupled fashion.
 type Labels map[string]string
-
-// Validate validates given labels data.
-func (l *Labels) Validate(ctx ValidationContext) error {
-	for k, v := range *l {
-		if k == "" || v == "" {
-			return ErrLabelsIncludeEmptyString
-		}
-	}
-
-	if ctx == nil {
-		return nil
-	}
-
-	if err := ctx.ValidateField((map[string]string)(*l)); err != nil {
-		return err
-	}
-
-	return nil
-}
 
 // Value implements the driver.Valuer interface.
 func (l *Labels) Value() (driver.Value, error) {

@@ -24,18 +24,13 @@ func init() {
 	}
 }
 
-// Validate validates given status of the tenant.
-func (s Status) Validate(ctx ValidationContext) error {
+// ValidateCustomRule implements CustomValidationRule interface.
+func (s Status) ValidateCustomRule() error {
+	if s == "" {
+		return ErrFieldValueMustNotBeEmpty
+	}
 	if _, ok := validStatuses[s]; !ok {
-		return status.Error(codes.InvalidArgument, "status is invalid")
-	}
-
-	if ctx == nil {
-		return nil
-	}
-
-	if err := ctx.ValidateField(string(s)); err != nil {
-		return err
+		return ErrInvalidFieldValue
 	}
 
 	return nil

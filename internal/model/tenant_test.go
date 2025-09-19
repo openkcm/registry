@@ -15,6 +15,10 @@ import (
 func TestTenantValidation(t *testing.T) {
 	tenantStatusActive := model.TenantStatus(tenantpb.Status_STATUS_ACTIVE.String())
 
+	// Set global validators
+	model.RegisterValidatorsForTypes(model.Tenant{})
+	defer model.ClearGlobalTypeValidators()
+
 	tests := map[string]struct {
 		tenant    model.Tenant
 		expectErr bool
@@ -43,7 +47,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "name is empty",
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": Name",
 		},
 		"Tenant data empty ID": {
 			tenant: model.Tenant{
@@ -56,7 +60,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "id is empty",
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": ID",
 		},
 		"Tenant data missing id": {
 			tenant: model.Tenant{
@@ -68,7 +72,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "id is empty",
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": ID",
 		},
 		"Tenant data missing region": {
 			tenant: model.Tenant{
@@ -80,7 +84,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "region is empty",
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": Region",
 		},
 		"Tenant data empty owner type": {
 			tenant: model.Tenant{
@@ -93,7 +97,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "owner type is empty",
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": OwnerType",
 		},
 		"Tenant data missing owner type": {
 			tenant: model.Tenant{
@@ -105,7 +109,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:    "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "owner type is empty",
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": OwnerType",
 		},
 		"Tenant data empty owner id": {
 			tenant: model.Tenant{
@@ -118,7 +122,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "owner id is empty",
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": OwnerID",
 		},
 		"Tenant data missing owner id": {
 			tenant: model.Tenant{
@@ -130,7 +134,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
-			errMsg:    "owner id is empty",
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": OwnerID",
 		},
 		"Tenant data empty role": {
 			tenant: model.Tenant{
@@ -143,7 +147,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "",
 			},
 			expectErr: true,
-			errMsg:    "role is invalid",
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": Role",
 		},
 		"Tenant data empty label key": {
 			tenant: model.Tenant{
@@ -159,7 +163,7 @@ func TestTenantValidation(t *testing.T) {
 				},
 			},
 			expectErr: true,
-			errMsg:    "labels include empty string",
+			errMsg:    model.FieldContainsEmptyKeysMsg + ": Labels",
 		},
 		"Tenant data empty label value": {
 			tenant: model.Tenant{
@@ -175,13 +179,13 @@ func TestTenantValidation(t *testing.T) {
 				},
 			},
 			expectErr: true,
-			errMsg:    "labels include empty string",
+			errMsg:    model.FieldContainsEmptyValuesMsg + ": Labels",
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := test.tenant.Validate(model.EmptyValidationContext)
+			err := test.tenant.Validate()
 			if test.expectErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), test.errMsg)

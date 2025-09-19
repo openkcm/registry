@@ -10,16 +10,16 @@ import (
 
 // Tenant represents the customer-managed key (CMK) tenant entity.
 type Tenant struct {
-	ID              ID           `gorm:"column:id;primaryKey"`
-	Name            Name         `gorm:"column:name"`
-	Region          Region       `gorm:"column:region"`
-	OwnerID         OwnerID      `gorm:"column:owner_id"`
-	OwnerType       OwnerType    `gorm:"column:owner_type"`
+	ID              ID           `gorm:"column:id;primaryKey" validators:"non-empty"`
+	Name            Name         `gorm:"column:name" validators:"non-empty"`
+	Region          Region       `gorm:"column:region" validators:"non-empty"`
+	OwnerID         OwnerID      `gorm:"column:owner_id" validators:"non-empty"`
+	OwnerType       OwnerType    `gorm:"column:owner_type" validators:"non-empty"`
 	Status          TenantStatus `gorm:"column:status"`
 	StatusUpdatedAt time.Time    `gorm:"column:status_updated_at"`
-	Role            Role         `gorm:"column:role"`
-	Labels          Labels       `gorm:"column:labels;type:jsonb"`
-	UserGroups      UserGroups   `gorm:"column:user_groups;type:jsonb"`
+	Role            Role         `gorm:"column:role" validators:"custom"`
+	Labels          Labels       `gorm:"column:labels;type:jsonb" validators:"map"`
+	UserGroups      UserGroups   `gorm:"column:user_groups;type:jsonb" validators:"array"`
 	UpdatedAt       time.Time    `gorm:"column:updated_at;autoUpdateTime"`
 	CreatedAt       time.Time    `gorm:"column:created_at;autoCreateTime"`
 }
@@ -30,7 +30,7 @@ func (t *Tenant) TableName() string {
 }
 
 // Validate validates given tenant data.
-func (t *Tenant) Validate(_ ValidationContext) error {
+func (t *Tenant) Validate() error {
 	return ValidateStruct(t)
 }
 

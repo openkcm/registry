@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/openkcm/registry/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -16,7 +17,6 @@ import (
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	typespb "github.com/openkcm/api-sdk/proto/kms/api/cmk/types/v1"
 
-	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/service"
 )
 
@@ -48,8 +48,8 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				require.Error(t, err)
-				assert.Equal(t, codes.InvalidArgument, status.Code(err))
-				assert.Contains(t, status.Convert(err).Message(), "external id is empty")
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.FieldValueMustNotBeEmptyMsg+": ExternalID")
 				assert.Nil(t, result)
 			})
 			t.Run("for invalid system type", func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestSystemService(t *testing.T) {
 				// then
 				require.Error(t, err)
 				assert.Equal(t, codes.InvalidArgument, status.Code(err))
-				assert.Contains(t, status.Convert(err).Message(), "invalid field value: 'invalid-type' for field 'Type'")
+				assert.Contains(t, status.Convert(err).Message(), model.InvalidFieldValueMsg+": 'invalid-type' for field 'Type'")
 				assert.Nil(t, result)
 			})
 			t.Run("if Tenant doesn't exist", func(t *testing.T) {
@@ -571,9 +571,8 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				expErr := model.ErrExternalIDIsEmpty.Error()
-				assert.Error(t, err)
-				assert.Equal(t, expErr, err.Error())
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), model.FieldValueMustNotBeEmptyMsg+": ExternalID")
 				assert.Nil(t, res)
 			})
 			t.Run("region in system Identifier is empty", func(t *testing.T) {
@@ -587,9 +586,9 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				expErr := model.ErrRegionIsEmpty.Error()
-				assert.Error(t, err)
-				assert.Equal(t, expErr, err.Error())
+				require.Error(t, err)
+				assert.Error(t, status.Error(codes.InvalidArgument, err.Error()))
+				assert.Contains(t, err.Error(), model.FieldValueMustNotBeEmptyMsg+": Region")
 				assert.Nil(t, res)
 			})
 			t.Run("system to update is not present in the database", func(t *testing.T) {
@@ -735,9 +734,9 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				expErr := model.ErrExternalIDIsEmpty.Error()
-				assert.Error(t, err)
-				assert.Equal(t, expErr, err.Error())
+				require.Error(t, err)
+				assert.Error(t, status.Error(codes.InvalidArgument, err.Error()))
+				assert.Contains(t, err.Error(), model.FieldValueMustNotBeEmptyMsg+": ExternalID")
 				assert.Nil(t, res)
 			})
 
@@ -966,8 +965,9 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrExternalIDIsEmpty, err)
+				require.Error(t, err)
+				assert.Error(t, status.Error(codes.InvalidArgument, err.Error()))
+				assert.Contains(t, err.Error(), model.FieldValueMustNotBeEmptyMsg+": ExternalID")
 				assert.Nil(t, res)
 			})
 
@@ -1036,8 +1036,9 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrExternalIDIsEmpty, err)
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.FieldValueMustNotBeEmptyMsg+": ExternalID")
 				assert.Nil(t, res)
 			})
 			t.Run("region is empty", func(t *testing.T) {
@@ -1051,8 +1052,9 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrRegionIsEmpty, err)
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.FieldValueMustNotBeEmptyMsg+": Region")
 				assert.Nil(t, res)
 			})
 			t.Run("labels are empty", func(t *testing.T) {
@@ -1078,8 +1080,9 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrLabelsIncludeEmptyString, err)
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.FieldContainsEmptyKeysMsg+": Labels")
 				assert.Nil(t, res)
 			})
 			t.Run("labels values are empty", func(t *testing.T) {
@@ -1093,8 +1096,9 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrLabelsIncludeEmptyString, err)
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.FieldContainsEmptyValuesMsg+": Labels")
 				assert.Nil(t, res)
 			})
 			t.Run("system to update is not present in the database", func(t *testing.T) {
@@ -1182,8 +1186,9 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrExternalIDIsEmpty, err)
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.FieldValueMustNotBeEmptyMsg+": ExternalID")
 				assert.Nil(t, res)
 			})
 			t.Run("region is empty", func(t *testing.T) {
@@ -1195,8 +1200,9 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrRegionIsEmpty, err)
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.FieldValueMustNotBeEmptyMsg+": Region")
 				assert.Nil(t, res)
 			})
 			t.Run("labels keys are empty", func(t *testing.T) {

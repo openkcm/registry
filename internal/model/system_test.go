@@ -36,8 +36,8 @@ func TestSystemValidation(t *testing.T) {
 
 	// Set global validators
 	model.SetGlobalTypeValidators(testValidators)
-
-	defer model.SetGlobalTypeValidators(&config.TypeValidators{})
+	model.RegisterValidatorsForTypes(model.System{})
+	defer model.ClearGlobalTypeValidators()
 
 	claimTrue := true
 	tenantID := uuid.New().String()
@@ -72,7 +72,7 @@ func TestSystemValidation(t *testing.T) {
 				Type:          "system",
 			},
 			expectErr: true,
-			errMsg:    "external id is empty",
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": ExternalID",
 		},
 		"System data missing L2KeyID": {
 			system: model.System{
@@ -84,7 +84,7 @@ func TestSystemValidation(t *testing.T) {
 				Type:          "system",
 			},
 			expectErr: true,
-			errMsg:    "l2 key id is empty",
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": L2KeyID",
 		},
 		"System data missing Region": {
 			system: model.System{
@@ -96,7 +96,7 @@ func TestSystemValidation(t *testing.T) {
 				Type:          "system",
 			},
 			expectErr: true,
-			errMsg:    "region is empty",
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": Region",
 		},
 		"System data empty Region": {
 			system: model.System{
@@ -109,7 +109,7 @@ func TestSystemValidation(t *testing.T) {
 				Type:          "system",
 			},
 			expectErr: true,
-			errMsg:    "region is empty",
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": Region",
 		},
 		"System status unspecified": {
 			system: model.System{
@@ -121,7 +121,7 @@ func TestSystemValidation(t *testing.T) {
 				Type:          "system",
 			},
 			expectErr: true,
-			errMsg:    "status is invalid",
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": Status",
 		},
 		"System type missing": {
 			system: model.System{
@@ -134,7 +134,7 @@ func TestSystemValidation(t *testing.T) {
 				Status:        model.Status(typespb.Status_STATUS_AVAILABLE.String()),
 			},
 			expectErr: true,
-			errMsg:    "system type is empty",
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": Type",
 		},
 		"System type incorrect": {
 			system: model.System{
@@ -147,7 +147,7 @@ func TestSystemValidation(t *testing.T) {
 				Status:        model.Status(typespb.Status_STATUS_AVAILABLE.String()),
 			},
 			expectErr: true,
-			errMsg:    "invalid field value: 'invalid_type' for field 'Type'",
+			errMsg:    model.InvalidFieldValueMsg + ": 'invalid_type' for field 'Type'",
 		},
 		"Missing label key": {
 			system: model.System{
@@ -163,7 +163,7 @@ func TestSystemValidation(t *testing.T) {
 				},
 			},
 			expectErr: true,
-			errMsg:    "labels include empty string",
+			errMsg:    model.FieldContainsEmptyKeysMsg + ": Labels",
 		},
 		"Missing label value": {
 			system: model.System{
@@ -179,14 +179,14 @@ func TestSystemValidation(t *testing.T) {
 				},
 			},
 			expectErr: true,
-			errMsg:    "labels include empty string",
+			errMsg:    model.FieldContainsEmptyValuesMsg + ": Labels",
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// when
-			err := test.system.Validate(model.EmptyValidationContext)
+			err := test.system.Validate()
 
 			// then
 			if test.expectErr {

@@ -4,13 +4,21 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/openkcm/registry/internal/model"
 )
 
+type TypeWithOwnerID struct {
+	OwnerID model.OwnerID `validators:"non-empty"`
+}
+
 func TestOwnerIDValidation(t *testing.T) {
+	typeWithOwnerID := TypeWithOwnerID{}
+	model.RegisterValidatorsForTypes(typeWithOwnerID)
+	defer model.ClearGlobalTypeValidators()
+
 	tests := map[string]struct {
 		ownerID   model.OwnerID
 		expectErr bool
@@ -30,13 +38,13 @@ func TestOwnerIDValidation(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// when
-			err := test.ownerID.Validate(model.EmptyValidationContext)
+			typeWithOwnerID.OwnerID = test.ownerID
+			err := model.ValidateField(&typeWithOwnerID, &typeWithOwnerID.OwnerID)
 
 			// then
 			if test.expectErr {
-				assert.Error(t, err)
-				st, _ := status.FromError(err)
-				assert.Equal(t, test.errCode, st.Code())
+				require.Error(t, err)
+				assert.ErrorIs(t, err, model.ErrFieldValueMustNotBeEmpty)
 			} else {
 				assert.NoError(t, err)
 			}

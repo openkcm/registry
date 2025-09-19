@@ -4,11 +4,20 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/openkcm/registry/internal/model"
 )
 
+type TypeWithRegion struct {
+	Region model.Region `validators:"non-empty"`
+}
+
 func TestRegionValidation(t *testing.T) {
+	typeWithRegion := TypeWithRegion{}
+	model.RegisterValidatorsForTypes(typeWithRegion)
+	defer model.ClearGlobalTypeValidators()
+
 	tests := map[string]struct {
 		region    model.Region
 		expectErr bool
@@ -25,9 +34,11 @@ func TestRegionValidation(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := test.region.Validate(model.EmptyValidationContext)
+			typeWithRegion.Region = test.region
+			err := model.ValidateField(&typeWithRegion, &typeWithRegion.Region)
 			if test.expectErr {
-				assert.Error(t, err)
+				require.Error(t, err)
+				assert.ErrorIs(t, err, model.ErrFieldValueMustNotBeEmpty)
 			} else {
 				assert.NoError(t, err)
 			}

@@ -11,14 +11,14 @@ import (
 
 // System represents a customer-exposed "tenant" of any kind.
 type System struct {
-	ExternalID    ExternalID `gorm:"column:external_id;primaryKey"`
-	TenantID      *string    `gorm:"column:tenant_id"` // related tenant id; optional
-	Region        Region     `gorm:"column:region;primaryKey"`
-	Status        Status     `gorm:"column:status"`
-	L2KeyID       L2KeyID    `gorm:"column:l2key_id"`
+	ExternalID    ExternalID `gorm:"column:external_id;primaryKey" validators:"non-empty"`
+	TenantID      *string    `gorm:"column:tenant_id" validators:"non-empty"` // related tenant id; optional
+	Region        Region     `gorm:"column:region;primaryKey" validators:"non-empty"`
+	Status        Status     `gorm:"column:status" validators:"custom"`
+	L2KeyID       L2KeyID    `gorm:"column:l2key_id" validators:"non-empty"`
 	HasL1KeyClaim *bool      `gorm:"column:has_l1_key_claim"` // claim status of related L1 key
-	Type          SystemType `gorm:"column:type"`
-	Labels        Labels     `gorm:"column:labels;type:jsonb"`
+	Type          SystemType `gorm:"column:type" validators:"non-empty"`
+	Labels        Labels     `gorm:"column:labels;type:jsonb" validators:"map"`
 	UpdatedAt     time.Time  `gorm:"column:updated_at;autoUpdateTime"`
 	CreatedAt     time.Time  `gorm:"column:created_at;autoCreateTime"`
 }
@@ -29,7 +29,7 @@ func (s *System) TableName() string {
 }
 
 // Validate validates given System data.
-func (s *System) Validate(_ ValidationContext) error {
+func (s *System) Validate() error {
 	return ValidateStruct(s)
 }
 

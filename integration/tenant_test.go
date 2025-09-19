@@ -647,7 +647,7 @@ func TestTenantValidation(t *testing.T) {
 			tests := []struct {
 				name    string
 				req     *tenantgrpc.ApplyTenantAuthRequest
-				expErr  error
+				errMsg  string
 				expCode codes.Code
 			}{
 				{
@@ -656,7 +656,7 @@ func TestTenantValidation(t *testing.T) {
 						Id:       "",
 						AuthInfo: map[string]string{"auth_type": "OIDC"},
 					},
-					expErr:  model.ErrEmptyID,
+					errMsg:  model.FieldValueMustNotBeEmptyMsg + ": ID",
 					expCode: codes.InvalidArgument,
 				},
 				{
@@ -665,7 +665,7 @@ func TestTenantValidation(t *testing.T) {
 						Id:       validRandID(),
 						AuthInfo: map[string]string{},
 					},
-					expErr:  service.ErrMissingLabels,
+					errMsg:  "missing labels",
 					expCode: codes.InvalidArgument,
 				},
 				{
@@ -674,7 +674,7 @@ func TestTenantValidation(t *testing.T) {
 						Id:       validRandID(),
 						AuthInfo: map[string]string{"": "OIDC"},
 					},
-					expErr:  model.ErrLabelsIncludeEmptyString,
+					errMsg:  model.FieldContainsEmptyKeysMsg + ": Labels",
 					expCode: codes.InvalidArgument,
 				},
 				{
@@ -683,7 +683,7 @@ func TestTenantValidation(t *testing.T) {
 						Id:       validRandID(),
 						AuthInfo: map[string]string{"auth_type": "OIDC"},
 					},
-					expErr:  service.ErrTenantNotFound,
+					errMsg:  service.TenantNotFoundMsg,
 					expCode: codes.NotFound,
 				},
 			}
@@ -694,8 +694,8 @@ func TestTenantValidation(t *testing.T) {
 					resp, err := tSubj.ApplyTenantAuth(ctx, tt.req)
 
 					// then
-					assert.Error(t, err)
-					assert.ErrorIs(t, err, tt.expErr)
+					require.Error(t, err)
+					assert.Contains(t, err.Error(), tt.errMsg)
 					assert.Equal(t, tt.expCode, status.Code(err), err.Error())
 					assert.Nil(t, resp)
 				})
@@ -943,8 +943,9 @@ func TestTenantValidation(t *testing.T) {
 				})
 
 				// then
-				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrEmptyID, err)
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.FieldValueMustNotBeEmptyMsg+": ID")
 				assert.Nil(t, res)
 			})
 			t.Run("labels are empty", func(t *testing.T) {
@@ -968,8 +969,9 @@ func TestTenantValidation(t *testing.T) {
 				})
 
 				// then
-				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrLabelsIncludeEmptyString, err)
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.FieldContainsEmptyKeysMsg+": Labels")
 				assert.Nil(t, res)
 			})
 			t.Run("labels values are empty", func(t *testing.T) {
@@ -982,8 +984,9 @@ func TestTenantValidation(t *testing.T) {
 				})
 
 				// then
-				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrLabelsIncludeEmptyString, err)
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.FieldContainsEmptyValuesMsg+": Labels")
 				assert.Nil(t, res)
 			})
 			t.Run("tenant to update is not present in the database", func(t *testing.T) {
@@ -1066,7 +1069,7 @@ func TestTenantValidation(t *testing.T) {
 		})
 
 		t.Run("should return error if", func(t *testing.T) {
-			t.Run("external ID is empty", func(t *testing.T) {
+			t.Run("ID is empty", func(t *testing.T) {
 				// when
 				res, err := tSubj.RemoveTenantLabels(ctx, &tenantgrpc.RemoveTenantLabelsRequest{
 					Id:        "",
@@ -1074,8 +1077,9 @@ func TestTenantValidation(t *testing.T) {
 				})
 
 				// then
-				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrEmptyID, err)
+				require.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.FieldValueMustNotBeEmptyMsg+": ID")
 				assert.Nil(t, res)
 			})
 			t.Run("labels keys are empty", func(t *testing.T) {

@@ -30,7 +30,11 @@ const (
 )
 
 const (
-	RuleTypeEnum = "enum"
+	RuleTypeEnum        = "enum"
+	RuleTypeNonEmpty    = "non-empty"
+	RuleTypeStringMap   = "map"
+	RuleTypeStringArray = "array"
+	RuleTypeCustom      = "custom"
 )
 
 var (

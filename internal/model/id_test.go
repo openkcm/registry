@@ -4,11 +4,20 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/openkcm/registry/internal/model"
 )
 
+type TypeWithID struct {
+	ID model.ID `validators:"non-empty"`
+}
+
 func TestIDValidation(t *testing.T) {
+	typeWithID := TypeWithID{}
+	model.RegisterValidatorsForTypes(typeWithID)
+	defer model.ClearGlobalTypeValidators()
+
 	tests := map[string]struct {
 		id        model.ID
 		expectErr bool
@@ -25,9 +34,11 @@ func TestIDValidation(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := test.id.Validate(model.EmptyValidationContext)
+			typeWithID.ID = test.id
+			err := model.ValidateField(&typeWithID, &typeWithID.ID)
 			if test.expectErr {
-				assert.Error(t, err)
+				require.Error(t, err)
+				assert.ErrorIs(t, err, model.ErrFieldValueMustNotBeEmpty)
 			} else {
 				assert.NoError(t, err)
 			}

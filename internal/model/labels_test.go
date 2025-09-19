@@ -6,14 +6,24 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/openkcm/registry/internal/model"
 )
 
+type TypeWithLabels struct {
+	Labels model.Labels `validators:"map"`
+}
+
 func TestLabelsValidation(t *testing.T) {
+	typeWithLabels := TypeWithLabels{}
+	model.RegisterValidatorsForTypes(typeWithLabels)
+	defer model.ClearGlobalTypeValidators()
+
 	tests := map[string]struct {
 		labels    model.Labels
 		expectErr bool
+		err       error
 	}{
 		"Valid labels": {
 			labels: map[string]string{
@@ -26,20 +36,24 @@ func TestLabelsValidation(t *testing.T) {
 				"": "eu10",
 			},
 			expectErr: true,
+			err:       model.ErrFieldContainsEmptyKeys,
 		},
 		"Empty value": {
 			labels: map[string]string{
 				"datacenter": "",
 			},
 			expectErr: true,
+			err:       model.ErrFieldContainsEmptyValues,
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := test.labels.Validate(model.EmptyValidationContext)
+			typeWithLabels.Labels = test.labels
+			err := model.ValidateField(&typeWithLabels, &typeWithLabels.Labels)
 			if test.expectErr {
-				assert.Error(t, err)
+				require.Error(t, err)
+				assert.ErrorIs(t, err, test.err)
 			} else {
 				assert.NoError(t, err)
 			}

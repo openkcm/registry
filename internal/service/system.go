@@ -61,7 +61,7 @@ func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSyst
 		Labels:        in.GetLabels(),
 	}
 
-	err := system.Validate(model.EmptyValidationContext)
+	err := system.Validate()
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -158,7 +158,7 @@ func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRe
 	externalID := model.ExternalID(in.GetExternalId())
 	region := model.Region(in.GetRegion())
 
-	if err := s.validateSystemIdentifier(ctx, externalID, region); err != nil {
+	if err := s.validateSystemIdentifier(externalID, region); err != nil {
 		return nil, err
 	}
 
@@ -205,7 +205,7 @@ func (s *System) UpdateSystemL1KeyClaim(ctx context.Context, in *systemgrpc.Upda
 	externalID := model.ExternalID(in.GetExternalId())
 	region := model.Region(in.GetRegion())
 
-	if err := s.validateSystemIdentifier(ctx, externalID, region); err != nil {
+	if err := s.validateSystemIdentifier(externalID, region); err != nil {
 		return nil, err
 	}
 
@@ -255,7 +255,7 @@ func (s *System) UnlinkSystemsFromTenant(ctx context.Context, in *systemgrpc.Unl
 
 	emptyTenantID := ""
 
-	systems, uniqMap, err := s.validateAndGetSystems(ctx, in.GetSystemIdentifiers())
+	systems, uniqMap, err := s.validateAndGetSystems(in.GetSystemIdentifiers())
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +294,7 @@ func (s *System) LinkSystemsToTenant(ctx context.Context, in *systemgrpc.LinkSys
 	slogctx.Debug(ctx, "LinkSystemsToTenant called", "tenant_id", in.GetTenantId())
 	tenantID := in.GetTenantId()
 
-	systems, uniqMap, err := s.validateAndGetSystems(ctx, in.GetSystemIdentifiers())
+	systems, uniqMap, err := s.validateAndGetSystems(in.GetSystemIdentifiers())
 	if err != nil {
 		return nil, err
 	}
@@ -343,13 +343,13 @@ func (s *System) UpdateSystemStatus(ctx context.Context, in *systemgrpc.UpdateSy
 	externalID := model.ExternalID(in.GetExternalId())
 	region := model.Region(in.GetRegion())
 
-	if err := s.validateSystemIdentifier(ctx, externalID, region); err != nil {
+	if err := s.validateSystemIdentifier(externalID, region); err != nil {
 		return nil, err
 	}
 
 	stat := model.Status(in.GetStatus().String())
 
-	if err := s.validateStatus(ctx, externalID, region, stat); err != nil {
+	if err := s.validateStatus(stat); err != nil {
 		return nil, err
 	}
 
@@ -375,7 +375,7 @@ func (s *System) UpdateSystemStatus(ctx context.Context, in *systemgrpc.UpdateSy
 func (s *System) SetSystemLabels(ctx context.Context, in *systemgrpc.SetSystemLabelsRequest) (*systemgrpc.SetSystemLabelsResponse, error) {
 	slogctx.Debug(ctx, "SetSystemLabels called", "external_id", in.GetExternalId(), "region", in.GetRegion())
 
-	if err := s.validateSetSystemLabelsRequest(ctx, in); err != nil {
+	if err := s.validateSetSystemLabelsRequest(in); err != nil {
 		return nil, err
 	}
 
@@ -403,7 +403,7 @@ func (s *System) SetSystemLabels(ctx context.Context, in *systemgrpc.SetSystemLa
 func (s *System) RemoveSystemLabels(ctx context.Context, in *systemgrpc.RemoveSystemLabelsRequest) (*systemgrpc.RemoveSystemLabelsResponse, error) {
 	slogctx.Debug(ctx, "RemoveSystemLabels called", "external_id", in.GetExternalId(), "region", in.GetRegion())
 
-	if err := s.validateRemoveSystemLabelsRequest(ctx, in); err != nil {
+	if err := s.validateRemoveSystemLabelsRequest(in); err != nil {
 		return nil, err
 	}
 
@@ -425,11 +425,11 @@ func (s *System) RemoveSystemLabels(ctx context.Context, in *systemgrpc.RemoveSy
 
 // validateSetSystemLabelsRequest validates the SetSystemLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
-func (s *System) validateSetSystemLabelsRequest(ctx context.Context, in *systemgrpc.SetSystemLabelsRequest) error {
+func (s *System) validateSetSystemLabelsRequest(in *systemgrpc.SetSystemLabelsRequest) error {
 	externalID := model.ExternalID(in.GetExternalId())
 	region := model.Region(in.GetRegion())
 
-	if err := s.validateSystemIdentifier(ctx, externalID, region); err != nil {
+	if err := s.validateSystemIdentifier(externalID, region); err != nil {
 		return err
 	}
 
@@ -439,65 +439,46 @@ func (s *System) validateSetSystemLabelsRequest(ctx context.Context, in *systemg
 
 	labels := model.Labels(in.GetLabels())
 
-	if err := s.validateLabels(ctx, externalID, region, labels); err != nil {
+	if err := s.validateLabels(labels); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (s *System) validateSystemIdentifier(ctx context.Context, externalId model.ExternalID, region model.Region) error {
-	systemPtr := &model.System{}
-	valCtxExtId, err := model.ValidationContextFromType(systemPtr, &systemPtr.ExternalID)
-	if err != nil {
-		slogctx.Error(ctx, "validation of system externalId failed", "externalID", externalId, "region", region, "error", err)
-		return ErrInternalValidation
+func (s *System) validateSystemIdentifier(externalId model.ExternalID, region model.Region) error {
+	systemPtr := &model.System{
+		ExternalID: externalId,
+		Region:     region,
+	}
+	if err := model.ValidateField(systemPtr, &systemPtr.ExternalID); err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	if err = externalId.Validate(valCtxExtId); err != nil {
-		return err
-	}
-
-	valCtxRegion, err := model.ValidationContextFromType(systemPtr, &systemPtr.Region)
-	if err != nil {
-		slogctx.Error(ctx, "validation of system region failed", "externalID", externalId, "region", region, "error", err)
-		return ErrInternalValidation
-	}
-
-	if err = region.Validate(valCtxRegion); err != nil {
-		return err
+	if err := model.ValidateField(systemPtr, &systemPtr.Region); err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	return nil
 }
 
-func (s *System) validateLabels(ctx context.Context, externalId model.ExternalID, region model.Region, labels model.Labels) error {
-	systemPtr := &model.System{}
-	validationCtx, err := model.ValidationContextFromType(systemPtr, &systemPtr.Labels)
-	if err != nil {
-		slogctx.Error(ctx, "validation of system labels failed", "externalID", externalId, "region", region, "error", err)
-		return ErrInternalValidation
+func (s *System) validateLabels(labels model.Labels) error {
+	systemPtr := &model.System{
+		Labels: labels,
 	}
-
-	err = labels.Validate(validationCtx)
-	if err != nil {
-		return err
+	if err := model.ValidateField(systemPtr, &systemPtr.Labels); err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	return nil
 }
 
-func (s *System) validateStatus(ctx context.Context, externalId model.ExternalID, region model.Region, status model.Status) error {
-	systemPtr := &model.System{}
-	validationCtx, err := model.ValidationContextFromType(systemPtr, &systemPtr.Status)
-	if err != nil {
-		slogctx.Error(ctx, "validation of system status failed", "externalID", externalId, "region", region, "error", err)
-		return ErrInternalValidation
+func (s *System) validateStatus(st model.Status) error {
+	systemPtr := &model.System{
+		Status: st,
 	}
-
-	err = status.Validate(validationCtx)
-	if err != nil {
-		return err
+	if err := model.ValidateField(systemPtr, &systemPtr.Status); err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	return nil
@@ -505,11 +486,11 @@ func (s *System) validateStatus(ctx context.Context, externalId model.ExternalID
 
 // validateRemoveSystemLabelsRequest validates the RemoveSystemLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
-func (s *System) validateRemoveSystemLabelsRequest(ctx context.Context, in *systemgrpc.RemoveSystemLabelsRequest) error {
+func (s *System) validateRemoveSystemLabelsRequest(in *systemgrpc.RemoveSystemLabelsRequest) error {
 	externalID := model.ExternalID(in.GetExternalId())
 	region := model.Region(in.GetRegion())
 
-	if err := s.validateSystemIdentifier(ctx, externalID, region); err != nil {
+	if err := s.validateSystemIdentifier(externalID, region); err != nil {
 		return err
 	}
 
@@ -731,7 +712,7 @@ func checkSystemAvailable(system *model.System) error {
 }
 
 // validateAndGetSystems validates the input slice of SystemId and returns a slice of model.System having only unique systems.
-func (s *System) validateAndGetSystems(ctx context.Context, in []*systemgrpc.SystemIdentifier) ([]*model.System, map[string]*model.System, error) {
+func (s *System) validateAndGetSystems(in []*systemgrpc.SystemIdentifier) ([]*model.System, map[string]*model.System, error) {
 	if len(in) == 0 {
 		return nil, nil, ErrNoSystemIdentifiers
 	}
@@ -740,7 +721,7 @@ func (s *System) validateAndGetSystems(ctx context.Context, in []*systemgrpc.Sys
 	systems := make([]*model.System, 0, len(in))
 
 	for _, system := range in {
-		if err := s.validateSystemIdentifier(ctx, model.ExternalID(system.GetExternalId()), model.Region(system.GetRegion())); err != nil {
+		if err := s.validateSystemIdentifier(model.ExternalID(system.GetExternalId()), model.Region(system.GetRegion())); err != nil {
 			return nil, nil, err
 		}
 
