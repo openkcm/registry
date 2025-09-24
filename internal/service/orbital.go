@@ -31,25 +31,18 @@ type (
 		registry handlerRegistry
 	}
 
+	// handlerRegistry maintains a mapping of job types to their respective handlers.
 	handlerRegistry struct {
 		mu sync.RWMutex
 		r  map[string]JobHandler
-	}
-)
-
-type (
-	// JobSource provides job identification and encoded job data.
-	JobSource interface {
-		IDString() string
-		ProtoBytes() ([]byte, error)
 	}
 
 	// JobHandler defines the lifecycle callbacks for job processing.
 	JobHandler interface {
 		ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error)
 		ResolveTasks(ctx context.Context, job orbital.Job, targets map[string]orbital.Initiator) (orbital.TaskResolverResult, error)
-		ApplyJobDone(ctx context.Context, job orbital.Job) error
-		ApplyJobAborted(ctx context.Context, job orbital.Job) error
+		HandleJobDone(ctx context.Context, job orbital.Job) error
+		HandleJobAborted(ctx context.Context, job orbital.Job) error
 	}
 )
 
@@ -100,6 +93,7 @@ func NewOrbital(ctx context.Context, db *gorm.DB, cfg config.Orbital) (*Orbital,
 	return o, nil
 }
 
+// RegisterJobHandler registers a JobHandler for a specific job type.
 func (o *Orbital) RegisterJobHandler(jobType string, handler JobHandler) {
 	o.registry.mu.Lock()
 	defer o.registry.mu.Unlock()
@@ -111,17 +105,12 @@ func (o *Orbital) RegisterJobHandler(jobType string, handler JobHandler) {
 	o.registry.r[jobType] = handler
 }
 
-func (o *Orbital) PrepareJob(ctx context.Context, source JobSource, jobType string) error {
-	ctx = slogctx.With(ctx, slog.String("job type", jobType), slog.String("external ID", source.IDString()))
+// PrepareJob creates a new job with the given data, external ID, and job type.
+func (o *Orbital) PrepareJob(ctx context.Context, data []byte, externalID, jobType string) error {
+	ctx = slogctx.With(ctx, slog.String("job type", jobType), slog.String("external ID", externalID))
 
-	data, err := source.ProtoBytes()
-	if err != nil {
-		slogctx.Error(ctx, "failed to get job data bytes", "error", err)
-		return fmt.Errorf("failed to get job data bytes: %w", err)
-	}
-
-	job := orbital.NewJob(jobType, data).WithExternalID(source.IDString())
-	job, err = o.manager.PrepareJob(ctx, job)
+	job := orbital.NewJob(jobType, data).WithExternalID(externalID)
+	job, err := o.manager.PrepareJob(ctx, job)
 	if err != nil {
 		slogctx.Error(ctx, "failed to prepare job", "error", err)
 		return err
@@ -267,7 +256,7 @@ func (o *Orbital) handleJobDone() orbital.JobTerminatedEventFunc {
 			return nil
 		}
 
-		return h.ApplyJobDone(ctx, job)
+		return h.HandleJobDone(ctx, job)
 	}
 }
 
@@ -280,7 +269,7 @@ func (o *Orbital) handleJobAborted() orbital.JobTerminatedEventFunc {
 			return nil
 		}
 
-		return h.ApplyJobAborted(ctx, job)
+		return h.HandleJobAborted(ctx, job)
 	}
 }
 
@@ -290,7 +279,7 @@ func (o *Orbital) getHandler(ctx context.Context, jobType string) (JobHandler, b
 
 	h, ok := o.registry.r[jobType]
 	if !ok {
-		slogctx.Error(ctx, "no job handler registered", slog.String("jobType", jobType))
+		slogctx.Error(ctx, "no job handler registered", "jobType", jobType)
 	}
 
 	return h, ok

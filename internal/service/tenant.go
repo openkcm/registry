@@ -30,8 +30,6 @@ type Tenant struct {
 	meters  *Meters
 }
 
-var _ JobHandler = (*Tenant)(nil)
-
 type (
 	tenantUpdateFunc   func(tenant *model.Tenant)
 	tenantValidateFunc func(tenant *model.Tenant) error
@@ -53,6 +51,7 @@ func NewTenant(repo repository.Repository, orbital *Orbital, meters *Meters) *Te
 		meters:  meters,
 	}
 
+	// Register tenant service as job handler for tenant-related actions
 	for _, jobType := range []string{
 		tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String(),
 		tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String(),
@@ -95,7 +94,13 @@ func (t *Tenant) RegisterTenant(ctx context.Context, in *tenantgrpc.RegisterTena
 			return err
 		}
 
-		err := t.orbital.PrepareJob(ctx, tenant, tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String())
+		data, err := proto.Marshal(tenant.ToProto())
+		if err != nil {
+			slogctx.Error(ctx, "failed to encode tenant data", "error", err)
+			return ErrTenantEncoding
+		}
+
+		err = t.orbital.PrepareJob(ctx, data, tenant.ID.String(), tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String())
 		if err != nil {
 			return status.Error(codes.Internal, "failed to start tenant provisioning job")
 		}
@@ -176,7 +181,13 @@ func (t *Tenant) ApplyTenantAuth(ctx context.Context, in *tenantgrpc.ApplyTenant
 			}
 			maps.Copy(tenant.Labels, in.GetAuthInfo())
 
-			return t.orbital.PrepareJob(ctx, tenant, tenantgrpc.ACTION_ACTION_APPLY_TENANT_AUTH.String())
+			data, err := proto.Marshal(tenant.ToProto())
+			if err != nil {
+				slogctx.Error(ctx, "failed to encode tenant data", "error", err)
+				return ErrTenantEncoding
+			}
+
+			return t.orbital.PrepareJob(ctx, data, tenant.ID.String(), tenantgrpc.ACTION_ACTION_APPLY_TENANT_AUTH.String())
 		},
 	})
 	if err != nil {
@@ -205,7 +216,12 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 		},
 		validateFunc: validateTransition(tenantgrpc.Status_STATUS_BLOCKING),
 		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
-			return t.orbital.PrepareJob(ctx, tenant, tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String())
+			data, err := proto.Marshal(tenant.ToProto())
+			if err != nil {
+				slogctx.Error(ctx, "failed to encode tenant data", "error", err)
+				return ErrTenantEncoding
+			}
+			return t.orbital.PrepareJob(ctx, data, tenant.ID.String(), tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String())
 		},
 	})
 	if err != nil {
@@ -234,7 +250,12 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 		},
 		validateFunc: validateTransition(tenantgrpc.Status_STATUS_UNBLOCKING),
 		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
-			return t.orbital.PrepareJob(ctx, tenant, tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String())
+			data, err := proto.Marshal(tenant.ToProto())
+			if err != nil {
+				slogctx.Error(ctx, "failed to encode tenant data", "error", err)
+				return ErrTenantEncoding
+			}
+			return t.orbital.PrepareJob(ctx, data, tenant.ID.String(), tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String())
 		},
 	})
 	if err != nil {
@@ -265,7 +286,12 @@ func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTe
 		},
 		validateFunc: validateTransition(tenantgrpc.Status_STATUS_TERMINATING),
 		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
-			return t.orbital.PrepareJob(ctx, tenant, tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String())
+			data, err := proto.Marshal(tenant.ToProto())
+			if err != nil {
+				slogctx.Error(ctx, "failed to encode tenant data", "error", err)
+				return ErrTenantEncoding
+			}
+			return t.orbital.PrepareJob(ctx, data, tenant.ID.String(), tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String())
 		},
 	})
 	if err != nil {
@@ -420,8 +446,8 @@ func (t *Tenant) ResolveTasks(ctx context.Context, job orbital.Job, targets map[
 	}, nil
 }
 
-// ApplyJobAborted applies the changes to the tenant based on the job type when the job is aborted.
-func (t *Tenant) ApplyJobAborted(ctx context.Context, job orbital.Job) error {
+// HandleJobAborted applies the changes to the tenant based on the job type when the job is aborted.
+func (t *Tenant) HandleJobAborted(ctx context.Context, job orbital.Job) error {
 	return t.patchTenant(ctx, patchTenantParams{
 		id: model.ID(job.ExternalID),
 		updateFunc: func(tenant *model.Tenant) {
@@ -439,8 +465,8 @@ func (t *Tenant) ApplyJobAborted(ctx context.Context, job orbital.Job) error {
 	})
 }
 
-// ApplyJobDone applies the changes to the tenant based on the job type when the job is done.
-func (t *Tenant) ApplyJobDone(ctx context.Context, job orbital.Job) error {
+// HandleJobDone applies the changes to the tenant based on the job type when the job is done.
+func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 	return t.patchTenant(ctx, patchTenantParams{
 		id: model.ID(job.ExternalID),
 		updateFunc: func(tenant *model.Tenant) {
