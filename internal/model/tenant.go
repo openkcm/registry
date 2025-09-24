@@ -3,6 +3,8 @@ package model
 import (
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 
 	"github.com/openkcm/registry/internal/repository"
@@ -62,4 +64,12 @@ func (t *Tenant) ToProto() *tenantgrpc.Tenant {
 func (t *Tenant) SetStatus(status TenantStatus) {
 	t.Status = status
 	t.StatusUpdatedAt = time.Now()
+}
+
+func (t *Tenant) ProtoBytes() ([]byte, error) {
+	return proto.Marshal(t.ToProto())
+}
+
+func (t *Tenant) IDString() string {
+	return t.ID.String()
 }
