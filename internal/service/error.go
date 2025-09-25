@@ -41,6 +41,7 @@ var (
 	ErrTenantIDFormat                   = status.Error(codes.InvalidArgument, "tenant ID is not valid")
 	ErrTenantNotFound                   = status.Error(codes.NotFound, TenantNotFoundMsg)
 	ErrTenantUnavailable                = status.Error(codes.FailedPrecondition, TenantUnavailableErrMsg)
+	ErrTenantEncoding                   = status.Error(codes.Internal, "failed to encode tenant data")
 	ErrTenantStatusTransitionNotAllowed = errors.New(TenantStatusTransitionNotAllowedMsg)
 	ErrInvalidTenantStatus              = errors.New(InvalidTenantStatusMsg)
 )

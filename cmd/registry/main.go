@@ -54,8 +54,7 @@ func main() {
 
 	repository := sql.NewRepository(db)
 
-	orbital := service.NewOrbital()
-	err = orbital.Init(ctx, db, repository, cfg.Orbital)
+	orbital, err := service.NewOrbital(ctx, db, cfg.Orbital)
 	handleErr("initializing Orbital", err)
 
 	tenantSrv := service.NewTenant(repository, orbital, meters)
