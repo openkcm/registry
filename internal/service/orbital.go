@@ -42,7 +42,8 @@ type (
 		ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error)
 		ResolveTasks(ctx context.Context, job orbital.Job, targets map[string]orbital.Initiator) (orbital.TaskResolverResult, error)
 		HandleJobDone(ctx context.Context, job orbital.Job) error
-		HandleJobAborted(ctx context.Context, job orbital.Job) error
+		HandleJobCanceled(ctx context.Context, job orbital.Job) error
+		HandleJobFailed(ctx context.Context, job orbital.Job) error
 	}
 )
 
@@ -53,18 +54,18 @@ func NewOrbital(ctx context.Context, db *gorm.DB, cfg config.Orbital) (*Orbital,
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		return &Orbital{}, fmt.Errorf("failed to get SQL DB from GORM: %w", err)
+		return nil, fmt.Errorf("failed to get SQL DB from GORM: %w", err)
 	}
 
 	store, err := orbsql.New(ctx, sqlDB)
 	if err != nil {
-		return &Orbital{}, fmt.Errorf("failed to create orbital store: %w", err)
+		return nil, fmt.Errorf("failed to create orbital store: %w", err)
 	}
 	orbRepo := orbital.NewRepository(store)
 
 	targets, err := createTargets(ctx, cfg.Targets)
 	if err != nil {
-		return &Orbital{}, fmt.Errorf("failed to configure orbital targets: %w", err)
+		return nil, fmt.Errorf("failed to configure orbital targets: %w", err)
 	}
 	o := &Orbital{
 		targets: targets,
@@ -75,18 +76,18 @@ func NewOrbital(ctx context.Context, db *gorm.DB, cfg config.Orbital) (*Orbital,
 		orbital.WithTargetClients(targets),
 		orbital.WithJobConfirmFunc(o.confirmJob()),
 		orbital.WithJobDoneEventFunc(o.handleJobDone()),
-		orbital.WithJobFailedEventFunc(o.handleJobAborted()),
-		orbital.WithJobCanceledEventFunc(o.handleJobAborted()),
+		orbital.WithJobCanceledEventFunc(o.handleJobCanceled()),
+		orbital.WithJobFailedEventFunc(o.handleJobFailed()),
 	)
 	if err != nil {
-		return &Orbital{}, fmt.Errorf("orbital manager initialization failed: %w", err)
+		return nil, fmt.Errorf("orbital manager initialization failed: %w", err)
 	}
 
 	configureOrbital(ctx, cfg, manager)
 
 	err = manager.Start(ctx)
 	if err != nil {
-		return &Orbital{}, fmt.Errorf("failed to start orbital job manager: %w", err)
+		return nil, fmt.Errorf("failed to start orbital job manager: %w", err)
 	}
 
 	o.manager = manager
@@ -260,16 +261,29 @@ func (o *Orbital) handleJobDone() orbital.JobTerminatedEventFunc {
 	}
 }
 
-func (o *Orbital) handleJobAborted() orbital.JobTerminatedEventFunc {
+func (o *Orbital) handleJobFailed() orbital.JobTerminatedEventFunc {
 	return func(ctx context.Context, job orbital.Job) error {
-		slogctx.Debug(ctx, "handling aborted job", "id", job.ID.String(), "type", job.Type, "externalID", job.ExternalID)
+		slogctx.Debug(ctx, "handling failed job", "id", job.ID.String(), "type", job.Type, "externalID", job.ExternalID)
 
 		h, ok := o.getHandler(ctx, job.Type)
 		if !ok {
 			return nil
 		}
 
-		return h.HandleJobAborted(ctx, job)
+		return h.HandleJobFailed(ctx, job)
+	}
+}
+
+func (o *Orbital) handleJobCanceled() orbital.JobTerminatedEventFunc {
+	return func(ctx context.Context, job orbital.Job) error {
+		slogctx.Debug(ctx, "handling canceled job", "id", job.ID.String(), "type", job.Type, "externalID", job.ExternalID)
+
+		h, ok := o.getHandler(ctx, job.Type)
+		if !ok {
+			return nil
+		}
+
+		return h.HandleJobCanceled(ctx, job)
 	}
 }
 

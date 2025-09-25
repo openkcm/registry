@@ -415,7 +415,7 @@ func (t *Tenant) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobCo
 }
 
 // ResolveTasks creates a task for the job based on the tenant's region.
-func (t *Tenant) ResolveTasks(ctx context.Context, job orbital.Job, targets map[string]orbital.Initiator) (orbital.TaskResolverResult, error) {
+func (t *Tenant) ResolveTasks(ctx context.Context, job orbital.Job, targetsByRegion map[string]orbital.Initiator) (orbital.TaskResolverResult, error) {
 	tenant := &tenantgrpc.Tenant{}
 
 	err := proto.Unmarshal(job.Data, tenant)
@@ -426,7 +426,7 @@ func (t *Tenant) ResolveTasks(ctx context.Context, job orbital.Job, targets map[
 		}, nil
 	}
 
-	_, ok := targets[tenant.GetRegion()]
+	_, ok := targetsByRegion[tenant.GetRegion()]
 	if !ok {
 		return orbital.TaskResolverResult{
 			IsCanceled:           true,
@@ -446,23 +446,14 @@ func (t *Tenant) ResolveTasks(ctx context.Context, job orbital.Job, targets map[
 	}, nil
 }
 
-// HandleJobAborted applies the changes to the tenant based on the job type when the job is aborted.
-func (t *Tenant) HandleJobAborted(ctx context.Context, job orbital.Job) error {
-	return t.patchTenant(ctx, patchTenantParams{
-		id: model.ID(job.ExternalID),
-		updateFunc: func(tenant *model.Tenant) {
-			switch job.Type {
-			case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String():
-				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_PROVISIONING_ERROR.String()))
-			case tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String():
-				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_UNBLOCKING_ERROR.String()))
-			case tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String():
-				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKING_ERROR.String()))
-			case tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String():
-				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATION_ERROR.String()))
-			}
-		},
-	})
+// HandleJobFailed applies the changes to the tenant based on the job type when the job is failed.
+func (t *Tenant) HandleJobFailed(ctx context.Context, job orbital.Job) error {
+	return t.handleJobAborted(ctx, job)
+}
+
+// HandleJobCanceled applies the changes to the tenant based on the job type when the job is canceled.
+func (t *Tenant) HandleJobCanceled(ctx context.Context, job orbital.Job) error {
+	return t.handleJobAborted(ctx, job)
 }
 
 // HandleJobDone applies the changes to the tenant based on the job type when the job is done.
@@ -541,6 +532,24 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 	}
 
 	return &tenantgrpc.SetTenantUserGroupsResponse{Success: true}, nil
+}
+
+func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
+	return t.patchTenant(ctx, patchTenantParams{
+		id: model.ID(job.ExternalID),
+		updateFunc: func(tenant *model.Tenant) {
+			switch job.Type {
+			case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String():
+				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_PROVISIONING_ERROR.String()))
+			case tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String():
+				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_UNBLOCKING_ERROR.String()))
+			case tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String():
+				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKING_ERROR.String()))
+			case tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String():
+				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATION_ERROR.String()))
+			}
+		},
+	})
 }
 
 // validateSetTenantLabelsRequest validates the SetTenantLabelsRequest.
