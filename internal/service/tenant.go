@@ -57,7 +57,6 @@ func NewTenant(repo repository.Repository, orbital *Orbital, meters *Meters) *Te
 		tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String(),
 		tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String(),
 		tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String(),
-		tenantgrpc.ACTION_ACTION_APPLY_TENANT_AUTH.String(),
 	} {
 		orbital.RegisterJobHandler(jobType, t)
 	}
@@ -85,7 +84,7 @@ func (t *Tenant) RegisterTenant(ctx context.Context, in *tenantgrpc.RegisterTena
 	}
 
 	err := t.repo.Transaction(ctx, func(ctx context.Context, r repository.Repository) error {
-		if err := t.repo.Create(ctx, tenant); err != nil {
+		if err := r.Create(ctx, tenant); err != nil {
 			var ucErr *repository.UniqueConstraintError
 			if errors.As(err, &ucErr) {
 				return status.Error(codes.InvalidArgument, ucErr.Error())
@@ -161,40 +160,6 @@ func (t *Tenant) ListTenants(ctx context.Context, in *tenantgrpc.ListTenantsRequ
 		Tenants:       pbTenants,
 		NextPageToken: nextPageToken,
 	}, nil
-}
-
-// ApplyTenantAuth applies auth information to a Tenant.
-func (t *Tenant) ApplyTenantAuth(ctx context.Context, in *tenantgrpc.ApplyTenantAuthRequest) (*tenantgrpc.ApplyTenantAuthResponse, error) {
-	slogctx.Debug(ctx, "ApplyTenantAuth called", "tenantId", in.GetId())
-
-	err := validateApplyAuthRequest(in)
-	if err != nil {
-		return nil, err
-	}
-
-	err = t.patchTenant(ctx, patchTenantParams{
-		id:           model.ID(in.GetId()),
-		validateFunc: checkTenantActive,
-		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
-			if tenant.Labels == nil {
-				tenant.Labels = make(model.Labels)
-			}
-			maps.Copy(tenant.Labels, in.GetAuthInfo())
-
-			data, err := proto.Marshal(tenant.ToProto())
-			if err != nil {
-				slogctx.Error(ctx, "failed to encode tenant data", "error", err)
-				return ErrTenantEncoding
-			}
-
-			return t.orbital.PrepareJob(ctx, data, tenant.ID.String(), tenantgrpc.ACTION_ACTION_APPLY_TENANT_AUTH.String())
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &tenantgrpc.ApplyTenantAuthResponse{Success: true}, nil
 }
 
 // BlockTenant updates the status of a Tenant to BLOCKED.
@@ -390,7 +355,7 @@ func (t *Tenant) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobCo
 	}
 
 	switch job.Type {
-	case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String(), tenantgrpc.ACTION_ACTION_APPLY_TENANT_AUTH.String():
+	case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String():
 		return orbital.JobConfirmResult{Done: true}, nil
 	case tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String(), tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String(), tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String():
 		status, err := jobTypeToStatus(job.Type)
@@ -464,19 +429,6 @@ func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 			switch job.Type {
 			case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String(), tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String():
 				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()))
-			case tenantgrpc.ACTION_ACTION_APPLY_TENANT_AUTH.String():
-				t := &tenantgrpc.Tenant{}
-
-				err := proto.Unmarshal(job.Data, t)
-				if err != nil {
-					slogctx.Error(ctx, "failed to unmarshal tenant data", "error", err, "jobID", job.ID.String())
-					return
-				}
-
-				if tenant.Labels == nil {
-					tenant.Labels = make(model.Labels)
-				}
-				maps.Copy(tenant.Labels, t.GetLabels())
 			case tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String():
 				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String()))
 			case tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String():
@@ -484,28 +436,6 @@ func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 			}
 		},
 	})
-}
-
-// validateApplyAuthRequest validates the ApplyTenantAuthRequest.
-// If the request is valid, it returns nil, otherwise it returns an error.
-func validateApplyAuthRequest(in *tenantgrpc.ApplyTenantAuthRequest) error {
-	id := model.ID(in.GetId())
-	if err := id.Validate(); err != nil {
-		return err
-	}
-
-	info := in.GetAuthInfo()
-	if len(info) == 0 {
-		return ErrMissingLabels
-	}
-
-	labels := model.Labels(info)
-	err := labels.Validate()
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTenantUserGroupsRequest) (*tenantgrpc.SetTenantUserGroupsResponse, error) {
