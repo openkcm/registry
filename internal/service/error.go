@@ -26,16 +26,28 @@ const (
 )
 
 const (
+	SelectAuthErrMsg     = "could not select auth"
+	UpdateAuthErrMsg     = "could not update auth"
+	AuthNotFoundErrMsg   = "auth not found"
+	AuthAlreadyExistsMsg = "auth with the given external ID already exists"
+)
+
+const (
 	MissingLabelKeysMsg = "missing label keys"
 	MissingLabelsMsg    = "missing labels"
 	EmptyLabelKeysMsg   = "label keys cannot be empty"
 )
 
 var (
-	ErrTenantSelect      = status.Error(codes.Internal, SelectTenantErrMsg)
-	ErrTenantUpdate      = status.Error(codes.Internal, UpdateTenantErrMsg)
-	ErrTenantNotFound    = status.Error(codes.NotFound, TenantNotFoundMsg)
-	ErrTenantUnavailable = status.Error(codes.FailedPrecondition, TenantUnavailableErrMsg)
+	ErrTenantSelect                     = status.Error(codes.Internal, SelectTenantErrMsg)
+	ErrTenantUpdate                     = status.Error(codes.Internal, UpdateTenantErrMsg)
+	ErrTenantDelete                     = status.Error(codes.Internal, DeleteTenantErrMsg)
+	ErrTenantIDFormat                   = status.Error(codes.InvalidArgument, "tenant ID is not valid")
+	ErrTenantNotFound                   = status.Error(codes.NotFound, TenantNotFoundMsg)
+	ErrTenantUnavailable                = status.Error(codes.FailedPrecondition, TenantUnavailableErrMsg)
+	ErrTenantEncoding                   = status.Error(codes.Internal, "failed to encode tenant data")
+	ErrTenantStatusTransitionNotAllowed = errors.New(TenantStatusTransitionNotAllowedMsg)
+	ErrInvalidTenantStatus              = errors.New(InvalidTenantStatusMsg)
 )
 
 var (
@@ -49,6 +61,13 @@ var (
 	ErrSystemUnavailable         = status.Error(codes.FailedPrecondition, SystemUnavailableErrMsg)
 	ErrNoSystemIdentifiers       = status.Error(codes.InvalidArgument, "no system identifiers provided")
 	ErrSystemListNotAllowed      = status.Error(codes.InvalidArgument, "need either externalID and region or tenantID to list systems")
+)
+
+var (
+	ErrAuthSelect        = status.Error(codes.Internal, SelectAuthErrMsg)
+	ErrAuthUpdate        = status.Error(codes.Internal, UpdateAuthErrMsg)
+	ErrAuthNotFound      = status.Error(codes.NotFound, AuthNotFoundErrMsg)
+	ErrAuthAlreadyExists = status.Error(codes.AlreadyExists, AuthAlreadyExistsMsg)
 )
 
 var (

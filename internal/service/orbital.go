@@ -5,136 +5,113 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
+	"sync"
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/client/amqp"
 	"github.com/openkcm/orbital/codec"
-	"google.golang.org/protobuf/proto"
 	"gorm.io/gorm"
 
-	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 	orbsql "github.com/openkcm/orbital/store/sql"
 	slogctx "github.com/veqryn/slog-context"
 
 	"github.com/openkcm/registry/internal/config"
-	"github.com/openkcm/registry/internal/model"
-	"github.com/openkcm/registry/internal/repository"
-)
-
-// These job types correspond to:
-//  1. Actions initiated from the Registry client (gRPCs)
-//  2. Task types, which means the operator will process the task based on the job type.
-const (
-	ProvisionTenant JobType = "PROVISION_TENANT" // (Note: gRPC is called RegisterTenant)
-	ApplyTenantAuth JobType = "APPLY_TENANT_AUTH"
-	BlockTenant     JobType = "BLOCK_TENANT"
-	UnblockTenant   JobType = "UNBLOCK_TENANT"
-	TerminateTenant JobType = "TERMINATE_TENANT"
 )
 
 var (
 	ErrWrongConnectionType = errors.New("wrong initiator type")
 	ErrUnexpectedJobType   = errors.New("unexpected job type")
-	ErrUnexpectedStatus    = errors.New("unexpected tenant status")
 )
 
-// JobType represents the type of job.
-type JobType string
-
-func (j JobType) toStatus() (tenantgrpc.Status, error) {
-	switch j { //nolint:exhaustive
-	case ProvisionTenant:
-		return tenantgrpc.Status_STATUS_PROVISIONING, nil
-	case BlockTenant:
-		return tenantgrpc.Status_STATUS_BLOCKING, nil
-	case UnblockTenant:
-		return tenantgrpc.Status_STATUS_UNBLOCKING, nil
-	case TerminateTenant:
-		return tenantgrpc.Status_STATUS_TERMINATING, nil
-	default:
-		return tenantgrpc.Status_STATUS_UNSPECIFIED, fmt.Errorf("%w: %s", ErrUnexpectedJobType, j)
+type (
+	// Orbital manages jobs and their execution targets.
+	Orbital struct {
+		manager  *orbital.Manager
+		targets  map[string]orbital.Initiator
+		registry handlerRegistry
 	}
-}
 
-type applyJobToTenant func(job orbital.Job, tenant *model.Tenant) error
+	// handlerRegistry maintains a mapping of job types to their respective handlers.
+	handlerRegistry struct {
+		mu sync.RWMutex
+		r  map[string]JobHandler
+	}
 
-// Orbital manages jobs and their execution targets.
-type Orbital struct {
-	manager *orbital.Manager
-	targets map[string]orbital.Initiator
-}
+	// JobHandler defines the lifecycle callbacks for job processing.
+	JobHandler interface {
+		ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error)
+		ResolveTasks(ctx context.Context, job orbital.Job, targets map[string]orbital.Initiator) (orbital.TaskResolverResult, error)
+		HandleJobDone(ctx context.Context, job orbital.Job) error
+		HandleJobCanceled(ctx context.Context, job orbital.Job) error
+		HandleJobFailed(ctx context.Context, job orbital.Job) error
+	}
+)
 
-// NewOrbital creates a new Orbital instance.
-func NewOrbital() *Orbital {
-	return &Orbital{}
-}
-
-// Init initializes the Orbital manager with the provided database, repository, and target configurations.
+// NewOrbital initializes the Orbital manager with the provided database and target configurations.
 // It sets up the AMQP clients for each target and starts the manager.
-func (o *Orbital) Init(ctx context.Context, db *gorm.DB, repo repository.Repository, cfg config.Orbital) error {
+func NewOrbital(ctx context.Context, db *gorm.DB, cfg config.Orbital) (*Orbital, error) {
 	slogctx.Info(ctx, "Initializing Orbital Manager")
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		return fmt.Errorf("failed to get SQL DB from GORM: %w", err)
+		return nil, fmt.Errorf("failed to get SQL DB from GORM: %w", err)
 	}
 
 	store, err := orbsql.New(ctx, sqlDB)
 	if err != nil {
-		return fmt.Errorf("failed to create orbital store: %w", err)
+		return nil, fmt.Errorf("failed to create orbital store: %w", err)
 	}
-
 	orbRepo := orbital.NewRepository(store)
 
 	targets, err := createTargets(ctx, cfg.Targets)
 	if err != nil {
-		return fmt.Errorf("failed to configure orbital targets: %w", err)
+		return nil, fmt.Errorf("failed to configure orbital targets: %w", err)
 	}
-
-	o.targets = targets
+	o := &Orbital{
+		targets: targets,
+	}
 
 	manager, err := orbital.NewManager(orbRepo,
 		o.resolveTasks(),
-		orbital.WithTargetClients(o.targets),
-		orbital.WithJobConfirmFunc(confirmJob(repo)),
-		orbital.WithJobDoneEventFunc(func(ctx context.Context, job orbital.Job) error {
-			return handleTerminatedJob(ctx, job, repo, applyJobDone)
-		}),
-		orbital.WithJobFailedEventFunc(func(ctx context.Context, job orbital.Job) error {
-			return handleTerminatedJob(ctx, job, repo, applyJobAborted)
-		}),
-		orbital.WithJobCanceledEventFunc(func(ctx context.Context, job orbital.Job) error {
-			return handleTerminatedJob(ctx, job, repo, applyJobAborted)
-		}),
+		orbital.WithTargetClients(targets),
+		orbital.WithJobConfirmFunc(o.confirmJob()),
+		orbital.WithJobDoneEventFunc(o.handleJobDone()),
+		orbital.WithJobCanceledEventFunc(o.handleJobCanceled()),
+		orbital.WithJobFailedEventFunc(o.handleJobFailed()),
 	)
 	if err != nil {
-		return fmt.Errorf("orbital manager initialization failed: %w", err)
+		return nil, fmt.Errorf("orbital manager initialization failed: %w", err)
 	}
 
 	configureOrbital(ctx, cfg, manager)
 
 	err = manager.Start(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to start orbital job manager: %w", err)
+		return nil, fmt.Errorf("failed to start orbital job manager: %w", err)
 	}
 
 	o.manager = manager
-
-	return nil
+	return o, nil
 }
 
-func (o *Orbital) PrepareTenantJob(ctx context.Context, tenant *model.Tenant, jobType JobType) error {
-	ctx = slogctx.With(ctx, slog.String("jobType", string(jobType)), slog.String("tenantID", tenant.ID.String()))
+// RegisterJobHandler registers a JobHandler for a specific job type.
+func (o *Orbital) RegisterJobHandler(jobType string, handler JobHandler) {
+	o.registry.mu.Lock()
+	defer o.registry.mu.Unlock()
 
-	data, err := proto.Marshal(tenant.ToProto())
-	if err != nil {
-		slogctx.Error(ctx, "failed to marshal job data", "error", err)
-		return err
+	if o.registry.r == nil {
+		o.registry.r = make(map[string]JobHandler)
 	}
 
-	job := orbital.NewJob(string(jobType), data).WithExternalID(tenant.ID.String())
-	job, err = o.manager.PrepareJob(ctx, job)
+	o.registry.r[jobType] = handler
+}
+
+// PrepareJob creates a new job with the given data, external ID, and job type.
+func (o *Orbital) PrepareJob(ctx context.Context, data []byte, externalID, jobType string) error {
+	ctx = slogctx.With(ctx, slog.String("job type", jobType), slog.String("external ID", externalID))
+
+	job := orbital.NewJob(jobType, data).WithExternalID(externalID)
+	job, err := o.manager.PrepareJob(ctx, job)
 	if err != nil {
 		slogctx.Error(ctx, "failed to prepare job", "error", err)
 		return err
@@ -239,167 +216,85 @@ func configureOrbitalWorker(ctx context.Context, cfg *config.Worker, worker *orb
 	slogctx.Info(ctx, "configured orbital worker", "name", cfg.Name, "worker", worker)
 }
 
-func (o *Orbital) resolveTasks() orbital.TaskResolveFunc {
-	return func(ctx context.Context, job orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
-		slogctx.Debug(ctx, "resolving tasks for job", "id", job.ID.String(), "type", job.Type)
-
-		tenant := &tenantgrpc.Tenant{}
-
-		err := proto.Unmarshal(job.Data, tenant)
-		if err != nil {
-			return orbital.TaskResolverResult{
-				IsCanceled:           true,
-				CanceledErrorMessage: fmt.Sprintf("failed to unmarshal tenant data: %v", err),
-			}, nil
-		}
-
-		_, ok := o.targets[tenant.GetRegion()]
-		if !ok {
-			return orbital.TaskResolverResult{
-				IsCanceled:           true,
-				CanceledErrorMessage: "no orbital initiator found for region: " + tenant.GetRegion(),
-			}, nil
-		}
-
-		return orbital.TaskResolverResult{
-			TaskInfos: []orbital.TaskInfo{
-				{
-					Data:   job.Data,
-					Type:   job.Type,
-					Target: tenant.GetRegion(),
-				},
-			},
-			Done: true,
-		}, nil
-	}
-}
-
-func confirmJob(repo repository.Repository) func(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
+func (o *Orbital) confirmJob() orbital.JobConfirmFunc {
 	return func(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
-		slogctx.Debug(ctx, "confirming job", "id", job.ID.String(), "type", job.Type)
+		slogctx.Debug(ctx, "confirming job", "id", job.ID.String(), "type", job.Type, "externalID", job.ExternalID)
 
-		tenant, err := getTenantForJob(ctx, job, repo)
-		if err != nil {
-			slogctx.Error(ctx, "failed to load tenant for job", "error", err, "jobID", job.ID.String())
-			return orbital.JobConfirmResult{}, err
-		}
-
-		switch JobType(job.Type) {
-		case ProvisionTenant, ApplyTenantAuth:
-			return orbital.JobConfirmResult{Done: true}, nil
-		case BlockTenant, UnblockTenant, TerminateTenant:
-			status, err := JobType(job.Type).toStatus()
-			if err != nil { //nolint:nilerr // if we return an error here, the job will be retried indefinitely
-				return orbital.JobConfirmResult{
-					IsCanceled:           true,
-					CanceledErrorMessage: fmt.Sprintf("%s: %s", ErrUnexpectedJobType, job.Type),
-				}, nil
-			}
-
-			if tenant.Status != model.TenantStatus(status.String()) {
-				return orbital.JobConfirmResult{}, ErrUnexpectedStatus
-			}
-
-			return orbital.JobConfirmResult{Done: true}, nil
-		default:
+		h, ok := o.getHandler(ctx, job.Type)
+		if !ok {
 			return orbital.JobConfirmResult{
 				IsCanceled:           true,
 				CanceledErrorMessage: fmt.Sprintf("%s: %s", ErrUnexpectedJobType, job.Type),
 			}, nil
 		}
+
+		return h.ConfirmJob(ctx, job)
 	}
 }
 
-func handleTerminatedJob(ctx context.Context, job orbital.Job, repo repository.Repository, applyFunc applyJobToTenant) error {
-	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
-	defer cancel()
+func (o *Orbital) resolveTasks() orbital.TaskResolveFunc {
+	return func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+		slogctx.Debug(ctx, "resolving tasks for job", "id", job.ID.String(), "type", job.Type, "externalID", job.ExternalID)
 
-	err := repo.Transaction(ctxTimeout, func(ctx context.Context, tx repository.Repository) error {
-		tenant, err := getTenantForJob(ctx, job, tx)
-		if err != nil {
-			return fmt.Errorf("failed to load tenant for job: %w", err)
+		h, ok := o.getHandler(ctx, job.Type)
+		if !ok {
+			return orbital.TaskResolverResult{
+				IsCanceled:           true,
+				CanceledErrorMessage: fmt.Sprintf("%s: %s", ErrUnexpectedJobType, job.Type),
+			}, nil
 		}
 
-		err = applyFunc(job, tenant)
-		if err != nil {
-			return fmt.Errorf("failed to apply job to tenant: %w", err)
-		}
-
-		patched, err := tx.Patch(ctx, tenant)
-		if err != nil || !patched {
-			return fmt.Errorf("failed to patch tenant: %w", err)
-		}
-
-		return nil
-	})
-
-	return mapError(err)
+		return h.ResolveTasks(ctx, job, o.targets)
+	}
 }
 
-func applyJobDone(job orbital.Job, tenant *model.Tenant) error {
-	switch JobType(job.Type) {
-	case ProvisionTenant, UnblockTenant:
-		tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()))
-	case ApplyTenantAuth:
-		t := &tenantgrpc.Tenant{}
+func (o *Orbital) handleJobDone() orbital.JobTerminatedEventFunc {
+	return func(ctx context.Context, job orbital.Job) error {
+		slogctx.Debug(ctx, "handling done job", "id", job.ID.String(), "type", job.Type, "externalID", job.ExternalID)
 
-		err := proto.Unmarshal(job.Data, t)
-		if err != nil {
-			return err
+		h, ok := o.getHandler(ctx, job.Type)
+		if !ok {
+			return nil
 		}
 
-		if tenant.Labels == nil {
-			tenant.Labels = make(model.Labels)
+		return h.HandleJobDone(ctx, job)
+	}
+}
+
+func (o *Orbital) handleJobFailed() orbital.JobTerminatedEventFunc {
+	return func(ctx context.Context, job orbital.Job) error {
+		slogctx.Debug(ctx, "handling failed job", "id", job.ID.String(), "type", job.Type, "externalID", job.ExternalID)
+
+		h, ok := o.getHandler(ctx, job.Type)
+		if !ok {
+			return nil
 		}
-		maps.Copy(tenant.Labels, t.GetLabels())
-	case BlockTenant:
-		tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String()))
-	case TerminateTenant:
-		tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATED.String()))
-	default:
-		return fmt.Errorf("%w: %s", ErrUnexpectedJobType, job.Type)
-	}
 
-	return nil
+		return h.HandleJobFailed(ctx, job)
+	}
 }
 
-func applyJobAborted(job orbital.Job, tenant *model.Tenant) error {
-	switch JobType(job.Type) { //nolint:exhaustive
-	case ProvisionTenant:
-		tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_PROVISIONING_ERROR.String()))
-	case UnblockTenant:
-		tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_UNBLOCKING_ERROR.String()))
-	case BlockTenant:
-		tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKING_ERROR.String()))
-	case TerminateTenant:
-		tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATION_ERROR.String()))
-	default:
-		return fmt.Errorf("%w: %s", ErrUnexpectedJobType, job.Type)
-	}
+func (o *Orbital) handleJobCanceled() orbital.JobTerminatedEventFunc {
+	return func(ctx context.Context, job orbital.Job) error {
+		slogctx.Debug(ctx, "handling canceled job", "id", job.ID.String(), "type", job.Type, "externalID", job.ExternalID)
 
-	return nil
+		h, ok := o.getHandler(ctx, job.Type)
+		if !ok {
+			return nil
+		}
+
+		return h.HandleJobCanceled(ctx, job)
+	}
 }
 
-func getTenantForJob(ctx context.Context, job orbital.Job, repo repository.Repository) (*model.Tenant, error) {
-	var tenant tenantgrpc.Tenant
+func (o *Orbital) getHandler(ctx context.Context, jobType string) (JobHandler, bool) {
+	o.registry.mu.RLock()
+	defer o.registry.mu.RUnlock()
 
-	err := proto.Unmarshal(job.Data, &tenant)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal job data: %w", err)
+	h, ok := o.registry.r[jobType]
+	if !ok {
+		slogctx.Error(ctx, "no job handler registered", "jobType", jobType)
 	}
 
-	tenantModel := model.Tenant{
-		ID: model.ID(tenant.GetId()),
-	}
-
-	found, err := repo.Find(ctx, &tenantModel)
-	if err != nil {
-		return nil, ErrTenantSelect
-	}
-
-	if !found {
-		return nil, ErrTenantNotFound
-	}
-
-	return &tenantModel, nil
+	return h, ok
 }
