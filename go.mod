@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
-	github.com/openkcm/api-sdk v0.7.0
+	github.com/openkcm/api-sdk v0.8.1
 	github.com/openkcm/common-sdk v1.3.0
 	github.com/openkcm/orbital v0.1.1-0.20250910121520-6d45bc67c71c
 	github.com/samber/oops v1.19.0
