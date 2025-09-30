@@ -114,7 +114,7 @@ func TestAuth(t *testing.T) {
 		}{
 			{
 				name:       "should change status to APPLYING_ERROR if region does not exist",
-				externalID: "test-auth-cancel",
+				externalID: operatortest.AuthExternalIDSuccess,
 				region:     "non-existing-region",
 				expStatus:  model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()),
 			},
