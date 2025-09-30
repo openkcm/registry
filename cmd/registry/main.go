@@ -22,6 +22,7 @@ import (
 
 	_ "gorm.io/driver/postgres"
 
+	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 	slogctx "github.com/veqryn/slog-context"
@@ -59,12 +60,14 @@ func main() {
 
 	tenantSrv := service.NewTenant(repository, orbital, meters)
 	systemSrv := service.NewSystem(repository, meters)
+	authSrv := service.NewAuth(repository, orbital)
 
 	grpcServer, err := setupGRPCServer(ctx, cfg)
 	handleErr("initializing gRPC server", err)
 
 	tenantgrpc.RegisterServiceServer(grpcServer, tenantSrv)
 	systemgrpc.RegisterServiceServer(grpcServer, systemSrv)
+	authgrpc.RegisterServiceServer(grpcServer, authSrv)
 
 	startGRPCServer(ctx, cfg, grpcServer)
 }
