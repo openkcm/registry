@@ -15,6 +15,7 @@ const (
 	UpdateTenantErrMsg      = "could not update tenant"
 	TenantNotFoundMsg       = "tenant not found"
 	TenantUnavailableErrMsg = "tenant is unavailable"
+	InvalidTenantStatusMsg  = "invalid tenant status"
 )
 
 const (
@@ -39,15 +40,12 @@ const (
 )
 
 var (
-	ErrTenantSelect                     = status.Error(codes.Internal, SelectTenantErrMsg)
-	ErrTenantUpdate                     = status.Error(codes.Internal, UpdateTenantErrMsg)
-	ErrTenantDelete                     = status.Error(codes.Internal, DeleteTenantErrMsg)
-	ErrTenantIDFormat                   = status.Error(codes.InvalidArgument, "tenant ID is not valid")
-	ErrTenantNotFound                   = status.Error(codes.NotFound, TenantNotFoundMsg)
-	ErrTenantUnavailable                = status.Error(codes.FailedPrecondition, TenantUnavailableErrMsg)
-	ErrTenantEncoding                   = status.Error(codes.Internal, "failed to encode tenant data")
-	ErrTenantStatusTransitionNotAllowed = errors.New(TenantStatusTransitionNotAllowedMsg)
-	ErrInvalidTenantStatus              = errors.New(InvalidTenantStatusMsg)
+	ErrTenantSelect        = status.Error(codes.Internal, SelectTenantErrMsg)
+	ErrTenantUpdate        = status.Error(codes.Internal, UpdateTenantErrMsg)
+	ErrTenantNotFound      = status.Error(codes.NotFound, TenantNotFoundMsg)
+	ErrTenantUnavailable   = status.Error(codes.FailedPrecondition, TenantUnavailableErrMsg)
+	ErrTenantEncoding      = status.Error(codes.Internal, "failed to encode tenant data")
+	ErrInvalidTenantStatus = errors.New(InvalidTenantStatusMsg)
 )
 
 var (
@@ -78,7 +76,6 @@ var (
 	ErrMissingLabelKeys        = status.Error(codes.InvalidArgument, MissingLabelKeysMsg)
 	ErrMissingLabels           = status.Error(codes.InvalidArgument, MissingLabelsMsg)
 	ErrEmptyLabelKeys          = status.Error(codes.InvalidArgument, EmptyLabelKeysMsg)
-	ErrInternalValidation      = status.Error(codes.Internal, "internal validation error")
 )
 
 // ErrorWithParams will return an error with new message,

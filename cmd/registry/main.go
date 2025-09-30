@@ -160,8 +160,9 @@ func initConfig() *config.Config {
 
 	model.SetGlobalTypeValidators(&cfg.Validators)
 	model.RegisterValidatorsForTypes(
-		model.Tenant{},
+		model.Auth{},
 		model.System{},
+		model.Tenant{},
 	)
 
 	return cfg

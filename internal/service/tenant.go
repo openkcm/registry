@@ -482,27 +482,6 @@ func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
 	})
 }
 
-// validateApplyAuthRequest validates the ApplyTenantAuthRequest.
-// If the request is valid, it returns nil, otherwise it returns an error.
-func (t *Tenant) validateApplyAuthRequest(in *tenantgrpc.ApplyTenantAuthRequest) error {
-	id := model.ID(in.GetId())
-	if err := t.validateTenantId(id); err != nil {
-		return err
-	}
-
-	info := in.GetAuthInfo()
-	if len(info) == 0 {
-		return ErrMissingLabels
-	}
-
-	labels := model.Labels(info)
-	if err := t.validateLabels(labels); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (t *Tenant) validateTenantId(tenantID model.ID) error {
 	tenantPtr := &model.Tenant{
 		ID: tenantID,

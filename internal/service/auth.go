@@ -57,6 +57,10 @@ func (a *Auth) ApplyAuth(ctx context.Context, req *authgrpc.ApplyAuthRequest) (*
 		Status:     model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_APPLYING.String()),
 	}
 
+	if err := auth.Validate(); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
 	err := a.repo.Transaction(ctx, func(ctx context.Context, r repository.Repository) error {
 		err := a.validateActiveTenant(ctx, r, auth.TenantID)
 		if err != nil {

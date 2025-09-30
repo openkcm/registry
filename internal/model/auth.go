@@ -10,11 +10,11 @@ import (
 
 // Auth represents an auth method associated with a tenant.
 type Auth struct {
-	ExternalID   ExternalID     `gorm:"column:id;primaryKey"`
-	TenantID     ID             `gorm:"column:tenant_id;not null"`
-	Type         AuthType       `gorm:"column:type;not null"`
-	Properties   AuthProperties `gorm:"column:properties;type:jsonb"`
-	Status       AuthStatus     `gorm:"column:status;not null"`
+	ExternalID   ExternalID     `gorm:"column:id;primaryKey" validators:"non-empty"`
+	TenantID     ID             `gorm:"column:tenant_id;not null" validators:"non-empty"`
+	Type         AuthType       `gorm:"column:type;not null" validators:"non-empty"`
+	Properties   AuthProperties `gorm:"column:properties;type:jsonb" validators:"map"`
+	Status       AuthStatus     `gorm:"column:status;not null" validators:"non-empty"`
 	ErrorMessage string         `gorm:"column:error_message"`
 	UpdatedAt    time.Time      `gorm:"column:updated_at;autoUpdateTime"`
 	CreatedAt    time.Time      `gorm:"column:created_at;autoCreateTime"`
@@ -25,9 +25,9 @@ func (a *Auth) TableName() string {
 	return "auths"
 }
 
+// Validate validates given tenant data.
 func (a *Auth) Validate() error {
-	// Will be replaced with different validation approach in the future.
-	return nil
+	return ValidateStruct(a)
 }
 
 // PaginationKey returns a map representing the pagination key for the Auth model.
