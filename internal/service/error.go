@@ -29,9 +29,10 @@ const (
 )
 
 const (
-	SelectAuthErrMsg   = "could not select auth"
-	UpdateAuthErrMsg   = "could not update auth"
-	AuthNotFoundErrMsg = "auth not found"
+	SelectAuthErrMsg     = "could not select auth"
+	UpdateAuthErrMsg     = "could not update auth"
+	AuthNotFoundErrMsg   = "auth not found"
+	AuthAlreadyExistsMsg = "auth with the given external ID already exists"
 )
 
 const (
@@ -68,9 +69,10 @@ var (
 )
 
 var (
-	ErrAuthSelect   = status.Error(codes.Internal, SelectAuthErrMsg)
-	ErrAuthUpdate   = status.Error(codes.Internal, UpdateAuthErrMsg)
-	ErrAuthNotFound = status.Error(codes.NotFound, AuthNotFoundErrMsg)
+	ErrAuthSelect        = status.Error(codes.Internal, SelectAuthErrMsg)
+	ErrAuthUpdate        = status.Error(codes.Internal, UpdateAuthErrMsg)
+	ErrAuthNotFound      = status.Error(codes.NotFound, AuthNotFoundErrMsg)
+	ErrAuthAlreadyExists = status.Error(codes.AlreadyExists, AuthAlreadyExistsMsg)
 )
 
 var (

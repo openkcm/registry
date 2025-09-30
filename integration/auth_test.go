@@ -74,36 +74,36 @@ func TestAuth(t *testing.T) {
 				assert.Equal(t, codes.FailedPrecondition, status.Code(err), err.Error())
 				assert.Nil(t, resp)
 			})
+		})
 
-			t.Run("auth with the same external ID already exists", func(t *testing.T) {
-				// given
-				tenant := validTenant()
-				err := repo.Create(ctx, tenant)
+		t.Run("should not return error if auth with the same external ID already exists", func(t *testing.T) {
+			// given
+			tenant := validTenant()
+			err := repo.Create(ctx, tenant)
+			assert.NoError(t, err)
+			defer func() {
+				_, err := repo.Delete(ctx, tenant)
 				assert.NoError(t, err)
-				defer func() {
-					_, err := repo.Delete(ctx, tenant)
-					assert.NoError(t, err)
-				}()
+			}()
 
-				auth := validAuth()
-				err = repo.Create(ctx, auth)
+			auth := validAuth()
+			err = repo.Create(ctx, auth)
+			assert.NoError(t, err)
+			defer func() {
+				_, err := repo.Delete(ctx, auth)
 				assert.NoError(t, err)
-				defer func() {
-					_, err := repo.Delete(ctx, auth)
-					assert.NoError(t, err)
-				}()
+			}()
 
-				// when
-				resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
-					ExternalId: auth.ExternalID.String(),
-					TenantId:   tenant.ID.String(),
-				})
-
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.AlreadyExists, status.Code(err), err.Error())
-				assert.Nil(t, resp)
+			// when
+			resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
+				ExternalId: auth.ExternalID.String(),
+				TenantId:   tenant.ID.String(),
 			})
+
+			// then
+			assert.NoError(t, err)
+			assert.NotNil(t, resp)
+			assert.True(t, resp.Success)
 		})
 
 		tests := []struct {

@@ -44,6 +44,7 @@ func NewAuth(repo repository.Repository, orbital *Orbital) *Auth {
 }
 
 // ApplyAuth creates a new auth and starts a job to apply it to the associated tenant.
+// If an auth with the same external ID already exists, it returns success to make the action idempotent.
 func (a *Auth) ApplyAuth(ctx context.Context, req *authgrpc.ApplyAuthRequest) (*authgrpc.ApplyAuthResponse, error) {
 	ctx = slogctx.With(ctx, "externalID", req.ExternalId, "tenantID", req.TenantId, "type", req.Type, "properties", req.Properties)
 	slogctx.Debug(ctx, "applying auth")
@@ -68,7 +69,8 @@ func (a *Auth) ApplyAuth(ctx context.Context, req *authgrpc.ApplyAuthRequest) (*
 			slogctx.Error(ctx, "failed to create auth", "error", err)
 			var ucErr *repository.UniqueConstraintError
 			if errors.As(err, &ucErr) {
-				return status.Error(codes.AlreadyExists, ucErr.Error())
+				slogctx.Info(ctx, AuthAlreadyExistsMsg, "detail", ucErr.Detail)
+				return ErrAuthAlreadyExists
 			}
 
 			return status.Error(codes.Internal, "failed to create auth")
@@ -83,7 +85,7 @@ func (a *Auth) ApplyAuth(ctx context.Context, req *authgrpc.ApplyAuthRequest) (*
 		return nil
 	})
 	err = mapError(err)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrAuthAlreadyExists) {
 		return nil, err
 	}
 
