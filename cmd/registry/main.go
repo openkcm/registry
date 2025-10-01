@@ -30,6 +30,7 @@ import (
 	root "github.com/openkcm/registry"
 	"github.com/openkcm/registry/internal/config"
 	"github.com/openkcm/registry/internal/interceptor"
+	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository/sql"
 	"github.com/openkcm/registry/internal/service"
 )
@@ -37,9 +38,7 @@ import (
 func main() {
 	ctx := context.Background()
 
-	cfg := loadConfig()
-	err := cfg.Validate()
-	handleErr("validating config", err)
+	cfg := initConfig()
 
 	initLogger(cfg)
 
@@ -145,7 +144,7 @@ func handleErr(msg string, err error) {
 	}
 }
 
-func loadConfig() *config.Config {
+func initConfig() *config.Config {
 	cfg := &config.Config{}
 	loader := commoncfg.NewLoader(cfg,
 		commoncfg.WithPaths("/etc/registry", "."),
@@ -155,6 +154,16 @@ func loadConfig() *config.Config {
 
 	err = commoncfg.UpdateConfigVersion(&cfg.BaseConfig, root.BuildVersion)
 	handleErr("loading build version into config", err)
+
+	err = cfg.Validate()
+	handleErr("validating config", err)
+
+	model.SetGlobalTypeValidators(&cfg.Validators)
+	model.RegisterValidatorsForTypes(
+		model.Auth{},
+		model.System{},
+		model.Tenant{},
+	)
 
 	return cfg
 }

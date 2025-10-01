@@ -29,6 +29,14 @@ const (
 	WorkerNameNotifyEvent = "notify-event"
 )
 
+const (
+	RuleTypeEnum        = "enum"
+	RuleTypeNonEmpty    = "non-empty"
+	RuleTypeStringMap   = "map"
+	RuleTypeStringArray = "array"
+	RuleTypeCustom      = "custom"
+)
+
 var (
 	ErrEmptyRegion               = errors.New("region must not be empty")
 	ErrNilConnection             = errors.New("connection configuration is missing")
@@ -56,6 +64,11 @@ var (
 	ErrMaxReconcileCountMustBeGreaterThanZero    = errors.New("max reconcile count must be greater than zero")
 	ErrBackoffBaseIntervalMustBeGreaterThanZero  = errors.New("backoff base interval must be greater than zero")
 	ErrBackoffMaxIntervalMustBeGreaterThanZero   = errors.New("backoff max interval must be greater than zero")
+	// FieldValidation specific errors.
+	ErrTypeNameMustNotBeEmpty              = errors.New("typeName must not be empty")
+	ErrFieldNameMustNotBeEmpty             = errors.New("fieldName must not be empty")
+	ErrEnumValidationMustHaveAllowedValues = errors.New("enum validation must have at least one allowed value")
+	ErrUnsupportedValidationType           = errors.New("unsupported validation type")
 )
 
 // Config holds all application configuration parameters.
@@ -68,11 +81,8 @@ type Config struct {
 	Database DB `yaml:"database" json:"database"`
 	// Orbital configuration
 	Orbital Orbital `yaml:"orbital" json:"orbital"`
-}
-
-// Validate validates the configuration.
-func (c *Config) Validate() error {
-	return c.Orbital.Validate()
+	// Field validation configuration - embedded directly as array
+	Validators TypeValidators `yaml:"validators" mapstructure:"validators"`
 }
 
 // DB holds DB config.
@@ -107,7 +117,31 @@ type Orbital struct {
 	Workers                []Worker      `yaml:"workers" json:"workers"`
 }
 
-func (o *Orbital) Validate() error {
+// Validate validates the configuration.
+func (c *Config) Validate() error {
+	if err := c.Orbital.validate(); err != nil {
+		return fmt.Errorf("orbital config error: %w", err)
+	}
+
+	if err := c.Validators.validate(); err != nil {
+		return fmt.Errorf("field validation config error: %w", err)
+	}
+
+	return nil
+}
+
+func (o *Orbital) GetWorker(workerName string) *Worker {
+	for _, worker := range o.Workers {
+		if worker.Name == workerName {
+			return &worker
+		}
+	}
+
+	return nil
+}
+
+// validate validates the Orbital configuration.
+func (o *Orbital) validate() error {
 	if o.ConfirmJobAfter < 0 {
 		return fmt.Errorf("%w: %v", ErrConfirmJobAfterMustBeEqualGreaterThanZero, o.ConfirmJobAfter)
 	}
@@ -139,16 +173,6 @@ func (o *Orbital) Validate() error {
 		err := worker.validate()
 		if err != nil {
 			return fmt.Errorf("invalid worker configuration for %s: %w", worker.Name, err)
-		}
-	}
-
-	return nil
-}
-
-func (o *Orbital) GetWorker(workerName string) *Worker {
-	for _, worker := range o.Workers {
-		if worker.Name == workerName {
-			return &worker
 		}
 	}
 
@@ -290,6 +314,68 @@ func (m *MTLS) validate() error {
 
 	if m.KeyFile == "" {
 		return ErrEmptyKeyFile
+	}
+
+	return nil
+}
+
+type TypeValidators []TypeValidator
+
+type TypeValidator struct {
+	TypeName string
+	Fields   FieldValidators
+}
+
+// validate validates the TypeValidators configuration.
+func (v *TypeValidators) validate() error {
+	for _, typeValidator := range *v {
+		if typeValidator.TypeName == "" {
+			return ErrTypeNameMustNotBeEmpty
+		}
+
+		for _, fieldValidators := range typeValidator.Fields {
+			if fieldValidators.FieldName == "" {
+				return ErrFieldNameMustNotBeEmpty
+			}
+
+			for _, rule := range fieldValidators.Rules {
+				if err := rule.validate(); err != nil {
+					return fmt.Errorf("invalid rule for type '%s' and field '%s': %w", typeValidator.TypeName, fieldValidators.FieldName, err)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+type FieldValidators []FieldValidator
+
+// FieldValidator holds validation rules for a specific field.
+type FieldValidator struct {
+	// FieldName is the name of the field to validate (e.g., "type")
+	FieldName string `yaml:"fieldName" json:"fieldName"`
+	// Rules contains the validation rules for this field
+	Rules []ValidationRule `yaml:"rules" json:"rules"`
+}
+
+// ValidationRule defines a validation rule.
+type ValidationRule struct {
+	// Type defines the type of validation (e.g., "enum")
+	Type string `yaml:"type" json:"type"`
+	// AllowedValues contains the list of valid values for enum validation
+	AllowedValues []string `yaml:"allowedValues" json:"allowedValues"`
+}
+
+// validate validates a ValidationRule.
+func (r *ValidationRule) validate() error {
+	switch r.Type {
+	case RuleTypeEnum:
+		if len(r.AllowedValues) == 0 {
+			return ErrEnumValidationMustHaveAllowedValues
+		}
+	default:
+		return fmt.Errorf("%w: %s", ErrUnsupportedValidationType, r.Type)
 	}
 
 	return nil

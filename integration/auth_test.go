@@ -44,7 +44,9 @@ func TestAuth(t *testing.T) {
 			t.Run("tenant does not exist", func(t *testing.T) {
 				// when
 				resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
-					TenantId: "non-existing-tenant",
+					TenantId:   "non-existing-tenant",
+					ExternalId: operatortest.AuthExternalIDSuccess,
+					Type:       "auth-type",
 				})
 
 				// then
@@ -66,7 +68,9 @@ func TestAuth(t *testing.T) {
 
 				// when
 				resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
-					TenantId: inactiveTenant.ID.String(),
+					TenantId:   inactiveTenant.ID.String(),
+					ExternalId: operatortest.AuthExternalIDSuccess,
+					Type:       "auth-type",
 				})
 
 				// then
@@ -98,6 +102,7 @@ func TestAuth(t *testing.T) {
 			resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
 				ExternalId: auth.ExternalID.String(),
 				TenantId:   tenant.ID.String(),
+				Type:       "auth-type",
 			})
 
 			// then
@@ -182,7 +187,6 @@ func TestAuth(t *testing.T) {
 				assert.NoError(t, err)
 			})
 		}
-
 	})
 }
 

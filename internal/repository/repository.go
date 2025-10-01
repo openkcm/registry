@@ -21,7 +21,6 @@ type Repository interface {
 // Resource defines the interface for Resource operations.
 type Resource interface {
 	TableName() string
-	Validate() error
 	PaginationKey() map[QueryField]any
 }
 

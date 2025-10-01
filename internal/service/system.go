@@ -8,6 +8,9 @@ import (
 	"maps"
 	"slices"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	slogctx "github.com/veqryn/slog-context"
 
@@ -47,11 +50,6 @@ func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSyst
 		}
 	}
 
-	systemType := model.SystemTypeSystem
-	if in.GetType() != "" {
-		systemType = model.SystemType(in.GetType())
-	}
-
 	system := &model.System{
 		ExternalID:    model.ExternalID(in.GetExternalId()),
 		TenantID:      &tenantID,
@@ -59,13 +57,13 @@ func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSyst
 		HasL1KeyClaim: &claim,
 		Status:        model.Status(in.GetStatus().String()),
 		Region:        model.Region(in.GetRegion()),
-		Type:          systemType,
+		Type:          model.SystemType(in.GetType()),
 		Labels:        in.GetLabels(),
 	}
 
 	err := system.Validate()
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	err = s.repo.Create(ctx, system)
@@ -157,15 +155,16 @@ func (s *System) ListSystems(ctx context.Context, in *systemgrpc.ListSystemsRequ
 func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRequest) (*systemgrpc.DeleteSystemResponse, error) {
 	slogctx.Debug(ctx, "DeleteSystem called", "external_id", in.GetExternalId(), "region", in.GetRegion())
 
-	if in.GetExternalId() == "" {
-		return nil, ErrExternalIDIsEmpty
-	} else if in.GetRegion() == "" {
-		return nil, ErrRegionIsEmpty
+	externalID := model.ExternalID(in.GetExternalId())
+	region := model.Region(in.GetRegion())
+
+	if err := s.validateSystemIdentifier(externalID, region); err != nil {
+		return nil, err
 	}
 
 	system := &model.System{
-		ExternalID: model.ExternalID(in.GetExternalId()),
-		Region:     model.Region(in.GetRegion()),
+		ExternalID: externalID,
+		Region:     region,
 	}
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
@@ -203,10 +202,11 @@ func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRe
 func (s *System) UpdateSystemL1KeyClaim(ctx context.Context, in *systemgrpc.UpdateSystemL1KeyClaimRequest) (*systemgrpc.UpdateSystemL1KeyClaimResponse, error) {
 	slogctx.Debug(ctx, "UpdateSystemL1KeyClaim called", "external_id", in.GetExternalId(), "region", in.GetRegion(), "key_claim", in.GetL1KeyClaim(), "tenant_id", in.GetTenantId())
 
-	if in.GetExternalId() == "" {
-		return nil, ErrExternalIDIsEmpty
-	} else if in.GetRegion() == "" {
-		return nil, ErrRegionIsEmpty
+	externalID := model.ExternalID(in.GetExternalId())
+	region := model.Region(in.GetRegion())
+
+	if err := s.validateSystemIdentifier(externalID, region); err != nil {
+		return nil, err
 	}
 
 	desiredClaim := in.GetL1KeyClaim()
@@ -255,7 +255,7 @@ func (s *System) UnlinkSystemsFromTenant(ctx context.Context, in *systemgrpc.Unl
 
 	emptyTenantID := ""
 
-	systems, uniqMap, err := validateAndGetSystems(in.GetSystemIdentifiers())
+	systems, uniqMap, err := s.validateAndGetSystems(in.GetSystemIdentifiers())
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +294,7 @@ func (s *System) LinkSystemsToTenant(ctx context.Context, in *systemgrpc.LinkSys
 	slogctx.Debug(ctx, "LinkSystemsToTenant called", "tenant_id", in.GetTenantId())
 	tenantID := in.GetTenantId()
 
-	systems, uniqMap, err := validateAndGetSystems(in.GetSystemIdentifiers())
+	systems, uniqMap, err := s.validateAndGetSystems(in.GetSystemIdentifiers())
 	if err != nil {
 		return nil, err
 	}
@@ -340,20 +340,23 @@ func (s *System) LinkSystemsToTenant(ctx context.Context, in *systemgrpc.LinkSys
 func (s *System) UpdateSystemStatus(ctx context.Context, in *systemgrpc.UpdateSystemStatusRequest) (*systemgrpc.UpdateSystemStatusResponse, error) {
 	slogctx.Debug(ctx, "UpdateSystemStatus called", "external_id", in.GetExternalId(), "region", in.GetRegion(), "status", in.GetStatus())
 
-	if in.GetExternalId() == "" {
-		return nil, ErrExternalIDIsEmpty
-	} else if in.GetRegion() == "" {
-		return nil, ErrRegionIsEmpty
+	externalID := model.ExternalID(in.GetExternalId())
+	region := model.Region(in.GetRegion())
+
+	if err := s.validateSystemIdentifier(externalID, region); err != nil {
+		return nil, err
 	}
 
-	if err := model.Status(in.GetStatus().String()).Validate(); err != nil {
+	stat := model.Status(in.GetStatus().String())
+
+	if err := s.validateStatus(stat); err != nil {
 		return nil, err
 	}
 
 	isPatched, err := s.repo.Patch(ctx, &model.System{
-		ExternalID: model.ExternalID(in.GetExternalId()),
-		Region:     model.Region(in.GetRegion()),
-		Status:     model.Status(in.GetStatus().String()),
+		ExternalID: externalID,
+		Region:     region,
+		Status:     stat,
 	})
 	if err != nil {
 		return nil, ErrSystemUpdate
@@ -423,12 +426,11 @@ func (s *System) RemoveSystemLabels(ctx context.Context, in *systemgrpc.RemoveSy
 // validateSetSystemLabelsRequest validates the SetSystemLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (s *System) validateSetSystemLabelsRequest(in *systemgrpc.SetSystemLabelsRequest) error {
-	if in.GetExternalId() == "" {
-		return ErrExternalIDIsEmpty
-	}
+	externalID := model.ExternalID(in.GetExternalId())
+	region := model.Region(in.GetRegion())
 
-	if in.GetRegion() == "" {
-		return ErrRegionIsEmpty
+	if err := s.validateSystemIdentifier(externalID, region); err != nil {
+		return err
 	}
 
 	if len(in.GetLabels()) == 0 {
@@ -437,9 +439,46 @@ func (s *System) validateSetSystemLabelsRequest(in *systemgrpc.SetSystemLabelsRe
 
 	labels := model.Labels(in.GetLabels())
 
-	err := labels.Validate()
-	if err != nil {
+	if err := s.validateLabels(labels); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (s *System) validateSystemIdentifier(externalId model.ExternalID, region model.Region) error {
+	systemPtr := &model.System{
+		ExternalID: externalId,
+		Region:     region,
+	}
+	if err := model.ValidateField(systemPtr, &systemPtr.ExternalID); err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	if err := model.ValidateField(systemPtr, &systemPtr.Region); err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	return nil
+}
+
+func (s *System) validateLabels(labels model.Labels) error {
+	systemPtr := &model.System{
+		Labels: labels,
+	}
+	if err := model.ValidateField(systemPtr, &systemPtr.Labels); err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	return nil
+}
+
+func (s *System) validateStatus(st model.Status) error {
+	systemPtr := &model.System{
+		Status: st,
+	}
+	if err := model.ValidateField(systemPtr, &systemPtr.Status); err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	return nil
@@ -448,12 +487,11 @@ func (s *System) validateSetSystemLabelsRequest(in *systemgrpc.SetSystemLabelsRe
 // validateRemoveSystemLabelsRequest validates the RemoveSystemLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (s *System) validateRemoveSystemLabelsRequest(in *systemgrpc.RemoveSystemLabelsRequest) error {
-	if in.GetExternalId() == "" {
-		return ErrExternalIDIsEmpty
-	}
+	externalID := model.ExternalID(in.GetExternalId())
+	region := model.Region(in.GetRegion())
 
-	if in.GetRegion() == "" {
-		return ErrRegionIsEmpty
+	if err := s.validateSystemIdentifier(externalID, region); err != nil {
+		return err
 	}
 
 	if len(in.GetLabelKeys()) == 0 {
@@ -674,7 +712,7 @@ func checkSystemAvailable(system *model.System) error {
 }
 
 // validateAndGetSystems validates the input slice of SystemId and returns a slice of model.System having only unique systems.
-func validateAndGetSystems(in []*systemgrpc.SystemIdentifier) ([]*model.System, map[string]*model.System, error) {
+func (s *System) validateAndGetSystems(in []*systemgrpc.SystemIdentifier) ([]*model.System, map[string]*model.System, error) {
 	if len(in) == 0 {
 		return nil, nil, ErrNoSystemIdentifiers
 	}
@@ -683,10 +721,8 @@ func validateAndGetSystems(in []*systemgrpc.SystemIdentifier) ([]*model.System, 
 	systems := make([]*model.System, 0, len(in))
 
 	for _, system := range in {
-		if system.GetExternalId() == "" {
-			return nil, nil, ErrExternalIDIsEmpty
-		} else if system.GetRegion() == "" {
-			return nil, nil, ErrRegionIsEmpty
+		if err := s.validateSystemIdentifier(model.ExternalID(system.GetExternalId()), model.Region(system.GetRegion())); err != nil {
+			return nil, nil, err
 		}
 
 		if _, ok := uniqMap[fmt.Sprintf("%s.%s", system.GetExternalId(), system.GetRegion())]; !ok {
