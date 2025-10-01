@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/openkcm/registry/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -17,6 +16,7 @@ import (
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	typespb "github.com/openkcm/api-sdk/proto/kms/api/cmk/types/v1"
 
+	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/service"
 )
 
