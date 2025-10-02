@@ -28,9 +28,7 @@ import (
 	"github.com/openkcm/registry/internal/service"
 )
 
-var (
-	ErrMissingSvrPort = errors.New("server port is missing")
-)
+var ErrMissingSvrPort = errors.New("server port is missing")
 
 func loadConfig() (*config.Config, error) {
 	cfg := &config.Config{}
