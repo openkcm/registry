@@ -8,7 +8,7 @@ require (
 	github.com/openkcm/api-sdk v0.8.1
 	github.com/openkcm/common-sdk v1.3.0
 	github.com/openkcm/orbital v0.1.1-0.20250910121520-6d45bc67c71c
-	github.com/samber/oops v1.19.0
+	github.com/samber/oops v1.19.3
 	github.com/stretchr/testify v1.11.1
 	github.com/veqryn/slog-context v0.8.0
 	go.opentelemetry.io/otel v1.38.0
