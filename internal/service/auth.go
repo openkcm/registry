@@ -112,9 +112,60 @@ func (a *Auth) GetAuth(ctx context.Context, req *authgrpc.GetAuthRequest) (*auth
 	}, nil
 }
 
+// RemoveAuth marks an auth for removal by its external ID and starts a job to remove it from the associated tenant.
+// If the auth does not exist or is not in APPLIED status, it returns an error.
+func (a *Auth) RemoveAuth(ctx context.Context, req *authgrpc.RemoveAuthRequest) (*authgrpc.RemoveAuthResponse, error) {
+	ctx = slogctx.With(ctx, "externalID", req.ExternalId)
+	slogctx.Debug(ctx, "removing auth")
+
+	err := a.repo.Transaction(ctx, func(ctx context.Context, r repository.Repository) error {
+		auth, err := getAuth(ctx, r, model.ExternalID(req.ExternalId))
+		if err != nil {
+			return err
+		}
+
+		if auth.Status != model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String()) {
+			slogctx.Error(ctx, AuthInvalidStatusMsg, "status", auth.Status)
+			return ErrorWithParams(ErrAuthInvalidStatus, "status", auth.Status)
+		}
+
+		err = a.validateActiveTenant(ctx, r, auth.TenantID)
+		if err != nil {
+			slogctx.Error(ctx, "tenant is invalid or not active", "error", err)
+			return err
+		}
+
+		err = patchAuth(ctx, r,
+			model.ExternalID(req.ExternalId),
+			func(auth *model.Auth) {
+				auth.Status = model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_REMOVING.String())
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		err = a.prepareJob(ctx, auth, authgrpc.AuthAction_AUTH_ACTION_REMOVE_AUTH.String())
+		if err != nil {
+			slogctx.Error(ctx, "failed to prepare job", "error", err)
+			return err
+		}
+
+		return nil
+	})
+	err = mapError(err)
+	if err != nil {
+		return nil, err
+	}
+
+	return &authgrpc.RemoveAuthResponse{
+		Success: true,
+	}, nil
+}
+
 // ConfirmJob confirms that the auth associated with the job exists.
 func (a *Auth) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
-	_, err := getAuth(ctx, a.repo, model.ExternalID(job.ExternalID))
+	auth, err := getAuth(ctx, a.repo, model.ExternalID(job.ExternalID))
 	if err != nil {
 		slogctx.Error(ctx, "failed to get auth for job confirmation", "error", err)
 		return orbital.JobConfirmResult{}, err
@@ -122,6 +173,15 @@ func (a *Auth) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConf
 
 	switch job.Type {
 	case authgrpc.AuthAction_AUTH_ACTION_APPLY_AUTH.String():
+		return orbital.JobConfirmResult{Done: true}, nil
+	case authgrpc.AuthAction_AUTH_ACTION_REMOVE_AUTH.String():
+		if auth.Status != model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_REMOVING.String()) {
+			slogctx.Error(ctx, AuthInvalidStatusMsg, "status", auth.Status)
+			return orbital.JobConfirmResult{
+				IsCanceled:           true,
+				CanceledErrorMessage: fmt.Sprintf("%s: status=%s", ErrAuthInvalidStatus, auth.Status),
+			}, nil
+		}
 		return orbital.JobConfirmResult{Done: true}, nil
 	default:
 		slogctx.Error(ctx, "unexpected job type for auth")
@@ -174,10 +234,21 @@ func (a *Auth) ResolveTasks(ctx context.Context, job orbital.Job, targetsByRegio
 
 // HandleJobDone updates the auth status to APPLIED when the job is done.
 func (a *Auth) HandleJobDone(ctx context.Context, job orbital.Job) error {
+	var status authgrpc.AuthStatus
+	switch job.Type {
+	case authgrpc.AuthAction_AUTH_ACTION_APPLY_AUTH.String():
+		status = authgrpc.AuthStatus_AUTH_STATUS_APPLIED
+	case authgrpc.AuthAction_AUTH_ACTION_REMOVE_AUTH.String():
+		status = authgrpc.AuthStatus_AUTH_STATUS_REMOVED
+	default:
+		slogctx.Error(ctx, ErrUnexpectedJobType.Error(), "jobType", job.Type)
+		return nil
+	}
+
 	err := patchAuth(ctx, a.repo,
 		model.ExternalID(job.ExternalID),
 		func(auth *model.Auth) {
-			auth.Status = model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String())
+			auth.Status = model.AuthStatus(status.String())
 		},
 	)
 	if errors.Is(err, ErrAuthNotFound) {
@@ -224,10 +295,21 @@ func (a *Auth) prepareJob(ctx context.Context, auth *model.Auth, jobType string)
 }
 
 func (a *Auth) handleJobAborted(ctx context.Context, job orbital.Job) error {
+	var status authgrpc.AuthStatus
+	switch job.Type {
+	case authgrpc.AuthAction_AUTH_ACTION_APPLY_AUTH.String():
+		status = authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR
+	case authgrpc.AuthAction_AUTH_ACTION_REMOVE_AUTH.String():
+		status = authgrpc.AuthStatus_AUTH_STATUS_REMOVING_ERROR
+	default:
+		slogctx.Error(ctx, ErrUnexpectedJobType.Error(), "jobType", job.Type)
+		return nil
+	}
+
 	err := patchAuth(ctx, a.repo,
 		model.ExternalID(job.ExternalID),
 		func(auth *model.Auth) {
-			auth.Status = model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String())
+			auth.Status = model.AuthStatus(status.String())
 			auth.ErrorMessage = job.ErrorMessage
 		},
 	)
