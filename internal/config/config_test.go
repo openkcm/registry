@@ -5,11 +5,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/openkcm/registry/internal/config"
 )
 
-func TestValidateTarget(t *testing.T) {
+func TestOrbital_ValidateTarget(t *testing.T) {
 	validTarget := config.Target{
 		Region: "us-west-1",
 		Connection: &config.Connection{
@@ -175,7 +176,7 @@ func TestValidateTarget(t *testing.T) {
 				},
 			}
 
-			err := c.Validate()
+			err := c.Orbital.Validate()
 			if tt.expErr != nil {
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, tt.expErr)
@@ -186,7 +187,7 @@ func TestValidateTarget(t *testing.T) {
 	}
 }
 
-func TestValidateWorker(t *testing.T) {
+func TestOrbital_ValidateWorker(t *testing.T) {
 	validWorker := config.Worker{
 		Name:         "confirm-job",
 		NoOfWorkers:  1,
@@ -284,7 +285,7 @@ func TestValidateWorker(t *testing.T) {
 				},
 			}
 
-			err := c.Validate()
+			err := c.Orbital.Validate()
 			if tt.expErr != nil {
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, tt.expErr)
@@ -295,7 +296,7 @@ func TestValidateWorker(t *testing.T) {
 	}
 }
 
-func TestValidateOrbitalFields(t *testing.T) {
+func TestOrbital_ValidateFields(t *testing.T) {
 	validOrbital := config.Orbital{
 		ConfirmJobAfter:        10 * time.Second,
 		TaskLimitNum:           10,
@@ -387,9 +388,154 @@ func TestValidateOrbitalFields(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			o := tt.patch(validOrbital)
 			c := config.Config{Orbital: o}
-			err := c.Validate()
+			err := c.Orbital.Validate()
 			assert.Error(t, err)
 			assert.ErrorIs(t, err, tt.expErr)
+		})
+	}
+}
+
+func TestFieldValidation_Validate(t *testing.T) {
+	tests := []struct {
+		name        string
+		config      config.Config
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "valid field validation configuration",
+			config: config.Config{
+				Validators: config.TypeValidators{
+					{
+						TypeName: "type-a",
+						Fields: config.FieldValidators{
+							{
+								FieldName: "field1",
+								Rules: []config.ValidationRule{
+									{
+										Type:          "enum",
+										AllowedValues: []string{"value1", "value2"},
+									},
+								},
+							},
+							{
+								FieldName: "field2",
+								Rules: []config.ValidationRule{
+									{
+										Type:          "enum",
+										AllowedValues: []string{"a", "b", "c"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "empty field name",
+			config: config.Config{
+				Validators: config.TypeValidators{
+					{
+						TypeName: "type-a",
+						Fields: config.FieldValidators{
+							{
+								FieldName: "",
+								Rules: []config.ValidationRule{
+									{
+										Type:          "enum",
+										AllowedValues: []string{"value1", "value2"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectError: true,
+			errorMsg:    "fieldName must not be empty",
+		},
+		{
+			name: "empty allowed values in enum rule",
+			config: config.Config{
+				Validators: config.TypeValidators{
+					{
+						TypeName: "type-a",
+						Fields: config.FieldValidators{
+							{
+								FieldName: "field1",
+								Rules: []config.ValidationRule{
+									{
+										Type:          "enum",
+										AllowedValues: []string{},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectError: true,
+			errorMsg:    "enum validation must have at least one allowed value",
+		},
+		{
+			name: "unsupported validation type",
+			config: config.Config{
+				Validators: config.TypeValidators{
+					{
+						TypeName: "type-a",
+						Fields: config.FieldValidators{
+							{
+								FieldName: "field1",
+								Rules: []config.ValidationRule{
+									{
+										Type:          "regex",
+										AllowedValues: []string{},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectError: true,
+			errorMsg:    "unsupported validation type: regex",
+		},
+		{
+			name: "empty field validation array",
+			config: config.Config{
+				Validators: config.TypeValidators{
+					{
+						TypeName: "type-a",
+						Fields:   config.FieldValidators{},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "empty type validation",
+			config: config.Config{
+				Validators: config.TypeValidators{},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.config.Validators.Validate()
+
+			if tt.expectError {
+				require.Error(t, err)
+
+				if tt.errorMsg != "" {
+					assert.Contains(t, err.Error(), tt.errorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }

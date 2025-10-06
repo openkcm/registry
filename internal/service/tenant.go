@@ -80,7 +80,7 @@ func (t *Tenant) RegisterTenant(ctx context.Context, in *tenantgrpc.RegisterTena
 	}
 
 	if err := tenant.Validate(); err != nil {
-		return nil, err
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	err := t.repo.Transaction(ctx, func(ctx context.Context, r repository.Repository) error {
@@ -170,7 +170,7 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 	slogctx.Debug(ctx, "BlockTenant called", "tenantId", in.GetId())
 
 	id := model.ID(in.GetId())
-	if err := id.Validate(); err != nil {
+	if err := t.validateTenantId(id); err != nil {
 		return nil, err
 	}
 
@@ -204,7 +204,7 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 	slogctx.Debug(ctx, "UnblockTenant called", "tenantId", in.GetId())
 
 	id := model.ID(in.GetId())
-	if err := id.Validate(); err != nil {
+	if err := t.validateTenantId(id); err != nil {
 		return nil, err
 	}
 
@@ -236,7 +236,7 @@ func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTe
 	slogctx.Debug(ctx, "TerminateTenant called", "tenantId", in.GetId())
 
 	id := model.ID(in.GetId())
-	if err := id.Validate(); err != nil {
+	if err := t.validateTenantId(id); err != nil {
 		return nil, err
 	}
 
@@ -331,12 +331,12 @@ func (t *Tenant) RemoveTenantLabels(ctx context.Context, in *tenantgrpc.RemoveTe
 func (t *Tenant) GetTenant(ctx context.Context, in *tenantgrpc.GetTenantRequest) (*tenantgrpc.GetTenantResponse, error) {
 	slogctx.Debug(ctx, "GetTenant called", "tenantId", in.GetId())
 
-	err := model.ID(in.GetId()).Validate()
-	if err != nil {
+	id := model.ID(in.GetId())
+	if err := t.validateTenantId(id); err != nil {
 		return nil, err
 	}
 
-	tenant, err := getTenant(ctx, t.repo, model.ID(in.GetId()))
+	tenant, err := getTenant(ctx, t.repo, id)
 	if err != nil {
 		return nil, err
 	}
@@ -440,19 +440,19 @@ func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 
 func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTenantUserGroupsRequest) (*tenantgrpc.SetTenantUserGroupsResponse, error) {
 	slogctx.Debug(ctx, "SetTenantUserGroups called", "tenantId", in.GetId())
-	tenantID := model.ID(in.GetId())
-	err := tenantID.Validate()
-	if err != nil {
+
+	id := model.ID(in.GetId())
+	if err := t.validateTenantId(id); err != nil {
 		return nil, err
 	}
 
-	err = model.UserGroups(in.GetUserGroups()).Validate()
-	if err != nil {
+	userGroups := model.UserGroups(in.GetUserGroups())
+	if err := t.validateUserGroups(userGroups); err != nil {
 		return nil, err
 	}
 
-	err = t.patchTenant(ctx, patchTenantParams{
-		id: tenantID,
+	err := t.patchTenant(ctx, patchTenantParams{
+		id: id,
 		updateFunc: func(tenant *model.Tenant) {
 			tenant.UserGroups = in.GetUserGroups()
 		},
@@ -482,13 +482,43 @@ func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
 	})
 }
 
+func (t *Tenant) validateTenantId(tenantID model.ID) error {
+	tenantPtr := &model.Tenant{
+		ID: tenantID,
+	}
+	if err := model.ValidateField(tenantPtr, &tenantPtr.ID); err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	return nil
+}
+
+func (t *Tenant) validateLabels(labels model.Labels) error {
+	tenantPtr := &model.Tenant{
+		Labels: labels,
+	}
+	if err := model.ValidateField(tenantPtr, &tenantPtr.Labels); err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	return nil
+}
+
+func (t *Tenant) validateUserGroups(userGroups model.UserGroups) error {
+	tenantPtr := &model.Tenant{
+		UserGroups: userGroups,
+	}
+	if err := model.ValidateField(tenantPtr, &tenantPtr.UserGroups); err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	return nil
+}
+
 // validateSetTenantLabelsRequest validates the SetTenantLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRequest) error {
 	id := model.ID(in.GetId())
-
-	err := id.Validate()
-	if err != nil {
+	if err := t.validateTenantId(id); err != nil {
 		return err
 	}
 
@@ -497,9 +527,7 @@ func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRe
 	}
 
 	labels := model.Labels(in.GetLabels())
-
-	err = labels.Validate()
-	if err != nil {
+	if err := t.validateLabels(labels); err != nil {
 		return err
 	}
 
@@ -510,9 +538,7 @@ func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRe
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (t *Tenant) validateRemoveTenantLabelsRequest(in *tenantgrpc.RemoveTenantLabelsRequest) error {
 	id := model.ID(in.GetId())
-
-	err := id.Validate()
-	if err != nil {
+	if err := t.validateTenantId(id); err != nil {
 		return err
 	}
 
@@ -617,9 +643,12 @@ func (t *Tenant) buildListTenantsQuery(in *tenantgrpc.ListTenantsRequest) (*repo
 	}
 
 	if in.GetOwnerType() != "" {
-		err := model.OwnerType(in.GetOwnerType()).Validate()
-		if err != nil {
-			return nil, err
+		ownerType := model.OwnerType(in.GetOwnerType())
+		tenantPtr := &model.Tenant{
+			OwnerType: ownerType,
+		}
+		if err := model.ValidateField(tenantPtr, &tenantPtr.OwnerType); err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 
 		cond.Where(repository.OwnerTypeField, in.GetOwnerType())
