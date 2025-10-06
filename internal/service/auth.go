@@ -233,7 +233,7 @@ func (a *Auth) ResolveTasks(ctx context.Context, job orbital.Job, targetsByRegio
 	}, nil
 }
 
-// HandleJobDone updates the auth status to APPLIED when the job is done.
+// HandleJobDone updates auth when the job is done.
 func (a *Auth) HandleJobDone(ctx context.Context, job orbital.Job) error {
 	var status authgrpc.AuthStatus
 	switch job.Type {
@@ -259,12 +259,12 @@ func (a *Auth) HandleJobDone(ctx context.Context, job orbital.Job) error {
 	return err
 }
 
-// HandleJobCanceled updates the auth status to APPLYING_ERROR when the job is canceled.
+// HandleJobCanceled updates auth when the job is canceled.
 func (a *Auth) HandleJobCanceled(ctx context.Context, job orbital.Job) error {
 	return a.handleJobAborted(ctx, job)
 }
 
-// HandleJobFailed updates the auth status to APPLYING_ERROR when the job has failed.
+// HandleJobFailed updates auth when the job is failed.
 func (a *Auth) HandleJobFailed(ctx context.Context, job orbital.Job) error {
 	return a.handleJobAborted(ctx, job)
 }
