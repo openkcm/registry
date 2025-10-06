@@ -43,7 +43,7 @@ func NewAuth(repo repository.Repository, orbital *Orbital) *Auth {
 	return a
 }
 
-// ApplyAuth creates a new auth and starts a job to apply it to the associated tenant.
+// ApplyAuth creates a new auth and starts a job to apply it to the linked tenant.
 // If an auth with the same external ID already exists, it returns success to make the action idempotent.
 func (a *Auth) ApplyAuth(ctx context.Context, req *authgrpc.ApplyAuthRequest) (*authgrpc.ApplyAuthResponse, error) {
 	ctx = slogctx.With(ctx, "externalID", req.ExternalId, "tenantID", req.TenantId, "type", req.Type, "properties", req.Properties)
@@ -112,8 +112,9 @@ func (a *Auth) GetAuth(ctx context.Context, req *authgrpc.GetAuthRequest) (*auth
 	}, nil
 }
 
-// RemoveAuth marks an auth for removal by its external ID and starts a job to remove it from the associated tenant.
+// RemoveAuth marks an auth for removal by its external ID and starts a job to remove it from the linked tenant.
 // If the auth does not exist or is not in APPLIED status, it returns an error.
+// If the linked tenant does not exist or is not active, it returns an error.
 func (a *Auth) RemoveAuth(ctx context.Context, req *authgrpc.RemoveAuthRequest) (*authgrpc.RemoveAuthResponse, error) {
 	ctx = slogctx.With(ctx, "externalID", req.ExternalId)
 	slogctx.Debug(ctx, "removing auth")
@@ -179,7 +180,7 @@ func (a *Auth) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConf
 			slogctx.Error(ctx, AuthInvalidStatusMsg, "status", auth.Status)
 			return orbital.JobConfirmResult{
 				IsCanceled:           true,
-				CanceledErrorMessage: fmt.Sprintf("%s: status=%s", ErrAuthInvalidStatus, auth.Status),
+				CanceledErrorMessage: fmt.Sprintf("%s: %s", ErrAuthInvalidStatus, auth.Status),
 			}, nil
 		}
 		return orbital.JobConfirmResult{Done: true}, nil
@@ -241,7 +242,7 @@ func (a *Auth) HandleJobDone(ctx context.Context, job orbital.Job) error {
 	case authgrpc.AuthAction_AUTH_ACTION_REMOVE_AUTH.String():
 		status = authgrpc.AuthStatus_AUTH_STATUS_REMOVED
 	default:
-		slogctx.Error(ctx, ErrUnexpectedJobType.Error(), "jobType", job.Type)
+		slogctx.Error(ctx, ErrUnexpectedJobType.Error())
 		return nil
 	}
 
@@ -302,7 +303,7 @@ func (a *Auth) handleJobAborted(ctx context.Context, job orbital.Job) error {
 	case authgrpc.AuthAction_AUTH_ACTION_REMOVE_AUTH.String():
 		status = authgrpc.AuthStatus_AUTH_STATUS_REMOVING_ERROR
 	default:
-		slogctx.Error(ctx, ErrUnexpectedJobType.Error(), "jobType", job.Type)
+		slogctx.Error(ctx, ErrUnexpectedJobType.Error())
 		return nil
 	}
 
