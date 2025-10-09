@@ -35,22 +35,22 @@ var (
 	ErrUnsupportedConnectionType = errors.New("connection type is not supported")
 	ErrNilAuth                   = errors.New("authentication configuration is missing")
 	ErrUnsupportedAuthType       = errors.New("authentication type is not supported")
-	// AMQP specific errors.
+
 	ErrAMQPConfigMissing = errors.New("AMQP configuration is missing")
 	ErrEmptyURL          = errors.New("URL must not be empty")
 	ErrEmptySource       = errors.New("source must not be empty")
 	ErrEmptyTarget       = errors.New("target must not be empty")
-	// MTLS specific errors.
+
 	ErrEmptyCAFile   = errors.New("CA file must not be empty")
 	ErrEmptyCertFile = errors.New("certificate file must not be empty")
 	ErrEmptyKeyFile  = errors.New("key file must not be empty")
-	// Worker specific errors.
+
 	ErrEmptyWorkerName                      = errors.New("worker name must not be empty")
 	ErrExecIntervalMustBeGreaterThanZero    = errors.New("worker exec interval must be greater than zero")
 	ErrUnsupportedWorkerName                = errors.New("worker name is not supported, please use one of the predefined worker names (confirm-job, create-task, reconcile, notify-event)")
 	ErrNumberOfWorkersMustBeGreaterThanZero = errors.New("number of workers must be greater than zero")
 	ErrTimeoutMustBeGreaterThanZero         = errors.New("timeout must be greater than zero")
-	// Orbital specific errors.
+
 	ErrConfirmJobAfterMustBeEqualGreaterThanZero = errors.New("confirm job delay must be equal or greater than zero")
 	ErrTaskLimitNumMustBeGreaterThanZero         = errors.New("task limit number must be greater than zero")
 	ErrMaxReconcileCountMustBeGreaterThanZero    = errors.New("max reconcile count must be greater than zero")
