@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.0](https://github.com/openkcm/registry/compare/v1.1.0...v1.2.0) (2025-10-09)
+
+
+### Features
+
+* apply auth and get auth ([3a24ce1](https://github.com/openkcm/registry/commit/3a24ce118d4fbc2c8e38088cd52cb139562f64a5)), closes [#54](https://github.com/openkcm/registry/issues/54)
+* changed required params for list systems to be one of tenantID or externalID ([#58](https://github.com/openkcm/registry/issues/58)) ([f007454](https://github.com/openkcm/registry/commit/f007454ac76d0a4c3f818e6effafc1ca4bfeabf9))
+* remove auth ([efd6674](https://github.com/openkcm/registry/commit/efd6674d1b592169c743f63b7ee42bd7c835842e)), closes [#61](https://github.com/openkcm/registry/issues/61)
+
+
+### Bug Fixes
+
+* auto migrate auth model ([e635e88](https://github.com/openkcm/registry/commit/e635e88817dec1e38b147368fc7ac6a83abed569)), closes [#64](https://github.com/openkcm/registry/issues/64)
+
 ## [1.1.0](https://github.com/openkcm/registry/compare/v1.0.1...v1.1.0) (2025-09-29)
 
 
