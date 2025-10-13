@@ -31,6 +31,7 @@ const (
 	UpdateAuthErrMsg     = "could not update auth"
 	AuthNotFoundErrMsg   = "auth not found"
 	AuthAlreadyExistsMsg = "auth with the given external ID already exists"
+	AuthInvalidStatusMsg = "invalid auth status"
 )
 
 const (
@@ -66,6 +67,7 @@ var (
 	ErrAuthUpdate        = status.Error(codes.Internal, UpdateAuthErrMsg)
 	ErrAuthNotFound      = status.Error(codes.NotFound, AuthNotFoundErrMsg)
 	ErrAuthAlreadyExists = status.Error(codes.AlreadyExists, AuthAlreadyExistsMsg)
+	ErrAuthInvalidStatus = status.Error(codes.FailedPrecondition, AuthInvalidStatusMsg)
 )
 
 var (

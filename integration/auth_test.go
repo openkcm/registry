@@ -188,6 +188,151 @@ func TestAuth(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("RemoveAuth", func(t *testing.T) {
+		t.Run("should return error if", func(t *testing.T) {
+			t.Run("auth does not exist", func(t *testing.T) {
+				// when
+				resp, err := subj.RemoveAuth(ctx, &authgrpc.RemoveAuthRequest{
+					ExternalId: "non-existing-auth",
+				})
+
+				// then
+				assert.Error(t, err)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+				assert.Nil(t, resp)
+			})
+
+			t.Run("auth is not in APPLIED status", func(t *testing.T) {
+				// given
+				auth := validAuth()
+				auth.Status = model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String())
+				err := repo.Create(ctx, auth)
+				assert.NoError(t, err)
+				defer func() {
+					_, err := repo.Delete(ctx, auth)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				resp, err := subj.RemoveAuth(ctx, &authgrpc.RemoveAuthRequest{
+					ExternalId: auth.ExternalID.String(),
+				})
+
+				// then
+				assert.Error(t, err)
+				assert.Equal(t, codes.FailedPrecondition, status.Code(err), err.Error())
+				assert.Nil(t, resp)
+			})
+
+			t.Run("tenant linked to auth does not exist", func(t *testing.T) {
+				// given
+				auth := validAuth()
+				auth.TenantID = "non-existing-tenant"
+				err := repo.Create(ctx, auth)
+				assert.NoError(t, err)
+				defer func() {
+					_, err := repo.Delete(ctx, auth)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				resp, err := subj.RemoveAuth(ctx, &authgrpc.RemoveAuthRequest{
+					ExternalId: auth.ExternalID.String(),
+				})
+
+				// then
+				assert.Error(t, err)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+				assert.Nil(t, resp)
+			})
+
+			t.Run("tenant linked to auth is not active", func(t *testing.T) {
+				// given
+				tenant := validTenant()
+				tenant.Status = model.TenantStatus(pb.Status_STATUS_BLOCKED.String())
+				err := repo.Create(ctx, tenant)
+				assert.NoError(t, err)
+				defer func() {
+					_, err := repo.Delete(ctx, tenant)
+					assert.NoError(t, err)
+				}()
+
+				auth := validAuth()
+				auth.TenantID = tenant.ID
+				err = repo.Create(ctx, auth)
+				assert.NoError(t, err)
+				defer func() {
+					_, err := repo.Delete(ctx, auth)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				resp, err := subj.RemoveAuth(ctx, &authgrpc.RemoveAuthRequest{
+					ExternalId: auth.ExternalID.String(),
+				})
+
+				// then
+				assert.Error(t, err)
+				assert.Equal(t, codes.FailedPrecondition, status.Code(err), err.Error())
+				assert.Nil(t, resp)
+			})
+		})
+
+		tests := []struct {
+			name       string
+			externalID string
+			expStatus  model.AuthStatus
+		}{
+			{
+				name:       "should change status to REMOVING_ERROR if operator fails to process the request",
+				externalID: operatortest.AuthExternalIDFail,
+				expStatus:  model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_REMOVING_ERROR.String()),
+			},
+			{
+				name:       "should change status to REMOVED if operator processes the request successfully",
+				externalID: operatortest.AuthExternalIDSuccess,
+				expStatus:  model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String()),
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// given
+				tenant := validTenant()
+				tenant.Region = model.Region(operatortest.Region)
+				err := repo.Create(ctx, tenant)
+				assert.NoError(t, err)
+				defer func() {
+					_, err := repo.Delete(ctx, tenant)
+					assert.NoError(t, err)
+				}()
+
+				auth := validAuth()
+				auth.ExternalID = model.ExternalID(tt.externalID)
+				auth.TenantID = tenant.ID
+				err = repo.Create(ctx, auth)
+				assert.NoError(t, err)
+				defer func() {
+					_, err := repo.Delete(ctx, auth)
+					assert.NoError(t, err)
+				}()
+
+				// when
+				resp, err := subj.RemoveAuth(ctx, &authgrpc.RemoveAuthRequest{
+					ExternalId: tt.externalID,
+				})
+
+				// then
+				assert.NoError(t, err)
+				assert.NotNil(t, resp)
+				assert.True(t, resp.Success)
+
+				err = waitForAuthReconciliation(ctx, subj, tt.externalID, tt.expStatus)
+				assert.NoError(t, err)
+			})
+		}
+	})
 }
 
 func waitForAuthReconciliation(ctx context.Context, subj authgrpc.ServiceClient, externalID string, expectedStatus model.AuthStatus) error {
