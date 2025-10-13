@@ -64,7 +64,7 @@ var (
 	ErrMaxReconcileCountMustBeGreaterThanZero    = errors.New("max reconcile count must be greater than zero")
 	ErrBackoffBaseIntervalMustBeGreaterThanZero  = errors.New("backoff base interval must be greater than zero")
 	ErrBackoffMaxIntervalMustBeGreaterThanZero   = errors.New("backoff max interval must be greater than zero")
-	// FieldValidation specific errors.
+
 	ErrTypeNameMustNotBeEmpty              = errors.New("typeName must not be empty")
 	ErrFieldNameMustNotBeEmpty             = errors.New("fieldName must not be empty")
 	ErrEnumValidationMustHaveAllowedValues = errors.New("enum validation must have at least one allowed value")
