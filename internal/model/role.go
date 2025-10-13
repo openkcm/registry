@@ -1,9 +1,6 @@
 package model
 
 import (
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	pb "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 )
 
@@ -24,10 +21,13 @@ func init() {
 	}
 }
 
-// Validate validates given role of the tenant.
-func (r Role) Validate() error {
+// ValidateCustomRule implements CustomValidationRule interface.
+func (r Role) ValidateCustomRule() error {
+	if r == "" {
+		return ErrFieldValueMustNotBeEmpty
+	}
 	if _, ok := validRoles[r]; !ok {
-		return status.Error(codes.InvalidArgument, "Role is not correct")
+		return ErrInvalidFieldValue
 	}
 
 	return nil

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	tenantpb "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 
@@ -14,9 +15,14 @@ import (
 func TestTenantValidation(t *testing.T) {
 	tenantStatusActive := model.TenantStatus(tenantpb.Status_STATUS_ACTIVE.String())
 
+	// Set global validators
+	model.RegisterValidatorsForTypes(model.Tenant{})
+	defer model.ClearGlobalTypeValidators()
+
 	tests := map[string]struct {
 		tenant    model.Tenant
 		expectErr bool
+		errMsg    string
 	}{
 		"Valid tenant data": {
 			tenant: model.Tenant{
@@ -41,8 +47,9 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": Name",
 		},
-		"Tenant data missing ID": {
+		"Tenant data empty ID": {
 			tenant: model.Tenant{
 				Name:      "SuccessFactor",
 				ID:        "",
@@ -53,8 +60,9 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": ID",
 		},
-		"Empty id": {
+		"Tenant data missing id": {
 			tenant: model.Tenant{
 				Name:      "SuccessFactor",
 				Region:    "CMK_REGION_EU",
@@ -64,6 +72,7 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": ID",
 		},
 		"Tenant data missing region": {
 			tenant: model.Tenant{
@@ -75,8 +84,9 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": Region",
 		},
-		"Tenant data wrong owner type": {
+		"Tenant data empty owner type": {
 			tenant: model.Tenant{
 				Name:      "SuccessFactor",
 				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
@@ -87,6 +97,32 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": OwnerType",
+		},
+		"Tenant data missing owner type": {
+			tenant: model.Tenant{
+				Name:    "SuccessFactor",
+				ID:      "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
+				Region:  "CMK_REGION_EU",
+				Status:  tenantStatusActive,
+				OwnerID: "customer_id",
+				Role:    "ROLE_TRIAL",
+			},
+			expectErr: true,
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": OwnerType",
+		},
+		"Tenant data empty owner id": {
+			tenant: model.Tenant{
+				Name:      "SuccessFactor",
+				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
+				Region:    "CMK_REGION_EU",
+				Status:    tenantStatusActive,
+				OwnerType: "some_owner",
+				OwnerID:   "",
+				Role:      "ROLE_TRIAL",
+			},
+			expectErr: true,
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": OwnerID",
 		},
 		"Tenant data missing owner id": {
 			tenant: model.Tenant{
@@ -98,8 +134,9 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": OwnerID",
 		},
-		"Tenant data missing role": {
+		"Tenant data empty role": {
 			tenant: model.Tenant{
 				Name:      "SuccessFactor",
 				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
@@ -110,8 +147,9 @@ func TestTenantValidation(t *testing.T) {
 				Role:      "",
 			},
 			expectErr: true,
+			errMsg:    model.FieldValueMustNotBeEmptyMsg + ": Role",
 		},
-		"Tenant data missing label key": {
+		"Tenant data empty label key": {
 			tenant: model.Tenant{
 				Name:      "SuccessFactor",
 				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
@@ -125,6 +163,23 @@ func TestTenantValidation(t *testing.T) {
 				},
 			},
 			expectErr: true,
+			errMsg:    model.FieldContainsEmptyKeysMsg + ": Labels",
+		},
+		"Tenant data empty label value": {
+			tenant: model.Tenant{
+				Name:      "SuccessFactor",
+				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
+				Region:    "CMK_REGION_EU",
+				Status:    tenantStatusActive,
+				OwnerType: "owner_type",
+				OwnerID:   "customer_id",
+				Role:      "ROLE_TRIAL",
+				Labels: map[string]string{
+					"key": "",
+				},
+			},
+			expectErr: true,
+			errMsg:    model.FieldContainsEmptyValuesMsg + ": Labels",
 		},
 	}
 
@@ -132,7 +187,8 @@ func TestTenantValidation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			err := test.tenant.Validate()
 			if test.expectErr {
-				assert.Error(t, err)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), test.errMsg)
 			} else {
 				assert.NoError(t, err)
 			}
