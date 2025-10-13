@@ -27,12 +27,13 @@ import (
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 	slogctx "github.com/veqryn/slog-context"
 
-	root "github.com/openkcm/registry"
 	"github.com/openkcm/registry/internal/config"
 	"github.com/openkcm/registry/internal/interceptor"
 	"github.com/openkcm/registry/internal/repository/sql"
 	"github.com/openkcm/registry/internal/service"
 )
+
+var BuildInfo = "{}"
 
 func main() {
 	ctx := context.Background()
@@ -153,7 +154,7 @@ func loadConfig() *config.Config {
 	err := loader.LoadConfig()
 	handleErr("loading config", err)
 
-	err = commoncfg.UpdateConfigVersion(&cfg.BaseConfig, root.BuildVersion)
+	err = commoncfg.UpdateConfigVersion(&cfg.BaseConfig, BuildInfo)
 	handleErr("loading build version into config", err)
 
 	return cfg
