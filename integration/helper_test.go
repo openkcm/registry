@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/openkcm/common-sdk/pkg/commoncfg"
+	"github.com/openkcm/orbital"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
@@ -16,6 +17,7 @@ import (
 
 	_ "google.golang.org/grpc/health"
 
+	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 	typespb "github.com/openkcm/api-sdk/proto/kms/api/cmk/types/v1"
@@ -26,9 +28,7 @@ import (
 	"github.com/openkcm/registry/internal/service"
 )
 
-var (
-	ErrMissingSvrPort = errors.New("server port is missing")
-)
+var ErrMissingSvrPort = errors.New("server port is missing")
 
 func loadConfig() (*config.Config, error) {
 	cfg := &config.Config{}
@@ -53,7 +53,7 @@ func startDB() (*gorm.DB, error) {
 		return nil, err
 	}
 
-	err = db.AutoMigrate(&model.Tenant{}, &model.System{})
+	err = db.AutoMigrate(&model.Tenant{}, &model.System{}, model.Auth{})
 	if err != nil {
 		return nil, err
 	}
@@ -109,6 +109,15 @@ func validTenant() *model.Tenant {
 	}
 }
 
+func validAuth() *model.Auth {
+	return &model.Auth{
+		ExternalID: model.ExternalID(validRandID()),
+		TenantID:   model.ID(validRandID()),
+		Type:       "auth_typ",
+		Status:     model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String()),
+	}
+}
+
 func validRegisterTenantReq() *tenantgrpc.RegisterTenantRequest {
 	return &tenantgrpc.RegisterTenantRequest{
 		Name:      "SuccessFactor",
@@ -153,6 +162,33 @@ func unlinkSystemFromTenant(ctx context.Context, s systemgrpc.ServiceClient, ext
 		},
 	})
 	return err
+}
+
+func deleteOrbitalResources(ctx context.Context, db *gorm.DB, externalID string) error {
+	var jobs []orbital.Job
+	err := db.WithContext(ctx).Table("jobs").Find(&jobs).Where("external_id = ?", externalID).Error
+	if err != nil {
+		return err
+	}
+	for _, job := range jobs {
+		err := db.WithContext(ctx).Table("tasks").Where("job_id = ?", job.ID).Delete(nil).Error
+		if err != nil {
+			return err
+		}
+		err = db.WithContext(ctx).Table("job_cursor").Where("id = ?", job.ID).Delete(nil).Error
+		if err != nil {
+			return err
+		}
+		err = db.WithContext(ctx).Table("job_event").Where("id = ?", job.ID).Delete(nil).Error
+		if err != nil {
+			return err
+		}
+		err = db.WithContext(ctx).Table("jobs").Where("id = ?", job.ID).Delete(nil).Error
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func deleteTenantFromDB(ctx context.Context, db *gorm.DB, tenant *model.Tenant) error {

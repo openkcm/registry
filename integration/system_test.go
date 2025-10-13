@@ -380,10 +380,9 @@ func TestSystemService(t *testing.T) {
 					expectedExternalID string
 				}{
 					{
-						name: "ID",
+						name: "externalID",
 						request: &systemgrpc.ListSystemsRequest{
 							ExternalId: externalID1,
-							Region:     region1,
 						},
 						expectedExternalID: externalID1,
 					},
@@ -431,7 +430,7 @@ func TestSystemService(t *testing.T) {
 						errorCode: codes.NotFound,
 					},
 					{
-						name:      "no tenantID and no externalID and region is provided in query",
+						name:      "no tenantID and no externalID is provided in query",
 						request:   &systemgrpc.ListSystemsRequest{},
 						errorCode: codes.InvalidArgument,
 					},

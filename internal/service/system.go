@@ -87,7 +87,7 @@ func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSyst
 func (s *System) ListSystems(ctx context.Context, in *systemgrpc.ListSystemsRequest) (*systemgrpc.ListSystemsResponse, error) {
 	slogctx.Debug(ctx, "ListSystems called", "external_id", in.GetExternalId(), "region", in.GetRegion(), "tenant_id", in.GetTenantId())
 
-	if (in.GetExternalId() == "" || in.GetRegion() == "") && in.GetTenantId() == "" {
+	if in.GetExternalId() == "" && in.GetTenantId() == "" {
 		return nil, ErrSystemListNotAllowed
 	}
 
