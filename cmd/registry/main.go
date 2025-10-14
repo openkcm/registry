@@ -29,8 +29,10 @@ import (
 
 	"github.com/openkcm/registry/internal/config"
 	"github.com/openkcm/registry/internal/interceptor"
+	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository/sql"
 	"github.com/openkcm/registry/internal/service"
+	"github.com/openkcm/registry/internal/validation"
 )
 
 var BuildInfo = "{}"
@@ -59,9 +61,12 @@ func main() {
 	orbital, err := service.NewOrbital(ctx, db, cfg.Orbital)
 	handleErr("initializing Orbital", err)
 
+	validations := initValidations(cfg.Validations)
+	handleErr("initializing validations", err)
+
 	tenantSrv := service.NewTenant(repository, orbital, meters)
 	systemSrv := service.NewSystem(repository, meters)
-	authSrv := service.NewAuth(repository, orbital)
+	authSrv := service.NewAuth(repository, orbital, validations)
 
 	grpcServer, err := setupGRPCServer(ctx, cfg)
 	handleErr("initializing gRPC server", err)
@@ -138,6 +143,26 @@ func initOTLP(ctx context.Context, cfg *config.Config) {
 func initLogger(cfg *config.Config) {
 	err := logger.InitAsDefault(cfg.Logger, cfg.Application)
 	handleErr("initializing logger", err)
+}
+
+func initValidations(configFields []validation.ConfigField) *validation.Validation {
+	v, err := validation.New(configFields...)
+	handleErr("initializing validation", err)
+
+	sources := make([]map[validation.ID]struct{}, 0, 1)
+
+	for _, s := range []validation.Struct{&model.Auth{}} {
+		v.AddStructFields(s.Fields()...)
+
+		ids, err := validation.GetIDs(s)
+		handleErr("getting IDs", err)
+		sources = append(sources, ids)
+	}
+
+	err = v.CheckIDs(sources...)
+	handleErr("validating IDs", err)
+
+	return v
 }
 
 func handleErr(msg string, err error) {

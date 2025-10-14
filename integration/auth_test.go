@@ -42,9 +42,14 @@ func TestAuth(t *testing.T) {
 	t.Run("ApplyAuth", func(t *testing.T) {
 		t.Run("should return error if", func(t *testing.T) {
 			t.Run("tenant does not exist", func(t *testing.T) {
+				// given
+				auth := validAuth()
+
 				// when
 				resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
-					TenantId: "non-existing-tenant",
+					ExternalId: auth.ExternalID.String(),
+					TenantId:   "non-existing-tenant",
+					Type:       auth.Type.String(),
 				})
 
 				// then
@@ -55,6 +60,8 @@ func TestAuth(t *testing.T) {
 
 			t.Run("tenant is not active", func(t *testing.T) {
 				// given
+				auth := validAuth()
+
 				inactiveTenant := validTenant()
 				inactiveTenant.Status = model.TenantStatus(pb.Status_STATUS_BLOCKED.String())
 				err := repo.Create(ctx, inactiveTenant)
@@ -66,7 +73,9 @@ func TestAuth(t *testing.T) {
 
 				// when
 				resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
-					TenantId: inactiveTenant.ID.String(),
+					ExternalId: auth.ExternalID.String(),
+					TenantId:   inactiveTenant.ID.String(),
+					Type:       auth.Type.String(),
 				})
 
 				// then
@@ -98,6 +107,7 @@ func TestAuth(t *testing.T) {
 			resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
 				ExternalId: auth.ExternalID.String(),
 				TenantId:   tenant.ID.String(),
+				Type:       auth.Type.String(),
 			})
 
 			// then
@@ -135,6 +145,8 @@ func TestAuth(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				// given
+				auth := validAuth()
+
 				tenant := validTenant()
 				tenant.Region = model.Region(tt.region)
 				err := repo.Create(ctx, tenant)
@@ -148,14 +160,14 @@ func TestAuth(t *testing.T) {
 				resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
 					ExternalId: tt.externalID,
 					TenantId:   tenant.ID.String(),
-					Type:       "auth_type",
+					Type:       auth.Type.String(),
 					Properties: map[string]string{
 						"auth_prop": "auth_value",
 					},
 				})
 				defer func() {
 					auth := &model.Auth{
-						ExternalID: model.ExternalID(tt.externalID),
+						ExternalID: model.AuthExternalID(tt.externalID),
 					}
 					_, err := repo.Delete(ctx, auth)
 					assert.NoError(t, err)
@@ -175,7 +187,7 @@ func TestAuth(t *testing.T) {
 				assert.NotNil(t, getResp)
 				assert.Equal(t, tt.externalID, getResp.Auth.ExternalId)
 				assert.Equal(t, tenant.ID.String(), getResp.Auth.TenantId)
-				assert.Equal(t, "auth_type", getResp.Auth.Type)
+				assert.Equal(t, auth.Type.String(), getResp.Auth.Type)
 				assert.Equal(t, "auth_value", getResp.Auth.Properties["auth_prop"])
 
 				err = waitForAuthReconciliation(ctx, subj, tt.externalID, tt.expStatus)
@@ -304,7 +316,7 @@ func TestAuth(t *testing.T) {
 				}()
 
 				auth := validAuth()
-				auth.ExternalID = model.ExternalID(tt.externalID)
+				auth.ExternalID = model.AuthExternalID(tt.externalID)
 				auth.TenantID = tenant.ID
 				err = repo.Create(ctx, auth)
 				assert.NoError(t, err)
@@ -353,5 +365,61 @@ func waitForAuthReconciliation(ctx context.Context, subj authgrpc.ServiceClient,
 			currentAuth = resp.Auth
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func TestAuthValidation(t *testing.T) {
+	conn, err := newGRPCClientConn()
+	require.NoError(t, err)
+	defer conn.Close()
+
+	subj := authgrpc.NewServiceClient(conn)
+
+	tests := []struct {
+		name       string
+		request    *authgrpc.ApplyAuthRequest
+		expErrCode codes.Code
+	}{
+		{
+			name: "should return error if ExternalId is empty",
+			request: &authgrpc.ApplyAuthRequest{
+				TenantId: "tenant-id",
+				Type:     "oidc",
+			},
+			expErrCode: codes.InvalidArgument,
+		},
+		{
+			name: "should return error if Type is not allowed",
+			request: &authgrpc.ApplyAuthRequest{
+				ExternalId: "external-id",
+				TenantId:   "tenant-id",
+				Type:       "saml",
+			},
+			expErrCode: codes.InvalidArgument,
+		},
+		{
+			name: "should return error if Properties validation fails",
+			request: &authgrpc.ApplyAuthRequest{
+				ExternalId: "external-id",
+				TenantId:   "tenant-id",
+				Type:       "oidc",
+				Properties: map[string]string{
+					"Issuer": "",
+				},
+			},
+			expErrCode: codes.InvalidArgument,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// when
+			resp, err := subj.ApplyAuth(t.Context(), tt.request)
+
+			// then
+			assert.Nil(t, resp)
+			assert.Error(t, err)
+			assert.Equal(t, tt.expErrCode, status.Code(err), err.Error())
+		})
 	}
 }

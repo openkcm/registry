@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/openkcm/common-sdk/pkg/commoncfg"
+
+	"github.com/openkcm/registry/internal/validation"
 )
 
 type (
@@ -68,6 +70,8 @@ type Config struct {
 	Database DB `yaml:"database" json:"database"`
 	// Orbital configuration
 	Orbital Orbital `yaml:"orbital" json:"orbital"`
+	// Validations configuration
+	Validations []validation.ConfigField `yaml:"validations"`
 }
 
 // Validate validates the configuration.

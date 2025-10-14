@@ -127,3 +127,14 @@ telemetry:
       value: localhost:4317
     secretRef:
       type: insecure
+
+validations:
+  - id: Auth.Type
+    constraints:
+    - type: list
+      spec:
+        allowlist: ["oidc"]
+  - id: Auth.Properties.Issuer
+    omitIDCheck: true
+    constraints:
+    - type: non-empty
