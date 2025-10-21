@@ -135,6 +135,6 @@ validations:
       spec:
         allowlist: ["oidc"]
   - id: Auth.Properties.Issuer
-    omitIDCheck: true
+    skipIfNotExists: true
     constraints:
     - type: non-empty

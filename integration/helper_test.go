@@ -111,10 +111,10 @@ func validTenant() *model.Tenant {
 
 func validAuth() *model.Auth {
 	return &model.Auth{
-		ExternalID: model.AuthExternalID(validRandID()),
-		TenantID:   model.ID(validRandID()),
+		ExternalID: validRandID(),
+		TenantID:   validRandID(),
 		Type:       "oidc",
-		Status:     model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String()),
+		Status:     authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String(),
 	}
 }
 

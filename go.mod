@@ -10,7 +10,6 @@ require (
 	github.com/openkcm/common-sdk v1.4.7
 	github.com/openkcm/orbital v0.2.0
 	github.com/samber/oops v1.19.3
-	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/veqryn/slog-context v0.8.0
 	go.opentelemetry.io/otel v1.38.0
@@ -61,6 +60,7 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/spf13/viper v1.21.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/veqryn/slog-context/otel v0.8.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect

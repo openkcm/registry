@@ -47,9 +47,9 @@ func TestAuth(t *testing.T) {
 
 				// when
 				resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
-					ExternalId: auth.ExternalID.String(),
+					ExternalId: auth.ExternalID,
 					TenantId:   "non-existing-tenant",
-					Type:       auth.Type.String(),
+					Type:       auth.Type,
 				})
 
 				// then
@@ -73,9 +73,9 @@ func TestAuth(t *testing.T) {
 
 				// when
 				resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
-					ExternalId: auth.ExternalID.String(),
+					ExternalId: auth.ExternalID,
 					TenantId:   inactiveTenant.ID.String(),
-					Type:       auth.Type.String(),
+					Type:       auth.Type,
 				})
 
 				// then
@@ -105,9 +105,9 @@ func TestAuth(t *testing.T) {
 
 			// when
 			resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
-				ExternalId: auth.ExternalID.String(),
+				ExternalId: auth.ExternalID,
 				TenantId:   tenant.ID.String(),
-				Type:       auth.Type.String(),
+				Type:       auth.Type,
 			})
 
 			// then
@@ -120,25 +120,25 @@ func TestAuth(t *testing.T) {
 			name       string
 			externalID string
 			region     string
-			expStatus  model.AuthStatus
+			expStatus  string
 		}{
 			{
 				name:       "should change status to APPLYING_ERROR if region does not exist",
 				externalID: operatortest.AuthExternalIDSuccess,
 				region:     "non-existing-region",
-				expStatus:  model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()),
+				expStatus:  authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String(),
 			},
 			{
 				name:       "should change status to APPLYING_ERROR if operator fails to process the request",
 				externalID: operatortest.AuthExternalIDFail,
 				region:     operatortest.Region,
-				expStatus:  model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()),
+				expStatus:  authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String(),
 			},
 			{
 				name:       "should change status to APPLIED if operator processes the request successfully",
 				externalID: operatortest.AuthExternalIDSuccess,
 				region:     operatortest.Region,
-				expStatus:  model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String()),
+				expStatus:  authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String(),
 			},
 		}
 
@@ -160,14 +160,14 @@ func TestAuth(t *testing.T) {
 				resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
 					ExternalId: tt.externalID,
 					TenantId:   tenant.ID.String(),
-					Type:       auth.Type.String(),
+					Type:       auth.Type,
 					Properties: map[string]string{
 						"auth_prop": "auth_value",
 					},
 				})
 				defer func() {
 					auth := &model.Auth{
-						ExternalID: model.AuthExternalID(tt.externalID),
+						ExternalID: tt.externalID,
 					}
 					_, err := repo.Delete(ctx, auth)
 					assert.NoError(t, err)
@@ -187,7 +187,7 @@ func TestAuth(t *testing.T) {
 				assert.NotNil(t, getResp)
 				assert.Equal(t, tt.externalID, getResp.Auth.ExternalId)
 				assert.Equal(t, tenant.ID.String(), getResp.Auth.TenantId)
-				assert.Equal(t, auth.Type.String(), getResp.Auth.Type)
+				assert.Equal(t, auth.Type, getResp.Auth.Type)
 				assert.Equal(t, "auth_value", getResp.Auth.Properties["auth_prop"])
 
 				err = waitForAuthReconciliation(ctx, subj, tt.externalID, tt.expStatus)
@@ -213,7 +213,7 @@ func TestAuth(t *testing.T) {
 			t.Run("auth is not in APPLIED status", func(t *testing.T) {
 				// given
 				auth := validAuth()
-				auth.Status = model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String())
+				auth.Status = authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()
 				err := repo.Create(ctx, auth)
 				assert.NoError(t, err)
 				defer func() {
@@ -223,7 +223,7 @@ func TestAuth(t *testing.T) {
 
 				// when
 				resp, err := subj.RemoveAuth(ctx, &authgrpc.RemoveAuthRequest{
-					ExternalId: auth.ExternalID.String(),
+					ExternalId: auth.ExternalID,
 				})
 
 				// then
@@ -245,7 +245,7 @@ func TestAuth(t *testing.T) {
 
 				// when
 				resp, err := subj.RemoveAuth(ctx, &authgrpc.RemoveAuthRequest{
-					ExternalId: auth.ExternalID.String(),
+					ExternalId: auth.ExternalID,
 				})
 
 				// then
@@ -266,7 +266,7 @@ func TestAuth(t *testing.T) {
 				}()
 
 				auth := validAuth()
-				auth.TenantID = tenant.ID
+				auth.TenantID = tenant.ID.String()
 				err = repo.Create(ctx, auth)
 				assert.NoError(t, err)
 				defer func() {
@@ -276,7 +276,7 @@ func TestAuth(t *testing.T) {
 
 				// when
 				resp, err := subj.RemoveAuth(ctx, &authgrpc.RemoveAuthRequest{
-					ExternalId: auth.ExternalID.String(),
+					ExternalId: auth.ExternalID,
 				})
 
 				// then
@@ -289,17 +289,17 @@ func TestAuth(t *testing.T) {
 		tests := []struct {
 			name       string
 			externalID string
-			expStatus  model.AuthStatus
+			expStatus  string
 		}{
 			{
 				name:       "should change status to REMOVING_ERROR if operator fails to process the request",
 				externalID: operatortest.AuthExternalIDFail,
-				expStatus:  model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_REMOVING_ERROR.String()),
+				expStatus:  authgrpc.AuthStatus_AUTH_STATUS_REMOVING_ERROR.String(),
 			},
 			{
 				name:       "should change status to REMOVED if operator processes the request successfully",
 				externalID: operatortest.AuthExternalIDSuccess,
-				expStatus:  model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String()),
+				expStatus:  authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String(),
 			},
 		}
 
@@ -316,8 +316,8 @@ func TestAuth(t *testing.T) {
 				}()
 
 				auth := validAuth()
-				auth.ExternalID = model.AuthExternalID(tt.externalID)
-				auth.TenantID = tenant.ID
+				auth.ExternalID = tt.externalID
+				auth.TenantID = tenant.ID.String()
 				err = repo.Create(ctx, auth)
 				assert.NoError(t, err)
 				defer func() {
@@ -342,7 +342,7 @@ func TestAuth(t *testing.T) {
 	})
 }
 
-func waitForAuthReconciliation(ctx context.Context, subj authgrpc.ServiceClient, externalID string, expectedStatus model.AuthStatus) error {
+func waitForAuthReconciliation(ctx context.Context, subj authgrpc.ServiceClient, externalID, expStatus string) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
@@ -358,7 +358,7 @@ func waitForAuthReconciliation(ctx context.Context, subj authgrpc.ServiceClient,
 			if err != nil {
 				return err
 			}
-			if resp.Auth.Status.String() == string(expectedStatus) {
+			if resp.Auth.Status.String() == expStatus {
 				return nil
 			}
 
@@ -381,7 +381,7 @@ func TestAuthValidation(t *testing.T) {
 		expErrCode codes.Code
 	}{
 		{
-			name: "should return error if ExternalId is empty",
+			name: "should return error for failed model validation",
 			request: &authgrpc.ApplyAuthRequest{
 				TenantId: "tenant-id",
 				Type:     "oidc",
@@ -389,7 +389,7 @@ func TestAuthValidation(t *testing.T) {
 			expErrCode: codes.InvalidArgument,
 		},
 		{
-			name: "should return error if Type is not allowed",
+			name: "should return error for failed configured validation with pre-existing validation ID",
 			request: &authgrpc.ApplyAuthRequest{
 				ExternalId: "external-id",
 				TenantId:   "tenant-id",
@@ -398,13 +398,13 @@ func TestAuthValidation(t *testing.T) {
 			expErrCode: codes.InvalidArgument,
 		},
 		{
-			name: "should return error if Properties validation fails",
+			name: "should return error for failed configured validation without pre-existing validation ID",
 			request: &authgrpc.ApplyAuthRequest{
 				ExternalId: "external-id",
 				TenantId:   "tenant-id",
 				Type:       "oidc",
 				Properties: map[string]string{
-					"Issuer": "",
+					"Issuer": "", // validation ID does not exist on compile time
 				},
 			},
 			expErrCode: codes.InvalidArgument,

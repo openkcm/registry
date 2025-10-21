@@ -6,37 +6,51 @@ import (
 	"sync"
 )
 
-var ErrMissingID = errors.New("id does not exist")
+var (
+	ErrEmptyID           = errors.New("id is empty")
+	ErrValidatorsMissing = errors.New("no validators provided")
+	ErrIDMustExist       = errors.New("id must exist")
+)
 
 type (
+	// Validation represents a map of validation specifications by their IDs.
 	Validation struct {
 		byID map[ID]Spec
 		mu   sync.RWMutex
 	}
 
-	ID   string
+	// ID represents a validation identifier.
+	ID string
+
+	// Spec represents the validation specification for a given ID.
 	Spec struct {
-		omitIDCheck bool
-		validators  []Validator
+		skipIfNotExists bool
+		validators      []Validator
 	}
 )
 
+// New creates a new Validation instance with the provided configuration fields.
 func New(fields ...ConfigField) (*Validation, error) {
 	v := &Validation{
 		byID: make(map[ID]Spec),
 	}
-	err := v.AddConfigFields(fields...)
+	err := v.RegisterConfig(fields...)
 	if err != nil {
 		return nil, err
 	}
 	return v, nil
 }
 
-func (v *Validation) AddConfigFields(fields ...ConfigField) error {
+// RegisterConfig registers configuration fields into the Validation instance.
+func (v *Validation) RegisterConfig(fields ...ConfigField) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
 	for _, field := range fields {
+		if field.ID == "" {
+			return ErrEmptyID
+		}
+
 		validators, err := getValidators(field.Constraints)
 		if err != nil {
 			return err
@@ -44,12 +58,12 @@ func (v *Validation) AddConfigFields(fields ...ConfigField) error {
 		spec, ok := v.byID[field.ID]
 		if !ok {
 			v.byID[field.ID] = Spec{
-				omitIDCheck: field.OmitIDCheck,
-				validators:  validators,
+				skipIfNotExists: field.SkipIfNotExists,
+				validators:      validators,
 			}
 			continue
 		}
-		spec.omitIDCheck = spec.omitIDCheck || field.OmitIDCheck
+		spec.skipIfNotExists = spec.skipIfNotExists && field.SkipIfNotExists
 		spec.validators = append(spec.validators, validators...)
 		v.byID[field.ID] = spec
 	}
@@ -57,11 +71,19 @@ func (v *Validation) AddConfigFields(fields ...ConfigField) error {
 	return nil
 }
 
-func (v *Validation) AddStructFields(fields ...StructField) {
+// Register registers validation fields into the Validation instance.
+func (v *Validation) Register(fields ...Field) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
 	for _, field := range fields {
+		if field.ID == "" {
+			return ErrEmptyID
+		}
+		if len(field.Validators) == 0 {
+			return ErrValidatorsMissing
+		}
+
 		spec, ok := v.byID[field.ID]
 		if !ok {
 			v.byID[field.ID] = Spec{
@@ -69,18 +91,23 @@ func (v *Validation) AddStructFields(fields ...StructField) {
 			}
 			continue
 		}
-		spec.omitIDCheck = false
+		spec.skipIfNotExists = false
 		spec.validators = append(spec.validators, field.Validators...)
 		v.byID[field.ID] = spec
 	}
+
+	return nil
 }
 
+// CheckIDs checks if all registered IDs exist in the provided sources.
+// A source can be created using GetIDs function.
+// If an ID is marked with SkipIfNotExists, it will be skipped during the check.
 func (v *Validation) CheckIDs(sources ...map[ID]struct{}) error {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
 	for id, spec := range v.byID {
-		if spec.omitIDCheck {
+		if spec.skipIfNotExists {
 			continue
 		}
 
@@ -93,12 +120,13 @@ func (v *Validation) CheckIDs(sources ...map[ID]struct{}) error {
 			}
 		}
 		if !exists {
-			return fmt.Errorf("%w: %s", ErrMissingID, id)
+			return fmt.Errorf("%w: %s", ErrIDMustExist, id)
 		}
 	}
 	return nil
 }
 
+// ValidateAll validates all provided values mapped by their IDs.
 func (v *Validation) ValidateAll(valuesByID map[ID]any) error {
 	for id, value := range valuesByID {
 		err := v.Validate(id, value)
@@ -109,6 +137,7 @@ func (v *Validation) ValidateAll(valuesByID map[ID]any) error {
 	return nil
 }
 
+// Validate validates a single value by its ID.
 func (v *Validation) Validate(id ID, value any) error {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
@@ -126,16 +155,4 @@ func (v *Validation) Validate(id ID, value any) error {
 	}
 
 	return nil
-}
-
-func getValidators(constraints []Constraint) ([]Validator, error) {
-	v := make([]Validator, 0, len(constraints))
-	for _, c := range constraints {
-		cv, err := c.getValidator()
-		if err != nil {
-			return nil, err
-		}
-		v = append(v, cv)
-	}
-	return v, nil
 }

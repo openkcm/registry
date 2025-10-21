@@ -13,22 +13,21 @@ var (
 	ErrKeyEmpty        = errors.New("key is empty")
 )
 
+// Validator defines the interface for constraints.
 type Validator interface {
 	Validate(value any) error
 }
 
-type String interface {
-	String() string
-}
-
+// ListConstraint validates that a value is within an allowed list.
 type ListConstraint struct {
 	AllowList []string `yaml:"allowList"`
 }
 
+// Validate checks if the provided value is in the AllowList.
 func (l ListConstraint) Validate(value any) error {
-	strValue, err := getString(value)
-	if err != nil {
-		return err
+	strValue, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("%w: %T", ErrWrongType, value)
 	}
 
 	if !slices.Contains(l.AllowList, strValue) {
@@ -38,12 +37,14 @@ func (l ListConstraint) Validate(value any) error {
 	return nil
 }
 
+// NonEmptyConstraint validates that a string value is not empty.
 type NonEmptyConstraint struct{}
 
+// Validate checks if the provided value is a non-empty string.
 func (n NonEmptyConstraint) Validate(value any) error {
-	strValue, err := getString(value)
-	if err != nil {
-		return err
+	strValue, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("%w: %T", ErrWrongType, value)
 	}
 
 	if strValue == "" {
@@ -53,29 +54,20 @@ func (n NonEmptyConstraint) Validate(value any) error {
 	return nil
 }
 
+// NonEmptyKeysConstraint validates that all keys in a map are non-empty strings.
 type NonEmptyKeysConstraint struct{}
 
+// Validate checks if the provided value is a map with non-empty keys.
 func (n NonEmptyKeysConstraint) Validate(value any) error {
 	mapValue, ok := value.(Map)
 	if !ok {
 		return fmt.Errorf("%w: %T", ErrWrongType, value)
 	}
 
-	for k := range mapValue.Map() {
+	for k, v := range mapValue.Map() {
 		if k == "" {
-			return ErrKeyEmpty
+			return fmt.Errorf("%w in key-value pair: '%s':'%v'", ErrKeyEmpty, k, v)
 		}
 	}
 	return nil
-}
-
-func getString(value any) (string, error) {
-	switch v := value.(type) {
-	case string:
-		return v, nil
-	case String:
-		return v.String(), nil
-	default:
-		return "", fmt.Errorf("%w: %T", ErrWrongType, value)
-	}
 }

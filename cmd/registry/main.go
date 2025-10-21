@@ -32,7 +32,7 @@ import (
 	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository/sql"
 	"github.com/openkcm/registry/internal/service"
-	"github.com/openkcm/registry/internal/validation"
+	validationpkg "github.com/openkcm/registry/internal/validation"
 )
 
 var BuildInfo = "{}"
@@ -61,12 +61,12 @@ func main() {
 	orbital, err := service.NewOrbital(ctx, db, cfg.Orbital)
 	handleErr("initializing Orbital", err)
 
-	validations := initValidations(cfg.Validations)
-	handleErr("initializing validations", err)
+	validation := initValidation(cfg.Validations)
+	handleErr("initializing validation", err)
 
 	tenantSrv := service.NewTenant(repository, orbital, meters)
 	systemSrv := service.NewSystem(repository, meters)
-	authSrv := service.NewAuth(repository, orbital, validations)
+	authSrv := service.NewAuth(repository, orbital, validation)
 
 	grpcServer, err := setupGRPCServer(ctx, cfg)
 	handleErr("initializing gRPC server", err)
@@ -145,24 +145,25 @@ func initLogger(cfg *config.Config) {
 	handleErr("initializing logger", err)
 }
 
-func initValidations(configFields []validation.ConfigField) *validation.Validation {
-	v, err := validation.New(configFields...)
+func initValidation(validations []validationpkg.ConfigField) *validationpkg.Validation {
+	validation, err := validationpkg.New(validations...)
 	handleErr("initializing validation", err)
 
-	sources := make([]map[validation.ID]struct{}, 0, 1)
+	for _, model := range []validationpkg.Model{&model.Auth{}} {
+		err := validation.Register(model.Validations()...)
+		handleErr("registering model validations", err)
+	}
 
-	for _, s := range []validation.Struct{&model.Auth{}} {
-		v.AddStructFields(s.Fields()...)
-
-		ids, err := validation.GetIDs(s)
+	sources := make([]map[validationpkg.ID]struct{}, 0, 1)
+	for _, input := range []any{&model.Auth{}} {
+		ids, err := validationpkg.GetIDs(input)
 		handleErr("getting IDs", err)
 		sources = append(sources, ids)
 	}
+	err = validation.CheckIDs(sources...)
+	handleErr("checking IDs", err)
 
-	err = v.CheckIDs(sources...)
-	handleErr("validating IDs", err)
-
-	return v
+	return validation
 }
 
 func handleErr(msg string, err error) {

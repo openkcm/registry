@@ -8,13 +8,8 @@ import (
 	"github.com/openkcm/registry/internal/validation"
 )
 
-type StringImplementer string
-
-func (s StringImplementer) String() string {
-	return string(s)
-}
-
 func TestListConstraint(t *testing.T) {
+	// given
 	tests := []struct {
 		name       string
 		constraint validation.ListConstraint
@@ -22,23 +17,15 @@ func TestListConstraint(t *testing.T) {
 		expErr     error
 	}{
 		{
-			name: "should pass for value in allowlist",
+			name: "should return error for non-string value",
 			constraint: validation.ListConstraint{
 				AllowList: []string{"value1", "value2"},
 			},
-			value:  "value1",
-			expErr: nil,
+			value:  123,
+			expErr: validation.ErrWrongType,
 		},
 		{
-			name: "should pass for String implementer value in allowlist",
-			constraint: validation.ListConstraint{
-				AllowList: []string{"value1", "value2"},
-			},
-			value:  StringImplementer("value2"),
-			expErr: nil,
-		},
-		{
-			name: "should fail for value not in allowlist",
+			name: "should return error for value not in allowlist",
 			constraint: validation.ListConstraint{
 				AllowList: []string{"value1", "value2"},
 			},
@@ -46,12 +33,12 @@ func TestListConstraint(t *testing.T) {
 			expErr: validation.ErrValueNotAllowed,
 		},
 		{
-			name: "should fail for non-string value",
+			name: "should return nil for value in allowlist",
 			constraint: validation.ListConstraint{
 				AllowList: []string{"value1", "value2"},
 			},
-			value:  123,
-			expErr: validation.ErrWrongType,
+			value:  "value1",
+			expErr: nil,
 		},
 	}
 
@@ -71,6 +58,7 @@ func TestListConstraint(t *testing.T) {
 }
 
 func TestNonEmptyConstraint(t *testing.T) {
+	// given
 	tests := []struct {
 		name       string
 		constraint validation.NonEmptyConstraint
@@ -78,28 +66,23 @@ func TestNonEmptyConstraint(t *testing.T) {
 		expErr     error
 	}{
 		{
-			name:       "should pass for non-empty string",
+			name:       "should return error for non-string value",
 			constraint: validation.NonEmptyConstraint{},
-			value:      "non-empty",
-			expErr:     nil,
+			value:      123,
+			expErr:     validation.ErrWrongType,
 		},
+
 		{
-			name:       "should pass for String implementer with non-empty string",
-			constraint: validation.NonEmptyConstraint{},
-			value:      StringImplementer("non-empty"),
-			expErr:     nil,
-		},
-		{
-			name:       "should fail for empty string",
+			name:       "should return error for empty string",
 			constraint: validation.NonEmptyConstraint{},
 			value:      "",
 			expErr:     validation.ErrValueEmpty,
 		},
 		{
-			name:       "should return error for non-string value",
+			name:       "should return nil for non-empty string",
 			constraint: validation.NonEmptyConstraint{},
-			value:      123,
-			expErr:     validation.ErrWrongType,
+			value:      "non-empty",
+			expErr:     nil,
 		},
 	}
 
@@ -119,6 +102,7 @@ func TestNonEmptyConstraint(t *testing.T) {
 }
 
 func TestNonEmptyKeysConstraint(t *testing.T) {
+	// given
 	tests := []struct {
 		name       string
 		constraint validation.NonEmptyKeysConstraint
@@ -126,22 +110,22 @@ func TestNonEmptyKeysConstraint(t *testing.T) {
 		expErr     error
 	}{
 		{
-			name:       "should pass for map with non-empty keys",
+			name:       "should return error for non-map value",
 			constraint: validation.NonEmptyKeysConstraint{},
-			value:      Map{"key1": "value1", "key2": "value2"},
-			expErr:     nil,
+			value:      "not-a-map",
+			expErr:     validation.ErrWrongType,
 		},
 		{
-			name:       "should fail for map with an empty key",
+			name:       "should return error for map with an empty key",
 			constraint: validation.NonEmptyKeysConstraint{},
 			value:      Map{"": "value1", "key2": "value2"},
 			expErr:     validation.ErrKeyEmpty,
 		},
 		{
-			name:       "should return error for non-map value",
+			name:       "should return nil for map with non-empty keys",
 			constraint: validation.NonEmptyKeysConstraint{},
-			value:      "not-a-map",
-			expErr:     validation.ErrWrongType,
+			value:      Map{"key1": "value1", "key2": "value2"},
+			expErr:     nil,
 		},
 	}
 

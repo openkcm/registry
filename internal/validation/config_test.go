@@ -1,53 +1,136 @@
 package validation_test
 
 import (
-	"strings"
 	"testing"
 
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openkcm/registry/internal/validation"
 )
 
-type Config struct {
-	Validations []validation.ConfigField `yaml:"validations"`
+func TestGetValidators(t *testing.T) {
+	// given
+	tests := []struct {
+		name        string
+		constraints []validation.Constraint
+		expErr      error
+	}{
+		{
+			name:        "should return error when constraints are empty",
+			constraints: []validation.Constraint{},
+			expErr:      validation.ErrConstraintsMissing,
+		},
+		{
+			name: "should return error when constraint is invalid",
+			constraints: []validation.Constraint{
+				{
+					Type: "unknown",
+				},
+			},
+			expErr: validation.ErrUnkownConstraintType,
+		},
+		{
+			name: "should return validator for valid constraint",
+			constraints: []validation.Constraint{
+				{
+					Type: validation.ConstraintTypeNonEmpty,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// when
+			validators, err := validation.GetValidators(tt.constraints)
+
+			// then
+			if tt.expErr != nil {
+				assert.ErrorIs(t, err, tt.expErr)
+				return
+			}
+			assert.NoError(t, err)
+			assert.NotEmpty(t, validators)
+		})
+	}
 }
 
-func TestConfig(t *testing.T) {
-	config := `
-    validations:
-    - id: Auth.Type
-      constraints:
-      - type: list
-        spec:
-          allowlist: ["oidc"]
-    - id: Auth.Properties.Issuer
-      omitIdCheck: true
-      constraints:
-      - type: non-empty`
+func TestGetValidator(t *testing.T) {
+	// given
+	tests := []struct {
+		name         string
+		constraint   validation.Constraint
+		expErr       error
+		expValidator validation.Validator
+	}{
+		{
+			name: "should return error for empty constraint type",
+			constraint: validation.Constraint{
+				Type: "",
+			},
+			expErr: validation.ErrEmptyConstraintType,
+		},
+		{
+			name: "should return error for unknown constraint type",
+			constraint: validation.Constraint{
+				Type: "unknown",
+			},
+			expErr: validation.ErrUnkownConstraintType,
+		},
+		{
+			name: "should return error when spec is missing for list constraint",
+			constraint: validation.Constraint{
+				Type: validation.ConstraintTypeList,
+			},
+			expErr: validation.ErrConstraintSpecMissing,
+		},
+		{
+			name: "should return error when allow list is missing for list constraint",
+			constraint: validation.Constraint{
+				Type: validation.ConstraintTypeList,
+				Spec: &validation.ConstraintSpec{},
+			},
+			expErr: validation.ErrConstraintAllowListMissing,
+		},
+		{
+			name: "should return validator for valid list constraint",
+			constraint: validation.Constraint{
+				Type: validation.ConstraintTypeList,
+				Spec: &validation.ConstraintSpec{
+					AllowList: []string{"a", "b"},
+				},
+			},
+			expValidator: validation.ListConstraint{},
+		},
+		{
+			name: "should return validator for valid non-empty constraint",
+			constraint: validation.Constraint{
+				Type: validation.ConstraintTypeNonEmpty,
+			},
+			expValidator: validation.NonEmptyConstraint{},
+		},
+		{
+			name: "should return validator for valid non-empty-keys constraint",
+			constraint: validation.Constraint{
+				Type: validation.ConstraintTypeNonEmptyKeys,
+			},
+			expValidator: validation.NonEmptyKeysConstraint{},
+		},
+	}
 
-	v := viper.New()
-	v.SetConfigType("yaml")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// when
+			validator, err := validation.GetValidator(tt.constraint)
 
-	err := v.ReadConfig(strings.NewReader(config))
-	assert.NoError(t, err)
-
-	var cfg Config
-	err = v.Unmarshal(&cfg)
-	assert.NoError(t, err)
-
-	assert.Len(t, cfg.Validations, 2)
-
-	assert.Equal(t, validation.ID("Auth.Type"), cfg.Validations[0].ID)
-	assert.Len(t, cfg.Validations[0].Constraints, 1)
-	assert.Equal(t, "list", cfg.Validations[0].Constraints[0].Type)
-	assert.NotNil(t, cfg.Validations[0].Constraints[0].Spec)
-	assert.NotEmpty(t, cfg.Validations[0].Constraints[0].Spec.AllowList)
-	assert.Equal(t, []string{"oidc"}, cfg.Validations[0].Constraints[0].Spec.AllowList)
-
-	assert.Equal(t, validation.ID("Auth.Properties.Issuer"), cfg.Validations[1].ID)
-	assert.True(t, cfg.Validations[1].OmitIDCheck)
-	assert.Len(t, cfg.Validations[1].Constraints, 1)
-	assert.Equal(t, "non-empty", cfg.Validations[1].Constraints[0].Type)
+			// then
+			if tt.expErr != nil {
+				assert.ErrorIs(t, err, tt.expErr)
+				return
+			}
+			assert.NoError(t, err)
+			assert.IsType(t, tt.expValidator, validator)
+			assert.NotNil(t, validator)
+		})
+	}
 }

@@ -8,17 +8,17 @@ import (
 	"github.com/openkcm/registry/internal/validation"
 )
 
-type Struct struct {
-	Field string      `validationID:"Struct.Field"`
-	Child ChildStruct `validationID:"Struct.Child"`
-	Map   Map         `validationID:"Struct.Map"`
+type Model struct {
+	Field string     `validationID:"Model.Field"`
+	Child ChildModel `validationID:"Model.Child"`
+	Map   Map        `validationID:"Model.Map"`
 }
 
-func (s Struct) Fields() []validation.StructField {
-	return []validation.StructField{}
+func (m Model) Validations() []validation.Field {
+	return []validation.Field{}
 }
 
-type ChildStruct struct {
+type ChildModel struct {
 	Field string `validationID:"Field"`
 }
 
@@ -34,16 +34,16 @@ func (m Map) Map() map[string]any {
 
 func TestGetIDs(t *testing.T) {
 	// when
-	ids, err := validation.GetIDs(Struct{})
+	ids, err := validation.GetIDs(Model{})
 
 	// then
 	assert.NoError(t, err)
 
 	expIDs := []validation.ID{
-		"Struct.Field",
-		"Struct.Child",
-		"Struct.Child.Field",
-		"Struct.Map",
+		"Model.Field",
+		"Model.Child",
+		"Model.Child.Field",
+		"Model.Map",
 	}
 	for _, id := range expIDs {
 		_, exists := ids[id]
@@ -53,9 +53,9 @@ func TestGetIDs(t *testing.T) {
 
 func TestGetValuesByID(t *testing.T) {
 	// given
-	s := Struct{
+	s := Model{
 		Field: "value",
-		Child: ChildStruct{
+		Child: ChildModel{
 			Field: "childValue",
 		},
 		Map: Map{
@@ -68,14 +68,14 @@ func TestGetValuesByID(t *testing.T) {
 
 	// then
 	assert.NoError(t, err)
-	assert.Equal(t, "value", valuesByID["Struct.Field"])
-	assert.Equal(t, "childValue", valuesByID["Struct.Child.Field"])
-	assert.Equal(t, "mapValue", valuesByID["Struct.Map.Key"])
+	assert.Equal(t, "value", valuesByID["Model.Field"])
+	assert.Equal(t, "childValue", valuesByID["Model.Child.Field"])
+	assert.Equal(t, "mapValue", valuesByID["Model.Map.Key"])
 }
 
 func TestGetValuesByID_NilMap(t *testing.T) {
 	// given
-	s := Struct{
+	s := Model{
 		Map: nil,
 	}
 
@@ -84,5 +84,5 @@ func TestGetValuesByID_NilMap(t *testing.T) {
 
 	// then
 	assert.NoError(t, err)
-	assert.Nil(t, valuesByID["Struct.Map"])
+	assert.Nil(t, valuesByID["Model.Map"])
 }
