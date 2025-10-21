@@ -375,51 +375,73 @@ func TestAuthValidation(t *testing.T) {
 
 	subj := authgrpc.NewServiceClient(conn)
 
-	tests := []struct {
-		name       string
-		request    *authgrpc.ApplyAuthRequest
-		expErrCode codes.Code
-	}{
-		{
-			name: "should return error for failed model validation",
-			request: &authgrpc.ApplyAuthRequest{
-				TenantId: "tenant-id",
-				Type:     "oidc",
-			},
-			expErrCode: codes.InvalidArgument,
-		},
-		{
-			name: "should return error for failed configured validation with pre-existing validation ID",
-			request: &authgrpc.ApplyAuthRequest{
-				ExternalId: "external-id",
-				TenantId:   "tenant-id",
-				Type:       "saml",
-			},
-			expErrCode: codes.InvalidArgument,
-		},
-		{
-			name: "should return error for failed configured validation without pre-existing validation ID",
-			request: &authgrpc.ApplyAuthRequest{
-				ExternalId: "external-id",
-				TenantId:   "tenant-id",
-				Type:       "oidc",
-				Properties: map[string]string{
-					"Issuer": "", // validation ID does not exist on compile time
+	t.Run("ApplyAuth should return error for invalid requests", func(t *testing.T) {
+		tests := []struct {
+			name       string
+			request    *authgrpc.ApplyAuthRequest
+			expErrCode codes.Code
+		}{
+			{
+				name: "should return error for failed model validation",
+				request: &authgrpc.ApplyAuthRequest{
+					TenantId: "tenant-id",
+					Type:     "oidc",
 				},
+				expErrCode: codes.InvalidArgument,
 			},
-			expErrCode: codes.InvalidArgument,
-		},
-	}
+			{
+				name: "should return error for failed configured validation with pre-existing validation ID",
+				request: &authgrpc.ApplyAuthRequest{
+					ExternalId: "external-id",
+					TenantId:   "tenant-id",
+					Type:       "saml",
+				},
+				expErrCode: codes.InvalidArgument,
+			},
+			{
+				name: "should return error for failed configured validation without pre-existing validation ID",
+				request: &authgrpc.ApplyAuthRequest{
+					ExternalId: "external-id",
+					TenantId:   "tenant-id",
+					Type:       "oidc",
+					Properties: map[string]string{
+						"Issuer": "", // validation ID Auth.Properties.Issuer is created on startup
+					},
+				},
+				expErrCode: codes.InvalidArgument,
+			},
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// when
-			resp, err := subj.ApplyAuth(t.Context(), tt.request)
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// when
+				resp, err := subj.ApplyAuth(t.Context(), tt.request)
 
-			// then
-			assert.Nil(t, resp)
-			assert.Error(t, err)
-			assert.Equal(t, tt.expErrCode, status.Code(err), err.Error())
+				// then
+				assert.Nil(t, resp)
+				assert.Error(t, err)
+				assert.Equal(t, tt.expErrCode, status.Code(err), err.Error())
+			})
+		}
+	})
+
+	t.Run("GetAuth should return error for invalid request", func(t *testing.T) {
+		resp, err := subj.GetAuth(t.Context(), &authgrpc.GetAuthRequest{
+			ExternalId: "",
 		})
-	}
+
+		assert.Nil(t, resp)
+		assert.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+	})
+
+	t.Run("RemoveAuth should return error for invalid request", func(t *testing.T) {
+		resp, err := subj.RemoveAuth(t.Context(), &authgrpc.RemoveAuthRequest{
+			ExternalId: "",
+		})
+
+		assert.Nil(t, resp)
+		assert.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+	})
 }
