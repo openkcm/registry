@@ -62,7 +62,6 @@ func main() {
 	handleErr("initializing Orbital", err)
 
 	validation := initValidation(cfg.Validations)
-	handleErr("initializing validation", err)
 
 	tenantSrv := service.NewTenant(repository, orbital, meters)
 	systemSrv := service.NewSystem(repository, meters)
