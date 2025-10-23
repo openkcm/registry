@@ -74,14 +74,16 @@ func TestNew(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// when
-			_, err := validation.New(tt.config)
+			v, err := validation.New(tt.config)
 
 			// then
 			if tt.expErr != nil {
 				assert.ErrorIs(t, err, tt.expErr)
+				assert.Nil(t, v)
 				return
 			}
 			assert.NoError(t, err)
+			assert.NotNil(t, v)
 		})
 	}
 }
