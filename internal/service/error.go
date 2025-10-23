@@ -13,19 +13,17 @@ import (
 const (
 	SelectTenantErrMsg      = "could not select tenant"
 	UpdateTenantErrMsg      = "could not update tenant"
-	DeleteTenantErrMsg      = "could not delete tenant"
 	TenantNotFoundMsg       = "tenant not found"
 	TenantUnavailableErrMsg = "tenant is unavailable"
+	InvalidTenantStatusMsg  = "invalid tenant status"
 )
 
 const (
-	SelectSystemErrMsg                  = "could not select system"
-	UpdateSystemErrMsg                  = "could not update system"
-	DeleteSystemErrMsg                  = "could not delete system"
-	SystemNotFoundMsg                   = "system not found"
-	SystemUnavailableErrMsg             = "system is unavailable"
-	TenantStatusTransitionNotAllowedMsg = "tenant status transition not allowed"
-	InvalidTenantStatusMsg              = "invalid tenant status"
+	SelectSystemErrMsg      = "could not select system"
+	UpdateSystemErrMsg      = "could not update system"
+	DeleteSystemErrMsg      = "could not delete system"
+	SystemNotFoundMsg       = "system not found"
+	SystemUnavailableErrMsg = "system is unavailable"
 )
 
 const (
@@ -43,23 +41,18 @@ const (
 )
 
 var (
-	ErrTenantSelect                     = status.Error(codes.Internal, SelectTenantErrMsg)
-	ErrTenantUpdate                     = status.Error(codes.Internal, UpdateTenantErrMsg)
-	ErrTenantDelete                     = status.Error(codes.Internal, DeleteTenantErrMsg)
-	ErrTenantIDFormat                   = status.Error(codes.InvalidArgument, "tenant ID is not valid")
-	ErrTenantNotFound                   = status.Error(codes.NotFound, TenantNotFoundMsg)
-	ErrTenantUnavailable                = status.Error(codes.FailedPrecondition, TenantUnavailableErrMsg)
-	ErrTenantEncoding                   = status.Error(codes.Internal, "failed to encode tenant data")
-	ErrTenantStatusTransitionNotAllowed = errors.New(TenantStatusTransitionNotAllowedMsg)
-	ErrInvalidTenantStatus              = errors.New(InvalidTenantStatusMsg)
+	ErrTenantSelect        = status.Error(codes.Internal, SelectTenantErrMsg)
+	ErrTenantUpdate        = status.Error(codes.Internal, UpdateTenantErrMsg)
+	ErrTenantNotFound      = status.Error(codes.NotFound, TenantNotFoundMsg)
+	ErrTenantUnavailable   = status.Error(codes.FailedPrecondition, TenantUnavailableErrMsg)
+	ErrTenantEncoding      = status.Error(codes.Internal, "failed to encode tenant data")
+	ErrInvalidTenantStatus = errors.New(InvalidTenantStatusMsg)
 )
 
 var (
 	ErrSystemSelect              = status.Error(codes.Internal, SelectSystemErrMsg)
 	ErrSystemUpdate              = status.Error(codes.Internal, UpdateSystemErrMsg)
 	ErrSystemDelete              = status.Error(codes.Internal, DeleteSystemErrMsg)
-	ErrExternalIDIsEmpty         = status.Error(codes.InvalidArgument, "external ID cannot be empty")
-	ErrRegionIsEmpty             = status.Error(codes.InvalidArgument, "region cannot be empty")
 	ErrSystemNotFound            = status.Error(codes.NotFound, SystemNotFoundMsg)
 	ErrSystemIsLinkedToTenant    = status.Error(codes.FailedPrecondition, "system is linked to the tenant")
 	ErrSystemIsNotLinkedToTenant = status.Error(codes.FailedPrecondition, "system is not linked to the tenant")

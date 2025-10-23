@@ -127,3 +127,11 @@ telemetry:
       value: localhost:4317
     secretRef:
       type: insecure
+
+validators:
+  - typeName: model.System
+    fields:
+      - fieldName: Type
+        rules:
+          - type: enum
+            allowedValues: ["system", "test"]
