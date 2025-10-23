@@ -145,23 +145,14 @@ func initLogger(cfg *config.Config) {
 	handleErr("initializing logger", err)
 }
 
-func initValidation(validations []validationpkg.ConfigField) *validationpkg.Validation {
-	validation, err := validationpkg.New(validations...)
+func initValidation(fields []validationpkg.ConfigField) *validationpkg.Validation {
+	validation, err := validationpkg.New(validationpkg.Config{
+		Fields: fields,
+		Models: []validationpkg.Model{
+			&model.Auth{},
+		},
+	})
 	handleErr("initializing validation", err)
-
-	for _, model := range []validationpkg.Model{&model.Auth{}} {
-		err := validation.Register(model.Validations()...)
-		handleErr("registering model validations", err)
-	}
-
-	sources := make([]map[validationpkg.ID]struct{}, 0, 1)
-	for _, input := range []any{&model.Auth{}} {
-		ids, err := validationpkg.GetIDs(input)
-		handleErr("getting IDs", err)
-		sources = append(sources, ids)
-	}
-	err = validation.CheckIDs(sources...)
-	handleErr("checking IDs", err)
 
 	return validation
 }

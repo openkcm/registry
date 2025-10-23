@@ -53,7 +53,7 @@ func TestGetIDs(t *testing.T) {
 
 func TestGetValuesByID(t *testing.T) {
 	// given
-	s := Model{
+	m := Model{
 		Field: "value",
 		Child: ChildModel{
 			Field: "childValue",
@@ -64,7 +64,7 @@ func TestGetValuesByID(t *testing.T) {
 	}
 
 	// when
-	valuesByID, err := validation.GetValuesByID(s)
+	valuesByID, err := validation.GetValues(m)
 
 	// then
 	assert.NoError(t, err)
@@ -75,12 +75,12 @@ func TestGetValuesByID(t *testing.T) {
 
 func TestGetValuesByID_NilMap(t *testing.T) {
 	// given
-	s := Model{
+	m := Model{
 		Map: nil,
 	}
 
 	// when
-	valuesByID, err := validation.GetValuesByID(s)
+	valuesByID, err := validation.GetValues(m)
 
 	// then
 	assert.NoError(t, err)

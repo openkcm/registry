@@ -23,34 +23,13 @@ type (
 	}
 )
 
-// GetIDs gets all validation IDs from the given input model
-// structured as a map where keys are validation IDs.
-func GetIDs(input any) (map[ID]struct{}, error) {
-	decMap := make(map[string]any)
-	config := mapstructure.DecoderConfig{
-		TagName: TagName,
-		Result:  &decMap,
-	}
-	decoder, err := mapstructure.NewDecoder(&config)
-	if err != nil {
-		return nil, err
-	}
-	err = decoder.Decode(input)
-	if err != nil {
-		return nil, err
-	}
-	res := make(map[ID]struct{}, len(decMap))
-	addIDs(res, decMap, "")
-	return res, nil
-}
-
-// GetValuesByID gets all values from the given input model
+// GetValues gets all values from the given model
 // mapped by their validation IDs.
 //
 // If one of the values implements the Map interface,
 // the keys and values of the resulting map will be flattened
 // into the resulting map.
-func GetValuesByID(input any) (map[ID]any, error) {
+func GetValues(model Model) (map[ID]any, error) {
 	decMap := make(map[string]any)
 	config := mapstructure.DecoderConfig{
 		TagName: TagName,
@@ -60,27 +39,13 @@ func GetValuesByID(input any) (map[ID]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = decoder.Decode(input)
+	err = decoder.Decode(model)
 	if err != nil {
 		return nil, err
 	}
 	res := make(map[ID]any)
 	addValuesByID(res, decMap, "")
 	return res, nil
-}
-
-func addIDs(res map[ID]struct{}, m map[string]any, id ID) {
-	for k, v := range m {
-		totalID := ID(k)
-		if id != "" {
-			totalID = id + "." + ID(k)
-		}
-		res[totalID] = struct{}{}
-
-		if m, ok := v.(map[string]any); ok {
-			addIDs(res, m, totalID)
-		}
-	}
 }
 
 func addValuesByID(res map[ID]any, m map[string]any, id ID) {
@@ -97,6 +62,41 @@ func addValuesByID(res map[ID]any, m map[string]any, id ID) {
 
 		if m, ok := v.(Map); ok {
 			addValuesByID(res, m.Map(), totalID)
+		}
+	}
+}
+
+// getIDs gets all validation IDs from the given model
+// structured as a map where keys are validation IDs.
+func getIDs(model Model) (map[ID]struct{}, error) {
+	decMap := make(map[string]any)
+	config := mapstructure.DecoderConfig{
+		TagName: TagName,
+		Result:  &decMap,
+	}
+	decoder, err := mapstructure.NewDecoder(&config)
+	if err != nil {
+		return nil, err
+	}
+	err = decoder.Decode(model)
+	if err != nil {
+		return nil, err
+	}
+	res := make(map[ID]struct{}, len(decMap))
+	addIDs(res, decMap, "")
+	return res, nil
+}
+
+func addIDs(res map[ID]struct{}, m map[string]any, id ID) {
+	for k, v := range m {
+		totalID := ID(k)
+		if id != "" {
+			totalID = id + "." + ID(k)
+		}
+		res[totalID] = struct{}{}
+
+		if m, ok := v.(map[string]any); ok {
+			addIDs(res, m, totalID)
 		}
 	}
 }

@@ -60,7 +60,7 @@ func (a *Auth) ApplyAuth(ctx context.Context, req *authgrpc.ApplyAuthRequest) (*
 		Status:     authgrpc.AuthStatus_AUTH_STATUS_APPLYING.String(),
 	}
 
-	err := a.validateAuth(*auth)
+	err := a.validateAuth(auth)
 	if err != nil {
 		return nil, err
 	}
@@ -295,8 +295,8 @@ func (a *Auth) validateActiveTenant(ctx context.Context, r repository.Repository
 	return checkTenantActive(tenant)
 }
 
-func (a *Auth) validateAuth(auth model.Auth) error {
-	valuesByID, err := validation.GetValuesByID(auth)
+func (a *Auth) validateAuth(auth *model.Auth) error {
+	valuesByID, err := validation.GetValues(auth)
 	if err != nil {
 		return status.Error(codes.Internal, "failed to get auth values by validation ID")
 	}

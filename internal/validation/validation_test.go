@@ -8,9 +8,87 @@ import (
 	"github.com/openkcm/registry/internal/validation"
 )
 
+type MockModel struct {
+	Fields []validation.Field
+}
+
+func (m *MockModel) Validations() []validation.Field {
+	return m.Fields
+}
+
+func TestNew(t *testing.T) {
+	// given
+	tests := []struct {
+		name   string
+		config validation.Config
+		expErr error
+	}{
+		{
+			name: "should return error for invalid config field",
+			config: validation.Config{
+				Fields: []validation.ConfigField{
+					{
+						ID: "",
+					},
+				},
+			},
+			expErr: validation.ErrEmptyID,
+		},
+		{
+			name: "should return error for invalid model validation",
+			config: validation.Config{
+				Models: []validation.Model{
+					&MockModel{
+						Fields: []validation.Field{
+							{
+								ID: "",
+							},
+						},
+					},
+				},
+			},
+			expErr: validation.ErrEmptyID,
+		},
+		{
+			name: "should return error for unknown validation ID",
+			config: validation.Config{
+				Fields: []validation.ConfigField{
+					{
+						ID: "Unknown.ID",
+						Constraints: []validation.Constraint{
+							{
+								Type: validation.ConstraintTypeNonEmpty,
+							},
+						},
+					},
+				},
+			},
+			expErr: validation.ErrIDMustExist,
+		},
+		{
+			name:   "should pass for empty config",
+			config: validation.Config{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// when
+			_, err := validation.New(tt.config)
+
+			// then
+			if tt.expErr != nil {
+				assert.ErrorIs(t, err, tt.expErr)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
 func TestRegisterConfig(t *testing.T) {
 	// given
-	v, err := validation.New()
+	v, err := validation.New(validation.Config{})
 	assert.NoError(t, err)
 
 	validConfigField := validation.ConfigField{
@@ -107,7 +185,7 @@ func TestRegisterConfig(t *testing.T) {
 
 func TestRegister(t *testing.T) {
 	// given
-	v, err := validation.New()
+	v, err := validation.New(validation.Config{})
 	assert.NoError(t, err)
 
 	validField := validation.Field{
@@ -255,7 +333,7 @@ func TestCheckIDs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// when
-			v, err := validation.New()
+			v, err := validation.New(validation.Config{})
 			assert.NoError(t, err)
 			err = v.Register(tt.fields...)
 			assert.NoError(t, err)
@@ -276,7 +354,7 @@ func TestCheckIDs(t *testing.T) {
 		// given
 		fieldID := validation.ID("Field1")
 
-		v, err := validation.New()
+		v, err := validation.New(validation.Config{})
 		assert.NoError(t, err)
 		err = v.RegisterConfig(validation.ConfigField{
 			ID:              fieldID,
@@ -319,7 +397,7 @@ func TestCheckIDs(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	// given
-	v, err := validation.New()
+	v, err := validation.New(validation.Config{})
 	assert.NoError(t, err)
 	fieldName := validation.ID("Field")
 	err = v.Register(validation.Field{
@@ -365,7 +443,7 @@ func TestValidate(t *testing.T) {
 
 func TestValidateAll(t *testing.T) {
 	// given
-	v, err := validation.New()
+	v, err := validation.New(validation.Config{})
 	assert.NoError(t, err)
 
 	field1, field2 := validation.ID("Field1"), validation.ID("Field2")

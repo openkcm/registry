@@ -65,10 +65,9 @@ func TestAuthValidationIDs(t *testing.T) {
 
 func TestAuthValidations(t *testing.T) {
 	// given
-	auth := model.Auth{}
-	v, err := validation.New()
-	assert.NoError(t, err)
-	err = v.Register(auth.Validations()...)
+	v, err := validation.New(validation.Config{
+		Models: []validation.Model{&model.Auth{}},
+	})
 	assert.NoError(t, err)
 
 	validAuth := model.Auth{
@@ -143,7 +142,7 @@ func TestAuthValidations(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// when
 			auth := tt.mutate(validAuth)
-			valuesByID, err := validation.GetValuesByID(auth)
+			valuesByID, err := validation.GetValues(&auth)
 			assert.NoError(t, err)
 
 			err = v.ValidateAll(valuesByID)
