@@ -382,7 +382,7 @@ func TestAuthValidation(t *testing.T) {
 			expErrCode codes.Code
 		}{
 			{
-				name: "should return error for failed model validation",
+				name: "should return error for failed model validation (Auth.ExternalId)",
 				request: &authgrpc.ApplyAuthRequest{
 					TenantId: "tenant-id",
 					Type:     "oidc",
@@ -390,7 +390,7 @@ func TestAuthValidation(t *testing.T) {
 				expErrCode: codes.InvalidArgument,
 			},
 			{
-				name: "should return error for failed configured validation with pre-existing validation ID",
+				name: "should return error for failed configured validation with pre-existing validation ID (Auth.Type)",
 				request: &authgrpc.ApplyAuthRequest{
 					ExternalId: "external-id",
 					TenantId:   "tenant-id",
@@ -399,7 +399,7 @@ func TestAuthValidation(t *testing.T) {
 				expErrCode: codes.InvalidArgument,
 			},
 			{
-				name: "should return error for failed configured validation without pre-existing validation ID",
+				name: "should return error for failed configured validation without pre-existing validation ID (Auth.Properties.Issuer)",
 				request: &authgrpc.ApplyAuthRequest{
 					ExternalId: "external-id",
 					TenantId:   "tenant-id",
