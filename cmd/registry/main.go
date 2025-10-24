@@ -29,8 +29,10 @@ import (
 
 	"github.com/openkcm/registry/internal/config"
 	"github.com/openkcm/registry/internal/interceptor"
+	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository/sql"
 	"github.com/openkcm/registry/internal/service"
+	validationpkg "github.com/openkcm/registry/internal/validation"
 )
 
 var BuildInfo = "{}"
@@ -59,9 +61,11 @@ func main() {
 	orbital, err := service.NewOrbital(ctx, db, cfg.Orbital)
 	handleErr("initializing Orbital", err)
 
+	validation := initValidation(cfg.Validations)
+
 	tenantSrv := service.NewTenant(repository, orbital, meters)
 	systemSrv := service.NewSystem(repository, meters)
-	authSrv := service.NewAuth(repository, orbital)
+	authSrv := service.NewAuth(repository, orbital, validation)
 
 	grpcServer, err := setupGRPCServer(ctx, cfg)
 	handleErr("initializing gRPC server", err)
@@ -138,6 +142,18 @@ func initOTLP(ctx context.Context, cfg *config.Config) {
 func initLogger(cfg *config.Config) {
 	err := logger.InitAsDefault(cfg.Logger, cfg.Application)
 	handleErr("initializing logger", err)
+}
+
+func initValidation(fields []validationpkg.ConfigField) *validationpkg.Validation {
+	validation, err := validationpkg.New(validationpkg.Config{
+		Fields: fields,
+		Models: []validationpkg.Model{
+			&model.Auth{},
+		},
+	})
+	handleErr("initializing validation", err)
+
+	return validation
 }
 
 func handleErr(msg string, err error) {

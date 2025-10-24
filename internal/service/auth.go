@@ -15,6 +15,7 @@ import (
 
 	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository"
+	"github.com/openkcm/registry/internal/validation"
 )
 
 // Auth implements the procedure calls defined as protobufs.
@@ -22,16 +23,18 @@ import (
 type Auth struct {
 	authgrpc.UnimplementedServiceServer
 
-	repo    repository.Repository
-	orbital *Orbital
+	repo       repository.Repository
+	orbital    *Orbital
+	validation *validation.Validation
 }
 
 // NewAuth creates and return a new instance of Auth.
 // It also registers the job handlers to the Orbital instance.
-func NewAuth(repo repository.Repository, orbital *Orbital) *Auth {
+func NewAuth(repo repository.Repository, orbital *Orbital, validation *validation.Validation) *Auth {
 	a := &Auth{
-		repo:    repo,
-		orbital: orbital,
+		repo:       repo,
+		orbital:    orbital,
+		validation: validation,
 	}
 
 	for _, jobType := range []string{
@@ -50,14 +53,19 @@ func (a *Auth) ApplyAuth(ctx context.Context, req *authgrpc.ApplyAuthRequest) (*
 	slogctx.Debug(ctx, "applying auth")
 
 	auth := &model.Auth{
-		ExternalID: model.ExternalID(req.ExternalId),
-		TenantID:   model.ID(req.TenantId),
-		Type:       model.AuthType(req.Type),
+		ExternalID: req.ExternalId,
+		TenantID:   req.TenantId,
+		Type:       req.Type,
 		Properties: req.Properties,
-		Status:     model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_APPLYING.String()),
+		Status:     authgrpc.AuthStatus_AUTH_STATUS_APPLYING.String(),
 	}
 
-	err := a.repo.Transaction(ctx, func(ctx context.Context, r repository.Repository) error {
+	err := a.validateAuth(auth)
+	if err != nil {
+		return nil, err
+	}
+
+	err = a.repo.Transaction(ctx, func(ctx context.Context, r repository.Repository) error {
 		err := a.validateActiveTenant(ctx, r, auth.TenantID)
 		if err != nil {
 			slogctx.Error(ctx, "tenant is invalid or not active", "error", err)
@@ -99,7 +107,12 @@ func (a *Auth) GetAuth(ctx context.Context, req *authgrpc.GetAuthRequest) (*auth
 	ctx = slogctx.With(ctx, "externalID", req.ExternalId)
 	slogctx.Debug(ctx, "getting auth")
 
-	auth, err := getAuth(ctx, a.repo, model.ExternalID(req.ExternalId))
+	err := a.validation.Validate(model.AuthExternalIDValidationID, req.ExternalId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid external ID: %v", err)
+	}
+
+	auth, err := getAuth(ctx, a.repo, req.ExternalId)
 	if errors.Is(err, ErrAuthNotFound) {
 		return nil, status.Error(codes.NotFound, "auth not found")
 	}
@@ -119,13 +132,18 @@ func (a *Auth) RemoveAuth(ctx context.Context, req *authgrpc.RemoveAuthRequest) 
 	ctx = slogctx.With(ctx, "externalID", req.ExternalId)
 	slogctx.Debug(ctx, "removing auth")
 
-	err := a.repo.Transaction(ctx, func(ctx context.Context, r repository.Repository) error {
-		auth, err := getAuth(ctx, r, model.ExternalID(req.ExternalId))
+	err := a.validation.Validate(model.AuthExternalIDValidationID, req.ExternalId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid external ID: %v", err)
+	}
+
+	err = a.repo.Transaction(ctx, func(ctx context.Context, r repository.Repository) error {
+		auth, err := getAuth(ctx, r, req.ExternalId)
 		if err != nil {
 			return err
 		}
 
-		if auth.Status != model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String()) {
+		if auth.Status != authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String() {
 			slogctx.Error(ctx, AuthInvalidStatusMsg, "status", auth.Status)
 			return ErrorWithParams(ErrAuthInvalidStatus, "status", auth.Status)
 		}
@@ -137,9 +155,9 @@ func (a *Auth) RemoveAuth(ctx context.Context, req *authgrpc.RemoveAuthRequest) 
 		}
 
 		err = patchAuth(ctx, r,
-			model.ExternalID(req.ExternalId),
+			req.ExternalId,
 			func(auth *model.Auth) {
-				auth.Status = model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_REMOVING.String())
+				auth.Status = authgrpc.AuthStatus_AUTH_STATUS_REMOVING.String()
 			},
 		)
 		if err != nil {
@@ -166,7 +184,7 @@ func (a *Auth) RemoveAuth(ctx context.Context, req *authgrpc.RemoveAuthRequest) 
 
 // ConfirmJob confirms that the auth associated with the job exists.
 func (a *Auth) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
-	auth, err := getAuth(ctx, a.repo, model.ExternalID(job.ExternalID))
+	auth, err := getAuth(ctx, a.repo, job.ExternalID)
 	if err != nil {
 		slogctx.Error(ctx, "failed to get auth for job confirmation", "error", err)
 		return orbital.JobConfirmResult{}, err
@@ -176,7 +194,7 @@ func (a *Auth) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConf
 	case authgrpc.AuthAction_AUTH_ACTION_APPLY_AUTH.String():
 		return orbital.JobConfirmResult{Done: true}, nil
 	case authgrpc.AuthAction_AUTH_ACTION_REMOVE_AUTH.String():
-		if auth.Status != model.AuthStatus(authgrpc.AuthStatus_AUTH_STATUS_REMOVING.String()) {
+		if auth.Status != authgrpc.AuthStatus_AUTH_STATUS_REMOVING.String() {
 			slogctx.Error(ctx, AuthInvalidStatusMsg, "status", auth.Status)
 			return orbital.JobConfirmResult{
 				IsCanceled:           true,
@@ -247,9 +265,9 @@ func (a *Auth) HandleJobDone(ctx context.Context, job orbital.Job) error {
 	}
 
 	err := patchAuth(ctx, a.repo,
-		model.ExternalID(job.ExternalID),
+		job.ExternalID,
 		func(auth *model.Auth) {
-			auth.Status = model.AuthStatus(status.String())
+			auth.Status = status.String()
 		},
 	)
 	if errors.Is(err, ErrAuthNotFound) {
@@ -269,12 +287,26 @@ func (a *Auth) HandleJobFailed(ctx context.Context, job orbital.Job) error {
 	return a.handleJobAborted(ctx, job)
 }
 
-func (a *Auth) validateActiveTenant(ctx context.Context, r repository.Repository, tenantID model.ID) error {
-	tenant, err := getTenant(ctx, r, tenantID)
+func (a *Auth) validateActiveTenant(ctx context.Context, r repository.Repository, tenantID string) error {
+	tenant, err := getTenant(ctx, r, model.ID(tenantID))
 	if err != nil {
 		return err
 	}
 	return checkTenantActive(tenant)
+}
+
+func (a *Auth) validateAuth(auth *model.Auth) error {
+	valuesByID, err := validation.GetValues(auth)
+	if err != nil {
+		return status.Error(codes.Internal, "failed to get auth values by validation ID")
+	}
+
+	err = a.validation.ValidateAll(valuesByID)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "invalid auth: %v", err)
+	}
+
+	return nil
 }
 
 func (a *Auth) prepareJob(ctx context.Context, auth *model.Auth, jobType string) error {
@@ -285,7 +317,7 @@ func (a *Auth) prepareJob(ctx context.Context, auth *model.Auth, jobType string)
 
 	err = a.orbital.PrepareJob(ctx,
 		authData,
-		auth.ExternalID.String(),
+		auth.ExternalID,
 		jobType,
 	)
 	if err != nil {
@@ -308,9 +340,9 @@ func (a *Auth) handleJobAborted(ctx context.Context, job orbital.Job) error {
 	}
 
 	err := patchAuth(ctx, a.repo,
-		model.ExternalID(job.ExternalID),
+		job.ExternalID,
 		func(auth *model.Auth) {
-			auth.Status = model.AuthStatus(status.String())
+			auth.Status = status.String()
 			auth.ErrorMessage = job.ErrorMessage
 		},
 	)
@@ -321,7 +353,7 @@ func (a *Auth) handleJobAborted(ctx context.Context, job orbital.Job) error {
 	return err
 }
 
-func getAuth(ctx context.Context, r repository.Repository, id model.ExternalID) (*model.Auth, error) {
+func getAuth(ctx context.Context, r repository.Repository, id string) (*model.Auth, error) {
 	auth := &model.Auth{
 		ExternalID: id,
 	}
@@ -338,7 +370,7 @@ func getAuth(ctx context.Context, r repository.Repository, id model.ExternalID) 
 	return auth, nil
 }
 
-func patchAuth(ctx context.Context, r repository.Repository, id model.ExternalID, updateFunc func(*model.Auth)) error {
+func patchAuth(ctx context.Context, r repository.Repository, id string, updateFunc func(*model.Auth)) error {
 	auth := &model.Auth{
 		ExternalID: id,
 	}
