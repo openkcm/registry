@@ -148,3 +148,13 @@ validations:
     - type: list
       spec:
         allowlist: ["region","region-2","test-region","region-tenant"]
+  - id: System.Type
+    constraints:
+    - type: list
+      spec:
+        allowlist: ["system", "application"]
+  - id: System.Region
+    constraints:
+    - type: list
+      spec:
+        allowlist: ["region-system", "region-application"]

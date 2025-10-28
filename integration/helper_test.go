@@ -30,6 +30,14 @@ import (
 
 const tenantOwnerType1 = "ownerType1"
 
+// Allowed system values based on the constraints defined in config.yaml
+var (
+	// System.Type allowed value
+	allowedSystemType = "application"
+	// System.Region allowed value
+	allowedSystemRegion = "region-application"
+)
+
 var ErrMissingSvrPort = errors.New("server port is missing")
 
 func loadConfig() (*config.Config, error) {
@@ -136,8 +144,8 @@ func validRegisterSystemReq() *systemgrpc.RegisterSystemRequest {
 		ExternalId: validRandID(),
 		L2KeyId:    "key123",
 		Status:     typespb.Status_STATUS_AVAILABLE,
-		Region:     "region",
-		Type:       "system",
+		Region:     allowedSystemRegion,
+		Type:       allowedSystemType,
 		Labels: map[string]string{
 			"key1": "value1",
 			"key2": "value2",

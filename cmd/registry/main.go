@@ -64,7 +64,7 @@ func main() {
 	validation := initValidation(cfg.Validations)
 
 	tenantSrv := service.NewTenant(repository, orbital, meters, validation)
-	systemSrv := service.NewSystem(repository, meters)
+	systemSrv := service.NewSystem(repository, meters, validation)
 	authSrv := service.NewAuth(repository, orbital, validation)
 
 	grpcServer, err := setupGRPCServer(ctx, cfg)
@@ -148,8 +148,9 @@ func initValidation(fields []validationpkg.ConfigField) *validationpkg.Validatio
 	validation, err := validationpkg.New(validationpkg.Config{
 		Fields: fields,
 		Models: []validationpkg.Model{
-			&model.Auth{},
 			&model.Tenant{},
+			&model.Auth{},
+			&model.System{},
 		},
 	})
 	handleErr("initializing validation", err)
