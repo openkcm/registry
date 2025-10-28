@@ -225,8 +225,8 @@ func TestTenantReconciliation(t *testing.T) {
 				// given
 				tenant := validTenant()
 				tenant.ID = tt.tenantID
-				tenant.Region = operatortest.Region
 				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+				tenant.Region = operatortest.Region
 				err := createTenantInDB(ctx, db, tenant)
 				assert.NoError(t, err)
 				defer func() {
