@@ -325,3 +325,24 @@ config:
       enabled: false
     logs:
       enabled: false
+
+validations:
+  - id: Auth.Type
+    constraints:
+    - type: list
+      spec:
+        allowlist: ["oidc"]
+  - id: Auth.Properties.Issuer
+    skipIfNotExists: true
+    constraints:
+    - type: non-empty
+  - id: Tenant.OwnerType
+    constraints:
+    - type: list
+      spec:
+        allowlist: ["customerID","costCenter"]
+  - id: Tenant.Region
+    constraints:
+    - type: list
+      spec:
+        allowlist: ["region1","region2"]
