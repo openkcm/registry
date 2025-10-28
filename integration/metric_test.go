@@ -496,8 +496,9 @@ func TestSystemMetrics(t *testing.T) {
 				t.Run("for unlinking if error occurs", func(t *testing.T) {
 					// Given
 					req := validRegisterSystemReq()
-					req.Region = systemMetricsRegion
 					req.TenantId = tenant.ID
+					req.Region = systemMetricsRegion
+
 					_, err := sSubj.RegisterSystem(ctx, req)
 					assert.NoError(t, err)
 					defer func() {
