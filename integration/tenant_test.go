@@ -289,74 +289,49 @@ func TestTenantValidation(t *testing.T) {
 	t.Run("RegisterTenant", func(t *testing.T) {
 		t.Run("should return an error if", func(t *testing.T) {
 			// given
-			invalidRequests := map[string]*tenantgrpc.RegisterTenantRequest{
-				"ownerID is empty": {
-					Name:      "SuccessFactor",
-					Id:        validRandID(),
-					Region:    "region",
-					OwnerId:   "",
-					OwnerType: "costCenter",
-					Role:      tenantgrpc.Role_ROLE_TEST,
-					Labels: map[string]string{
-						"key1": "value1",
-						"key2": "value2",
-					},
+			tts := map[string]func(t *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest{
+				"ownerID is empty": func(req *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
+					req.OwnerId = ""
+					return req
 				},
-				"request is empty": {},
-				"ownerType is empty": {
-					Name:      "SuccessFactor",
-					Id:        validRandID(),
-					Region:    "region",
-					OwnerId:   "customer-123",
-					OwnerType: "",
-					Role:      tenantgrpc.Role_ROLE_TEST,
-					Labels: map[string]string{
-						"key1": "value1",
-						"key2": "value2",
-					},
+				"request is empty": func(_ *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
+					return &tenantgrpc.RegisterTenantRequest{}
 				},
-				"ownerType is unknown": {
-					Name:      "SuccessFactor",
-					Id:        validRandID(),
-					Region:    "region",
-					OwnerId:   "customer-123",
-					OwnerType: "unknown",
-					Role:      tenantgrpc.Role_ROLE_TEST,
-					Labels: map[string]string{
-						"key1": "value1",
-						"key2": "value2",
-					},
+				"ownerType is empty": func(req *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
+					req.OwnerType = ""
+					return req
 				},
-				"role is unspecified": {
-					Name:      "SuccessFactor",
-					Id:        validRandID(),
-					Region:    "region",
-					OwnerId:   "customer-123",
-					OwnerType: "costCenter",
-					Role:      tenantgrpc.Role_ROLE_UNSPECIFIED,
-					Labels: map[string]string{
-						"key1": "value1",
-						"key2": "value2",
-					},
+				"ownerType is unknown": func(req *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
+					req.OwnerType = "unknown"
+					return req
 				},
-				"region is empty": {
-					Name:      "SuccessFactor",
-					Id:        validRandID(),
-					Region:    "",
-					OwnerId:   "customer-123",
-					OwnerType: "costCenter",
-					Role:      tenantgrpc.Role_ROLE_UNSPECIFIED,
-					Labels: map[string]string{
-						"key1": "value1",
-						"key2": "value2",
-					},
+				"role is unspecified": func(req *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
+					req.Role = tenantgrpc.Role_ROLE_UNSPECIFIED
+					return req
+				},
+				"region is empty": func(req *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
+					req.Region = ""
+					return req
 				},
 			}
 
-			for reason, req := range invalidRequests {
+			for reason, requestTransformer := range tts {
 				t.Run(reason, func(t *testing.T) {
+					validRequest := &tenantgrpc.RegisterTenantRequest{
+						Name:      "SuccessFactor",
+						Id:        validRandID(),
+						Region:    "region",
+						OwnerId:   "ownerID",
+						OwnerType: "costCenter",
+						Role:      tenantgrpc.Role_ROLE_TEST,
+						Labels: map[string]string{
+							"key1": "value1",
+							"key2": "value2",
+						},
+					}
+
 					// when
-					resp, err := tSubj.RegisterTenant(ctx, req)
+					resp, err := tSubj.RegisterTenant(ctx, requestTransformer(validRequest))
 
 					// then
 					assert.Error(t, err)
@@ -830,7 +805,7 @@ func TestTenantValidation(t *testing.T) {
 				actTenants, err := listTenants(ctx, tSubj)
 				assert.NoError(t, err)
 				assert.Len(t, actTenants.GetTenants(), 1)
-				assert.Equal(t, 3, len(actTenants.GetTenants()[0].GetLabels()))
+				assert.Len(t, actTenants.GetTenants()[0].GetLabels(), 3)
 				assert.Equal(t, "value12", actTenants.GetTenants()[0].GetLabels()["key1"])
 				assert.Equal(t, "value2", actTenants.GetTenants()[0].GetLabels()["key2"])
 				assert.Equal(t, "value3", actTenants.GetTenants()[0].GetLabels()["key3"])
@@ -936,7 +911,7 @@ func TestTenantValidation(t *testing.T) {
 				actTenants, err := listTenants(ctx, tSubj)
 				assert.NoError(t, err)
 				assert.Len(t, actTenants.GetTenants(), 1)
-				assert.Equal(t, 1, len(actTenants.GetTenants()[0].GetLabels()))
+				assert.Len(t, actTenants.GetTenants()[0].GetLabels(), 1)
 				assert.Equal(t, "value2", actTenants.GetTenants()[0].GetLabels()["key2"])
 				_, ok := actTenants.GetTenants()[0].GetLabels()["key1"]
 				assert.False(t, ok, "key1 should have been removed")
@@ -966,7 +941,7 @@ func TestTenantValidation(t *testing.T) {
 				actTenants, err := listTenants(ctx, tSubj)
 				assert.NoError(t, err)
 				assert.Len(t, actTenants.GetTenants(), 1)
-				assert.Equal(t, 2, len(actTenants.GetTenants()[0].GetLabels()))
+				assert.Len(t, actTenants.GetTenants()[0].GetLabels(), 2)
 			})
 		})
 
@@ -1336,7 +1311,7 @@ func TestListTenantsPagination(t *testing.T) {
 				assert.Equal(t, len(tenants), len(res1.Tenants)+len(res2.Tenants))
 
 				for _, prevTenants := range res1.GetTenants() {
-					assert.False(t, prevTenants.Id == res2.GetTenants()[0].Id)
+					assert.NotEqual(t, prevTenants.Id, res2.GetTenants()[0].Id)
 				}
 			})
 		})
