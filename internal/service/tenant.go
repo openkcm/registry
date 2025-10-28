@@ -18,6 +18,7 @@ import (
 
 	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository"
+	"github.com/openkcm/registry/internal/validation"
 )
 
 // Tenant implements the procedure calls defined as protobufs.
@@ -25,9 +26,10 @@ import (
 type Tenant struct {
 	tenantgrpc.UnimplementedServiceServer
 
-	repo    repository.Repository
-	orbital *Orbital
-	meters  *Meters
+	repo       repository.Repository
+	orbital    *Orbital
+	meters     *Meters
+	validation *validation.Validation
 }
 
 type (
@@ -36,7 +38,7 @@ type (
 	orbitalJobFunc     func(ctx context.Context, tenant *model.Tenant) error
 
 	patchTenantParams struct {
-		id           model.ID
+		id           string
 		updateFunc   tenantUpdateFunc
 		validateFunc tenantValidateFunc
 		jobFunc      orbitalJobFunc
@@ -44,11 +46,12 @@ type (
 )
 
 // NewTenant creates and returns a new instance of Tenant.
-func NewTenant(repo repository.Repository, orbital *Orbital, meters *Meters) *Tenant {
+func NewTenant(repo repository.Repository, orbital *Orbital, meters *Meters, validation *validation.Validation) *Tenant {
 	t := &Tenant{
-		repo:    repo,
-		orbital: orbital,
-		meters:  meters,
+		repo:       repo,
+		orbital:    orbital,
+		meters:     meters,
+		validation: validation,
 	}
 
 	// Register tenant service as job handler for tenant-related actions
@@ -68,18 +71,18 @@ func NewTenant(repo repository.Repository, orbital *Orbital, meters *Meters) *Te
 func (t *Tenant) RegisterTenant(ctx context.Context, in *tenantgrpc.RegisterTenantRequest) (*tenantgrpc.RegisterTenantResponse, error) {
 	slogctx.Debug(ctx, "RegisterTenant called", "tenantId", in.GetId(), "tenantName", in.GetName(), "tenantRegion", in.GetRegion())
 	tenant := &model.Tenant{
-		Name:            model.Name(in.GetName()),
-		ID:              model.ID(in.GetId()),
-		Region:          model.Region(in.GetRegion()),
-		OwnerID:         model.OwnerID(in.GetOwnerId()),
-		OwnerType:       model.OwnerType(in.GetOwnerType()),
+		Name:            in.GetName(),
+		ID:              in.GetId(),
+		Region:          in.GetRegion(),
+		OwnerID:         in.GetOwnerId(),
+		OwnerType:       in.GetOwnerType(),
 		Status:          model.TenantStatus(tenantgrpc.Status_STATUS_PROVISIONING.String()),
 		StatusUpdatedAt: time.Now(),
-		Role:            model.Role(in.GetRole().String()),
+		Role:            in.GetRole().String(),
 		Labels:          in.GetLabels(),
 	}
 
-	if err := tenant.Validate(); err != nil {
+	if err := t.validateTenant(tenant); err != nil {
 		return nil, err
 	}
 
@@ -99,7 +102,7 @@ func (t *Tenant) RegisterTenant(ctx context.Context, in *tenantgrpc.RegisterTena
 			return ErrTenantEncoding
 		}
 
-		err = t.orbital.PrepareJob(ctx, data, tenant.ID.String(), tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String())
+		err = t.orbital.PrepareJob(ctx, data, tenant.ID, tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String())
 		if err != nil {
 			return status.Error(codes.Internal, "failed to start tenant provisioning job")
 		}
@@ -112,10 +115,10 @@ func (t *Tenant) RegisterTenant(ctx context.Context, in *tenantgrpc.RegisterTena
 		return nil, err
 	}
 
-	t.meters.handleTenantRegistration(ctx, string(tenant.Region))
+	t.meters.handleTenantRegistration(ctx, tenant.Region)
 
 	return &tenantgrpc.RegisterTenantResponse{
-		Id: tenant.ID.String(),
+		Id: tenant.ID,
 	}, nil
 }
 
@@ -169,13 +172,13 @@ func (t *Tenant) ListTenants(ctx context.Context, in *tenantgrpc.ListTenantsRequ
 func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequest) (*tenantgrpc.BlockTenantResponse, error) {
 	slogctx.Debug(ctx, "BlockTenant called", "tenantId", in.GetId())
 
-	id := model.ID(in.GetId())
-	if err := id.Validate(); err != nil {
-		return nil, err
+	err := t.validation.Validate(model.TenantIDValidationID, in.GetId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
 	}
 
-	err := t.patchTenant(ctx, patchTenantParams{
-		id: id,
+	err = t.patchTenant(ctx, patchTenantParams{
+		id: in.GetId(),
 		updateFunc: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKING.String()))
 		},
@@ -186,7 +189,7 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 				slogctx.Error(ctx, "failed to encode tenant data", "error", err)
 				return ErrTenantEncoding
 			}
-			return t.orbital.PrepareJob(ctx, data, tenant.ID.String(), tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String())
+			return t.orbital.PrepareJob(ctx, data, tenant.ID, tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String())
 		},
 	})
 	if err != nil {
@@ -203,13 +206,13 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenantRequest) (*tenantgrpc.UnblockTenantResponse, error) {
 	slogctx.Debug(ctx, "UnblockTenant called", "tenantId", in.GetId())
 
-	id := model.ID(in.GetId())
-	if err := id.Validate(); err != nil {
-		return nil, err
+	err := t.validation.Validate(model.TenantIDValidationID, in.GetId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
 	}
 
-	err := t.patchTenant(ctx, patchTenantParams{
-		id: id,
+	err = t.patchTenant(ctx, patchTenantParams{
+		id: in.GetId(),
 		updateFunc: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_UNBLOCKING.String()))
 		},
@@ -220,7 +223,7 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 				slogctx.Error(ctx, "failed to encode tenant data", "error", err)
 				return ErrTenantEncoding
 			}
-			return t.orbital.PrepareJob(ctx, data, tenant.ID.String(), tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String())
+			return t.orbital.PrepareJob(ctx, data, tenant.ID, tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String())
 		},
 	})
 	if err != nil {
@@ -235,17 +238,17 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTenantRequest) (*tenantgrpc.TerminateTenantResponse, error) {
 	slogctx.Debug(ctx, "TerminateTenant called", "tenantId", in.GetId())
 
-	id := model.ID(in.GetId())
-	if err := id.Validate(); err != nil {
+	err := t.validation.Validate(model.TenantIDValidationID, in.GetId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
+	}
+
+	if err := assertNoSystemLinks(ctx, t.repo, in.GetId()); err != nil {
 		return nil, err
 	}
 
-	if err := assertNoSystemLinks(ctx, t.repo, id.String()); err != nil {
-		return nil, err
-	}
-
-	err := t.patchTenant(ctx, patchTenantParams{
-		id: id,
+	err = t.patchTenant(ctx, patchTenantParams{
+		id: in.GetId(),
 		updateFunc: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATING.String()))
 		},
@@ -256,7 +259,7 @@ func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTe
 				slogctx.Error(ctx, "failed to encode tenant data", "error", err)
 				return ErrTenantEncoding
 			}
-			return t.orbital.PrepareJob(ctx, data, tenant.ID.String(), tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String())
+			return t.orbital.PrepareJob(ctx, data, tenant.ID, tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String())
 		},
 	})
 	if err != nil {
@@ -277,7 +280,7 @@ func (t *Tenant) SetTenantLabels(ctx context.Context, in *tenantgrpc.SetTenantLa
 	}
 
 	err := t.patchTenant(ctx, patchTenantParams{
-		id: model.ID(in.GetId()),
+		id: in.GetId(),
 		updateFunc: func(tenant *model.Tenant) {
 			if tenant.Labels == nil {
 				tenant.Labels = make(model.Labels)
@@ -306,7 +309,7 @@ func (t *Tenant) RemoveTenantLabels(ctx context.Context, in *tenantgrpc.RemoveTe
 	}
 
 	err := t.patchTenant(ctx, patchTenantParams{
-		id: model.ID(in.GetId()),
+		id: in.GetId(),
 		updateFunc: func(tenant *model.Tenant) {
 			if tenant.Labels == nil {
 				return
@@ -331,12 +334,12 @@ func (t *Tenant) RemoveTenantLabels(ctx context.Context, in *tenantgrpc.RemoveTe
 func (t *Tenant) GetTenant(ctx context.Context, in *tenantgrpc.GetTenantRequest) (*tenantgrpc.GetTenantResponse, error) {
 	slogctx.Debug(ctx, "GetTenant called", "tenantId", in.GetId())
 
-	err := model.ID(in.GetId()).Validate()
+	err := t.validation.Validate(model.TenantIDValidationID, in.GetId())
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
 	}
 
-	tenant, err := getTenant(ctx, t.repo, model.ID(in.GetId()))
+	tenant, err := getTenant(ctx, t.repo, in.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -348,7 +351,7 @@ func (t *Tenant) GetTenant(ctx context.Context, in *tenantgrpc.GetTenantRequest)
 
 // ConfirmJob checks if a job can be confirmed based on tenant existence and tenant status.
 func (t *Tenant) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
-	tenant, err := getTenant(ctx, t.repo, model.ID(job.ExternalID))
+	tenant, err := getTenant(ctx, t.repo, job.ExternalID)
 	if err != nil {
 		slogctx.Error(ctx, "failed to load tenant for job", "error", err, "jobID", job.ID.String())
 		return orbital.JobConfirmResult{}, err
@@ -424,7 +427,7 @@ func (t *Tenant) HandleJobCanceled(ctx context.Context, job orbital.Job) error {
 // HandleJobDone applies the changes to the tenant based on the job type when the job is done.
 func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 	return t.patchTenant(ctx, patchTenantParams{
-		id: model.ID(job.ExternalID),
+		id: job.ExternalID,
 		updateFunc: func(tenant *model.Tenant) {
 			switch job.Type {
 			case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String(), tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String():
@@ -440,10 +443,10 @@ func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 
 func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTenantUserGroupsRequest) (*tenantgrpc.SetTenantUserGroupsResponse, error) {
 	slogctx.Debug(ctx, "SetTenantUserGroups called", "tenantId", in.GetId())
-	tenantID := model.ID(in.GetId())
-	err := tenantID.Validate()
+
+	err := t.validation.Validate(model.TenantIDValidationID, in.GetId())
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
 	}
 
 	err = model.UserGroups(in.GetUserGroups()).Validate()
@@ -452,7 +455,7 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 	}
 
 	err = t.patchTenant(ctx, patchTenantParams{
-		id: tenantID,
+		id: in.GetId(),
 		updateFunc: func(tenant *model.Tenant) {
 			tenant.UserGroups = in.GetUserGroups()
 		},
@@ -466,7 +469,7 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 
 func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
 	return t.patchTenant(ctx, patchTenantParams{
-		id: model.ID(job.ExternalID),
+		id: job.ExternalID,
 		updateFunc: func(tenant *model.Tenant) {
 			switch job.Type {
 			case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String():
@@ -485,11 +488,9 @@ func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
 // validateSetTenantLabelsRequest validates the SetTenantLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRequest) error {
-	id := model.ID(in.GetId())
-
-	err := id.Validate()
+	err := t.validation.Validate(model.TenantIDValidationID, in.GetId())
 	if err != nil {
-		return err
+		return status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
 	}
 
 	if len(in.GetLabels()) == 0 {
@@ -497,7 +498,6 @@ func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRe
 	}
 
 	labels := model.Labels(in.GetLabels())
-
 	err = labels.Validate()
 	if err != nil {
 		return err
@@ -509,11 +509,9 @@ func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRe
 // validateRemoveTenantLabelsRequest validates the RemoveTenantLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (t *Tenant) validateRemoveTenantLabelsRequest(in *tenantgrpc.RemoveTenantLabelsRequest) error {
-	id := model.ID(in.GetId())
-
-	err := id.Validate()
+	err := t.validation.Validate(model.TenantIDValidationID, in.GetId())
 	if err != nil {
-		return err
+		return status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
 	}
 
 	if len(in.GetLabelKeys()) == 0 {
@@ -574,7 +572,7 @@ func (t *Tenant) patchTenant(ctx context.Context, params patchTenantParams) erro
 }
 
 // getTenant queries the Tenant by its ID.
-func getTenant(ctx context.Context, r repository.Repository, id model.ID) (*model.Tenant, error) {
+func getTenant(ctx context.Context, r repository.Repository, id string) (*model.Tenant, error) {
 	tenant := &model.Tenant{
 		ID: id,
 	}
@@ -617,7 +615,7 @@ func (t *Tenant) buildListTenantsQuery(in *tenantgrpc.ListTenantsRequest) (*repo
 	}
 
 	if in.GetOwnerType() != "" {
-		err := model.OwnerType(in.GetOwnerType()).Validate()
+		err := t.validation.Validate(model.TenantOwnerTypeValidationID, in.GetOwnerType())
 		if err != nil {
 			return nil, err
 		}
@@ -696,4 +694,22 @@ func jobTypeToStatus(jobType string) (tenantgrpc.Status, error) {
 	default:
 		return tenantgrpc.Status_STATUS_UNSPECIFIED, fmt.Errorf("%w: %s", ErrUnexpectedJobType, jobType)
 	}
+}
+
+func (t *Tenant) validateTenant(tenant *model.Tenant) error {
+	valuesByID, err := validation.GetValues(tenant)
+	if err != nil {
+		return status.Error(codes.Internal, "failed to get tenant values by validation ID")
+	}
+
+	err = t.validation.ValidateAll(valuesByID)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "invalid tenant: %v", err)
+	}
+
+	err = tenant.Labels.Validate()
+	if err != nil {
+		return err
+	}
+	return nil
 }

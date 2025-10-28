@@ -224,18 +224,18 @@ func (a *Auth) ResolveTasks(ctx context.Context, job orbital.Job, targetsByRegio
 	}
 	ctx = slogctx.With(ctx, "tenantID", auth.TenantId)
 
-	tenant, err := getTenant(ctx, a.repo, model.ID(auth.TenantId))
+	tenant, err := getTenant(ctx, a.repo, auth.TenantId)
 	if err != nil {
 		slogctx.Error(ctx, "failed to get tenant for resolving tasks for auth", "error", err)
 		return orbital.TaskResolverResult{}, err
 	}
 
-	_, ok := targetsByRegion[tenant.Region.String()]
+	_, ok := targetsByRegion[tenant.Region]
 	if !ok {
 		slogctx.Error(ctx, "no target for region", "region", tenant.Region)
 		return orbital.TaskResolverResult{
 			IsCanceled:           true,
-			CanceledErrorMessage: fmt.Sprintf("no target for region: %s", tenant.Region),
+			CanceledErrorMessage: "no target for region: " + tenant.Region,
 		}, nil
 	}
 
@@ -244,7 +244,7 @@ func (a *Auth) ResolveTasks(ctx context.Context, job orbital.Job, targetsByRegio
 			{
 				Data:   job.Data,
 				Type:   job.Type,
-				Target: tenant.Region.String(),
+				Target: tenant.Region,
 			},
 		},
 		Done: true,
@@ -288,7 +288,7 @@ func (a *Auth) HandleJobFailed(ctx context.Context, job orbital.Job) error {
 }
 
 func (a *Auth) validateActiveTenant(ctx context.Context, r repository.Repository, tenantID string) error {
-	tenant, err := getTenant(ctx, r, model.ID(tenantID))
+	tenant, err := getTenant(ctx, r, tenantID)
 	if err != nil {
 		return err
 	}

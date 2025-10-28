@@ -9,7 +9,39 @@ import (
 	tenantpb "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 
 	"github.com/openkcm/registry/internal/model"
+	"github.com/openkcm/registry/internal/validation"
 )
+
+const tenantOwnerType1 = "costCenter"
+
+func TestTenantLabelsValidation(t *testing.T) {
+	tenantStatusActive := model.TenantStatus(tenantpb.Status_STATUS_ACTIVE.String())
+
+	tests := map[string]struct {
+		tenant model.Tenant
+	}{
+		"Tenant data missing label key": {
+			tenant: model.Tenant{
+				Name:      "SuccessFactor",
+				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
+				Region:    "CMK_REGION_EU",
+				Status:    tenantStatusActive,
+				OwnerType: tenantOwnerType1,
+				OwnerID:   "customer_id",
+				Role:      "ROLE_TRIAL",
+				Labels: map[string]string{
+					"": "value",
+				},
+			},
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := test.tenant.Labels.Validate()
+			assert.Error(t, err)
+		})
+	}
+}
 
 func TestTenantValidation(t *testing.T) {
 	tenantStatusActive := model.TenantStatus(tenantpb.Status_STATUS_ACTIVE.String())
@@ -24,7 +56,7 @@ func TestTenantValidation(t *testing.T) {
 				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
 				Region:    "CMK_REGION_EU",
 				Status:    tenantStatusActive,
-				OwnerType: "owner_type",
+				OwnerType: tenantOwnerType1,
 				OwnerID:   "customer_id",
 				Role:      "ROLE_TRIAL",
 			},
@@ -36,7 +68,7 @@ func TestTenantValidation(t *testing.T) {
 				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
 				Region:    "CMK_REGION_EU",
 				Status:    tenantStatusActive,
-				OwnerType: "owner_type",
+				OwnerType: tenantOwnerType1,
 				OwnerID:   "customer_id",
 				Role:      "ROLE_TRIAL",
 			},
@@ -48,7 +80,7 @@ func TestTenantValidation(t *testing.T) {
 				ID:        "",
 				Region:    "CMK_REGION_EU",
 				Status:    tenantStatusActive,
-				OwnerType: "owner_type",
+				OwnerType: tenantOwnerType1,
 				OwnerID:   "customer_id",
 				Role:      "ROLE_TRIAL",
 			},
@@ -59,7 +91,7 @@ func TestTenantValidation(t *testing.T) {
 				Name:      "SuccessFactor",
 				Region:    "CMK_REGION_EU",
 				Status:    tenantStatusActive,
-				OwnerType: "owner_type",
+				OwnerType: tenantOwnerType1,
 				OwnerID:   "customer_id",
 				Role:      "ROLE_TRIAL",
 			},
@@ -70,13 +102,13 @@ func TestTenantValidation(t *testing.T) {
 				Name:      "SuccessFactor",
 				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
 				Status:    tenantStatusActive,
-				OwnerType: "owner_type",
+				OwnerType: tenantOwnerType1,
 				OwnerID:   "customer_id",
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
 		},
-		"Tenant data wrong owner type": {
+		"Tenant data empty owner type": {
 			tenant: model.Tenant{
 				Name:      "SuccessFactor",
 				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
@@ -94,7 +126,7 @@ func TestTenantValidation(t *testing.T) {
 				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
 				Region:    "CMK_REGION_EU",
 				Status:    tenantStatusActive,
-				OwnerType: "some_owner",
+				OwnerType: tenantOwnerType1,
 				Role:      "ROLE_TRIAL",
 			},
 			expectErr: true,
@@ -105,32 +137,24 @@ func TestTenantValidation(t *testing.T) {
 				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
 				Region:    "CMK_REGION_EU",
 				Status:    tenantStatusActive,
-				OwnerType: "owner_type",
+				OwnerType: tenantOwnerType1,
 				OwnerID:   "customer_id",
 				Role:      "",
 			},
 			expectErr: true,
 		},
-		"Tenant data missing label key": {
-			tenant: model.Tenant{
-				Name:      "SuccessFactor",
-				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
-				Region:    "CMK_REGION_EU",
-				Status:    tenantStatusActive,
-				OwnerType: "owner_type",
-				OwnerID:   "customer_id",
-				Role:      "ROLE_TRIAL",
-				Labels: map[string]string{
-					"": "value",
-				},
-			},
-			expectErr: true,
-		},
 	}
+
+	v, err := validation.New(validation.Config{
+		Models: []validation.Model{&model.Tenant{}},
+	})
+	assert.NoError(t, err)
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := test.tenant.Validate()
+			valuesByID, err := validation.GetValues(&test.tenant)
+			assert.NoError(t, err)
+			err = v.ValidateAll(valuesByID)
 			if test.expectErr {
 				assert.Error(t, err)
 			} else {
@@ -160,14 +184,14 @@ func TestTenantToProto(t *testing.T) {
 
 	protoTenant := tenant.ToProto()
 
-	assert.Equal(t, tenant.ID.String(), protoTenant.GetId())
-	assert.Equal(t, tenant.Name.String(), protoTenant.GetName())
-	assert.Equal(t, tenant.Region.String(), protoTenant.GetRegion())
-	assert.Equal(t, tenant.OwnerType.String(), protoTenant.GetOwnerType())
-	assert.Equal(t, tenant.OwnerID.String(), protoTenant.GetOwnerId())
+	assert.Equal(t, tenant.ID, protoTenant.GetId())
+	assert.Equal(t, tenant.Name, protoTenant.GetName())
+	assert.Equal(t, tenant.Region, protoTenant.GetRegion())
+	assert.Equal(t, tenant.OwnerType, protoTenant.GetOwnerType())
+	assert.Equal(t, tenant.OwnerID, protoTenant.GetOwnerId())
 	assert.Equal(t, tenantpb.Status(tenantpb.Status_value[string(tenant.Status)]), protoTenant.GetStatus())
 	assert.Equal(t, tenant.StatusUpdatedAt.UTC().Format(time.RFC3339Nano), protoTenant.GetStatusUpdatedAt())
-	assert.Equal(t, tenantpb.Role(tenantpb.Role_value[string(tenant.Role)]), protoTenant.GetRole())
+	assert.Equal(t, tenantpb.Role(tenantpb.Role_value[tenant.Role]), protoTenant.GetRole())
 	assert.Len(t, protoTenant.GetLabels(), 1)
 	assert.Equal(t, tenant.Labels[labelKey], protoTenant.GetLabels()[labelKey])
 	assert.Equal(t, tenant.UpdatedAt.UTC().Format(time.RFC3339Nano), protoTenant.GetUpdatedAt())

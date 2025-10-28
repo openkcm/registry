@@ -28,6 +28,8 @@ import (
 	"github.com/openkcm/registry/internal/service"
 )
 
+const tenantOwnerType1 = "costCenter"
+
 var ErrMissingSvrPort = errors.New("server port is missing")
 
 func loadConfig() (*config.Config, error) {
@@ -100,12 +102,12 @@ func validRandID() string {
 func validTenant() *model.Tenant {
 	return &model.Tenant{
 		Name:      "SuccessFactor",
-		ID:        model.ID(validRandID()),
+		ID:        validRandID(),
 		Region:    "region",
 		OwnerID:   "owner123",
-		OwnerType: "owner_type",
+		OwnerType: tenantOwnerType1,
 		Status:    model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()),
-		Role:      model.Role(tenantgrpc.Role_ROLE_LIVE.String()),
+		Role:      tenantgrpc.Role_ROLE_LIVE.String(),
 	}
 }
 
@@ -124,7 +126,7 @@ func validRegisterTenantReq() *tenantgrpc.RegisterTenantRequest {
 		Id:        validRandID(),
 		Region:    "region",
 		OwnerId:   "owner123",
-		OwnerType: "owner_type",
+		OwnerType: tenantOwnerType1,
 		Role:      tenantgrpc.Role_ROLE_LIVE,
 	}
 }
@@ -192,7 +194,7 @@ func deleteOrbitalResources(ctx context.Context, db *gorm.DB, externalID string)
 }
 
 func deleteTenantFromDB(ctx context.Context, db *gorm.DB, tenant *model.Tenant) error {
-	err := deleteTenantJobFromDB(db, tenant.ID.String())
+	err := deleteTenantJobFromDB(db, tenant.ID)
 	if err != nil {
 		return err
 	}

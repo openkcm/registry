@@ -63,7 +63,7 @@ func main() {
 
 	validation := initValidation(cfg.Validations)
 
-	tenantSrv := service.NewTenant(repository, orbital, meters)
+	tenantSrv := service.NewTenant(repository, orbital, meters, validation)
 	systemSrv := service.NewSystem(repository, meters)
 	authSrv := service.NewAuth(repository, orbital, validation)
 
@@ -149,6 +149,7 @@ func initValidation(fields []validationpkg.ConfigField) *validationpkg.Validatio
 		Fields: fields,
 		Models: []validationpkg.Model{
 			&model.Auth{},
+			&model.Tenant{},
 		},
 	})
 	handleErr("initializing validation", err)

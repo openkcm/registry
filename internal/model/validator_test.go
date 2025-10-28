@@ -23,10 +23,6 @@ func TestValidateAll(t *testing.T) {
 			},
 			expectErr: false,
 		},
-		"Error expected with validators that do return an error": {
-			validators: []model.Validator{&model.Tenant{}},
-			expectErr:  true,
-		},
 	}
 
 	for name, test := range tests {

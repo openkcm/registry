@@ -34,7 +34,7 @@ func TestSystemService(t *testing.T) {
 	tenant := validTenant()
 	err = createTenantInDB(ctx, db, tenant)
 	assert.NoError(t, err)
-	existingTenantID := tenant.ID.String()
+	existingTenantID := tenant.ID
 	defer func() {
 		err = deleteTenantFromDB(ctx, db, tenant)
 		assert.NoError(t, err)
@@ -813,7 +813,7 @@ func TestSystemService(t *testing.T) {
 					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
 						{ExternalId: externalID, Region: region},
 					},
-					TenantId: tenant.ID.String(),
+					TenantId: tenant.ID,
 				})
 
 				// then

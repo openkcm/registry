@@ -311,7 +311,7 @@ func (s *System) LinkSystemsToTenant(ctx context.Context, in *systemgrpc.LinkSys
 			return err
 		}
 
-		err = isSystemTenantLinkAllowed(ctx, r, model.ID(tenantID), uniqMap, query)
+		err = isSystemTenantLinkAllowed(ctx, r, tenantID, uniqMap, query)
 		if err != nil {
 			return err
 		}
@@ -568,7 +568,7 @@ func isSystemTenantUnlinkAllowed(ctx context.Context, r repository.Repository, u
 			return ErrorWithParams(ErrSystemHasL1KeyClaim, "externalID", system.ExternalID, "region", system.Region)
 		}
 
-		tenant, err := getTenant(ctx, r, model.ID(*system.TenantID))
+		tenant, err := getTenant(ctx, r, *system.TenantID)
 		if err != nil {
 			return err
 		}
@@ -586,7 +586,7 @@ func isSystemTenantUnlinkAllowed(ctx context.Context, r repository.Repository, u
 // It returns nil if the provided Tenant exist, the System is found and no linked, and HasL1KeyClaim is false.
 // Here repository r is passed as a variable to address the scenarios where we will
 // create a new repository from the existing repository for e.g. in the case of transaction.
-func isSystemTenantLinkAllowed(ctx context.Context, r repository.Repository, tenantID model.ID, uniqMap map[string]*model.System, query *repository.Query) error {
+func isSystemTenantLinkAllowed(ctx context.Context, r repository.Repository, tenantID string, uniqMap map[string]*model.System, query *repository.Query) error {
 	tenant, err := getTenant(ctx, r, tenantID)
 	if err != nil {
 		return err
