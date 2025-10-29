@@ -97,7 +97,7 @@ err = v.ValidateAll(values)
 
 To validate an individual field, use its validation ID.
 ```go
-err = v.ValidateField("System.Type", system.Type)
+err = v.Validate("System.Type", system.Type)
 ```
 
 
