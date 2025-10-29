@@ -93,7 +93,7 @@ func TestSystemService(t *testing.T) {
 				})
 			}
 
-			t.Run("if Tenant doesn't exist", func(t *testing.T) {
+			t.Run("Tenant doesn't exist", func(t *testing.T) {
 				// when
 				req := validRegisterSystemReq()
 				req.TenantId = validRandID()
