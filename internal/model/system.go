@@ -10,13 +10,11 @@ import (
 	"github.com/openkcm/registry/internal/validation"
 )
 
-// Validation IDs for the System model fields that require validation.
+// Validation IDs for the System model fields that are validated individually.
 const (
 	SystemExternalIDValidationID validation.ID = "System.ExternalID"
 	SystemRegionValidationID     validation.ID = "System.Region"
 	SystemStatusValidationID     validation.ID = "System.Status"
-	SystemL2KeyIDValidationID    validation.ID = "System.L2KeyID"
-	SystemTypeValidationID       validation.ID = "System.Type"
 )
 
 // System represents a customer-exposed "tenant" of any kind.
@@ -110,14 +108,14 @@ func (s *System) Validations() []validation.Field {
 	})
 
 	fields = append(fields, validation.Field{
-		ID: SystemL2KeyIDValidationID,
+		ID: "System.L2KeyID",
 		Validators: []validation.Validator{
 			validation.NonEmptyConstraint{},
 		},
 	})
 
 	fields = append(fields, validation.Field{
-		ID: SystemTypeValidationID,
+		ID: "System.Type",
 		Validators: []validation.Validator{
 			validation.NonEmptyConstraint{},
 		},
@@ -142,7 +140,9 @@ func (c SystemStatusConstraint) Validate(value any) error {
 	if validSystemStatuses == nil {
 		validSystemStatuses = make(map[string]struct{})
 		for _, v := range typespb.Status_name {
-			validSystemStatuses[v] = struct{}{}
+			if v != typespb.Status_STATUS_UNSPECIFIED.String() {
+				validSystemStatuses[v] = struct{}{}
+			}
 		}
 	}
 

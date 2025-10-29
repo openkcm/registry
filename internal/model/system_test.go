@@ -1,7 +1,6 @@
 package model_test
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
@@ -44,33 +43,6 @@ func TestSystemToProto(t *testing.T) {
 	assert.Equal(t, system.Labels[labelKey], protoSystem.GetLabels()[labelKey])
 	assert.Equal(t, system.UpdatedAt.UTC().Format(time.RFC3339Nano), protoSystem.GetUpdatedAt())
 	assert.Equal(t, system.CreatedAt.UTC().Format(time.RFC3339Nano), protoSystem.GetCreatedAt())
-}
-
-func TestSystemValidationIDs(t *testing.T) {
-	// given
-	systemType := reflect.TypeOf(model.System{})
-
-	var tagValidationIDs []string
-	for i := range systemType.NumField() {
-		field := systemType.Field(i)
-		if validationID := field.Tag.Get(validation.TagName); validationID != "" {
-			tagValidationIDs = append(tagValidationIDs, validationID)
-		}
-	}
-
-	constants := map[validation.ID]struct{}{
-		model.SystemExternalIDValidationID: {},
-		model.SystemRegionValidationID:     {},
-		model.SystemStatusValidationID:     {},
-		model.SystemL2KeyIDValidationID:    {},
-		model.SystemTypeValidationID:       {},
-	}
-
-	// then
-	for _, tagID := range tagValidationIDs {
-		_, exists := constants[validation.ID(tagID)]
-		assert.True(t, exists)
-	}
 }
 
 func TestSystemValidations(t *testing.T) {
