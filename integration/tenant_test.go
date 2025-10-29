@@ -325,7 +325,7 @@ func TestTenantValidation(t *testing.T) {
 						Name:      "SuccessFactor",
 						Id:        validRandID(),
 						Region:    "region",
-						OwnerId:   "ownerID",
+						OwnerId:   "owner-id-1",
 						OwnerType: tenantOwnerType1,
 						Role:      tenantgrpc.Role_ROLE_TEST,
 						Labels: map[string]string{
@@ -350,7 +350,7 @@ func TestTenantValidation(t *testing.T) {
 					Name:      "SuccessFactor",
 					Id:        validRandID(),
 					Region:    "region",
-					OwnerId:   "customer-123",
+					OwnerId:   "owner-id-123",
 					OwnerType: tenantOwnerType1,
 					Role:      tenantgrpc.Role_ROLE_TEST,
 				}
@@ -382,7 +382,7 @@ func TestTenantValidation(t *testing.T) {
 				Name:      "SuccessFactor",
 				Id:        validRandID(),
 				Region:    "region",
-				OwnerId:   "customer-123",
+				OwnerId:   "owner-id-123",
 				OwnerType: tenantOwnerType1,
 				Role:      tenantgrpc.Role_ROLE_TEST,
 				Labels: map[string]string{
@@ -451,7 +451,7 @@ func TestTenantValidation(t *testing.T) {
 						Id:        validRandID(),
 						Name:      "some-name",
 						Region:    "region",
-						OwnerId:   "customer-123",
+						OwnerId:   "owner-id-123",
 						OwnerType: tenantOwnerType1,
 					},
 				},
@@ -476,7 +476,7 @@ func TestTenantValidation(t *testing.T) {
 				Name:      "SuccessFactor",
 				Id:        validRandID(),
 				Region:    "region",
-				OwnerId:   "customer-123",
+				OwnerId:   "owner-id-123",
 				OwnerType: tenantOwnerType1,
 				Role:      tenantgrpc.Role_ROLE_TEST,
 				Labels: map[string]string{
@@ -497,7 +497,7 @@ func TestTenantValidation(t *testing.T) {
 				Name:      "Ariba",
 				Id:        validRandID(),
 				Region:    "region-2",
-				OwnerId:   "cost-center-999",
+				OwnerId:   "owner-id-1",
 				OwnerType: "ownerType2",
 				Role:      tenantgrpc.Role_ROLE_TEST,
 				Labels: map[string]string{
@@ -1333,7 +1333,7 @@ func persistTenant(ctx context.Context, db *gorm.DB, id string, status model.Ten
 		Name:      "t1",
 		ID:        id,
 		Region:    "region",
-		OwnerID:   "customer-123",
+		OwnerID:   "owner-id-123",
 		OwnerType: tenantOwnerType1,
 		Status:    status,
 		Role:      "ROLE_LIVE",
