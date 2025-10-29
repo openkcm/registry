@@ -8,9 +8,6 @@ import (
 	"maps"
 	"slices"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	slogctx "github.com/veqryn/slog-context"
 
@@ -157,12 +154,9 @@ func (s *System) ListSystems(ctx context.Context, in *systemgrpc.ListSystemsRequ
 func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRequest) (*systemgrpc.DeleteSystemResponse, error) {
 	slogctx.Debug(ctx, "DeleteSystem called", "external_id", in.GetExternalId(), "region", in.GetRegion())
 
-	err := s.validation.ValidateAll(map[validation.ID]any{
-		model.SystemExternalIDValidationID: in.GetExternalId(),
-		model.SystemRegionValidationID:     in.GetRegion(),
-	})
+	err := s.validateIdentifier(in.GetExternalId(), in.GetRegion())
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid system identifier: %v", err)
+		return nil, err
 	}
 	system := &model.System{
 		ExternalID: in.GetExternalId(),
@@ -203,7 +197,7 @@ func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRe
 func (s *System) UpdateSystemL1KeyClaim(ctx context.Context, in *systemgrpc.UpdateSystemL1KeyClaimRequest) (*systemgrpc.UpdateSystemL1KeyClaimResponse, error) {
 	slogctx.Debug(ctx, "UpdateSystemL1KeyClaim called", "external_id", in.GetExternalId(), "region", in.GetRegion(), "key_claim", in.GetL1KeyClaim(), "tenant_id", in.GetTenantId())
 
-	err := s.validateSystemIdentifier(in.GetExternalId(), in.GetRegion())
+	err := s.validateIdentifier(in.GetExternalId(), in.GetRegion())
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +329,7 @@ func (s *System) LinkSystemsToTenant(ctx context.Context, in *systemgrpc.LinkSys
 func (s *System) UpdateSystemStatus(ctx context.Context, in *systemgrpc.UpdateSystemStatusRequest) (*systemgrpc.UpdateSystemStatusResponse, error) {
 	slogctx.Debug(ctx, "UpdateSystemStatus called", "external_id", in.GetExternalId(), "region", in.GetRegion(), "status", in.GetStatus())
 
-	err := s.validateSystemIdentifier(in.GetExternalId(), in.GetRegion())
+	err := s.validateIdentifier(in.GetExternalId(), in.GetRegion())
 	if err != nil {
 		return nil, err
 	}
@@ -428,7 +422,7 @@ func (s *System) validateSystem(system *model.System) error {
 	return nil
 }
 
-func (s *System) validateSystemIdentifier(externalID string, region string) error {
+func (s *System) validateIdentifier(externalID string, region string) error {
 	err := s.validation.ValidateAll(map[validation.ID]any{
 		model.SystemExternalIDValidationID: externalID,
 		model.SystemRegionValidationID:     region,
@@ -442,7 +436,7 @@ func (s *System) validateSystemIdentifier(externalID string, region string) erro
 // validateSetSystemLabelsRequest validates the SetSystemLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (s *System) validateSetSystemLabelsRequest(in *systemgrpc.SetSystemLabelsRequest) error {
-	err := s.validateSystemIdentifier(in.GetExternalId(), in.GetRegion())
+	err := s.validateIdentifier(in.GetExternalId(), in.GetRegion())
 	if err != nil {
 		return err
 	}
@@ -463,7 +457,7 @@ func (s *System) validateSetSystemLabelsRequest(in *systemgrpc.SetSystemLabelsRe
 // validateRemoveSystemLabelsRequest validates the RemoveSystemLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (s *System) validateRemoveSystemLabelsRequest(in *systemgrpc.RemoveSystemLabelsRequest) error {
-	err := s.validateSystemIdentifier(in.GetExternalId(), in.GetRegion())
+	err := s.validateIdentifier(in.GetExternalId(), in.GetRegion())
 	if err != nil {
 		return err
 	}
@@ -692,7 +686,7 @@ func (s *System) validateAndGetSystems(in []*systemgrpc.SystemIdentifier) ([]*mo
 	systems := make([]*model.System, 0, len(in))
 
 	for _, system := range in {
-		err := s.validateSystemIdentifier(system.GetExternalId(), system.GetRegion())
+		err := s.validateIdentifier(system.GetExternalId(), system.GetRegion())
 		if err != nil {
 			return nil, nil, err
 		}
