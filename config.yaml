@@ -142,7 +142,7 @@ validations:
     constraints:
     - type: list
       spec:
-        allowlist: ["customerID","costCenter"]
+        allowlist: ["ownerType2","ownerType1"]
   - id: Tenant.Region
     constraints:
     - type: list

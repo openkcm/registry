@@ -326,7 +326,7 @@ func TestTenantValidation(t *testing.T) {
 						Id:        validRandID(),
 						Region:    "region",
 						OwnerId:   "ownerID",
-						OwnerType: "costCenter",
+						OwnerType: tenantOwnerType1,
 						Role:      tenantgrpc.Role_ROLE_TEST,
 						Labels: map[string]string{
 							"key1": "value1",
@@ -498,7 +498,7 @@ func TestTenantValidation(t *testing.T) {
 				Id:        validRandID(),
 				Region:    "region-2",
 				OwnerId:   "cost-center-999",
-				OwnerType: "customerID",
+				OwnerType: "ownerType2",
 				Role:      tenantgrpc.Role_ROLE_TEST,
 				Labels: map[string]string{
 					"key21": "value21",

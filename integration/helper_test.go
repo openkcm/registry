@@ -28,7 +28,7 @@ import (
 	"github.com/openkcm/registry/internal/service"
 )
 
-const tenantOwnerType1 = "costCenter"
+const tenantOwnerType1 = "ownerType1"
 
 var ErrMissingSvrPort = errors.New("server port is missing")
 

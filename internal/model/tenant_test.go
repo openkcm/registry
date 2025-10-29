@@ -12,7 +12,7 @@ import (
 	"github.com/openkcm/registry/internal/validation"
 )
 
-const tenantOwnerType1 = "costCenter"
+const tenantOwnerType1 = "ownerType1"
 
 func TestTenantLabelsValidation(t *testing.T) {
 	tenantStatusActive := model.TenantStatus(tenantpb.Status_STATUS_ACTIVE.String())
