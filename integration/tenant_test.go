@@ -301,7 +301,7 @@ func TestTenantValidation(t *testing.T) {
 					req.OwnerType = ""
 					return req
 				},
-				"ownerType is unknown": func(req *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
+				"ownerType is not present in allowed list": func(req *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
 					req.OwnerType = "unknown"
 					return req
 				},
@@ -311,6 +311,10 @@ func TestTenantValidation(t *testing.T) {
 				},
 				"region is empty": func(req *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
 					req.Region = ""
+					return req
+				},
+				"region is not present in allowed list": func(req *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
+					req.Region = "unknown"
 					return req
 				},
 			}
