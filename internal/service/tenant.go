@@ -172,9 +172,9 @@ func (t *Tenant) ListTenants(ctx context.Context, in *tenantgrpc.ListTenantsRequ
 func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequest) (*tenantgrpc.BlockTenantResponse, error) {
 	slogctx.Debug(ctx, "BlockTenant called", "tenantId", in.GetId())
 
-	err := t.validation.Validate(model.TenantIDValidationID, in.GetId())
+	err := t.validateID(in.GetId())
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
+		return nil, err
 	}
 
 	err = t.patchTenant(ctx, patchTenantParams{
@@ -206,9 +206,9 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenantRequest) (*tenantgrpc.UnblockTenantResponse, error) {
 	slogctx.Debug(ctx, "UnblockTenant called", "tenantId", in.GetId())
 
-	err := t.validation.Validate(model.TenantIDValidationID, in.GetId())
+	err := t.validateID(in.GetId())
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
+		return nil, err
 	}
 
 	err = t.patchTenant(ctx, patchTenantParams{
@@ -238,9 +238,9 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTenantRequest) (*tenantgrpc.TerminateTenantResponse, error) {
 	slogctx.Debug(ctx, "TerminateTenant called", "tenantId", in.GetId())
 
-	err := t.validation.Validate(model.TenantIDValidationID, in.GetId())
+	err := t.validateID(in.GetId())
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
+		return nil, err
 	}
 
 	if err := assertNoSystemLinks(ctx, t.repo, in.GetId()); err != nil {
@@ -334,9 +334,9 @@ func (t *Tenant) RemoveTenantLabels(ctx context.Context, in *tenantgrpc.RemoveTe
 func (t *Tenant) GetTenant(ctx context.Context, in *tenantgrpc.GetTenantRequest) (*tenantgrpc.GetTenantResponse, error) {
 	slogctx.Debug(ctx, "GetTenant called", "tenantId", in.GetId())
 
-	err := t.validation.Validate(model.TenantIDValidationID, in.GetId())
+	err := t.validateID(in.GetId())
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
+		return nil, err
 	}
 
 	tenant, err := getTenant(ctx, t.repo, in.GetId())
@@ -444,9 +444,9 @@ func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTenantUserGroupsRequest) (*tenantgrpc.SetTenantUserGroupsResponse, error) {
 	slogctx.Debug(ctx, "SetTenantUserGroups called", "tenantId", in.GetId())
 
-	err := t.validation.Validate(model.TenantIDValidationID, in.GetId())
+	err := t.validateID(in.GetId())
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
+		return nil, err
 	}
 
 	err = model.UserGroups(in.GetUserGroups()).Validate()
@@ -488,9 +488,9 @@ func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
 // validateSetTenantLabelsRequest validates the SetTenantLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRequest) error {
-	err := t.validation.Validate(model.TenantIDValidationID, in.GetId())
+	err := t.validateID(in.GetId())
 	if err != nil {
-		return status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
+		return err
 	}
 
 	if len(in.GetLabels()) == 0 {
@@ -509,9 +509,9 @@ func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRe
 // validateRemoveTenantLabelsRequest validates the RemoveTenantLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (t *Tenant) validateRemoveTenantLabelsRequest(in *tenantgrpc.RemoveTenantLabelsRequest) error {
-	err := t.validation.Validate(model.TenantIDValidationID, in.GetId())
+	err := t.validateID(in.GetId())
 	if err != nil {
-		return status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
+		return err
 	}
 
 	if len(in.GetLabelKeys()) == 0 {
@@ -636,6 +636,17 @@ func (t *Tenant) mapTenantsToGRPCResponse(tenants []model.Tenant) []*tenantgrpc.
 	return pbTenants
 }
 
+// validateID checks if the provided tenant ID is valid according to
+// the TenantIDValidationID rules. Returns an error with InvalidArgument
+// status if validation fails.
+func (t *Tenant) validateID(id string) error {
+	err := t.validation.Validate(model.TenantIDValidationID, id)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
+	}
+	return nil
+}
+
 // assertNoSystemLinks checks if there are any Systems linked with the Tenant.
 // If records are found for the provided tenantID, it returns an error.
 // Here repository r is passed as a variable to address the scenarios where we will
@@ -696,6 +707,10 @@ func jobTypeToStatus(jobType string) (tenantgrpc.Status, error) {
 	}
 }
 
+// validateTenant performs validation on the provided Tenant model.
+// It checks all tenant fields using the validation package and also
+// validates tenant labels. Returns an error with appropriate gRPC status
+// if any validation fails.
 func (t *Tenant) validateTenant(tenant *model.Tenant) error {
 	valuesByID, err := validation.GetValues(tenant)
 	if err != nil {
