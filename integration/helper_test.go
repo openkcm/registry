@@ -28,10 +28,10 @@ import (
 	"github.com/openkcm/registry/internal/service"
 )
 
-const tenantOwnerType1 = "ownerType1"
-
 // Allowed system values based on the constraints defined in config.yaml
-var (
+const (
+	// Tenant.OwnerType allowed value
+	allowedOwnerType = "ownerType1"
 	// System.Type allowed value
 	allowedSystemType = "application"
 	// System.Region allowed value
@@ -113,7 +113,7 @@ func validTenant() *model.Tenant {
 		ID:        validRandID(),
 		Region:    "region",
 		OwnerID:   "owner123",
-		OwnerType: tenantOwnerType1,
+		OwnerType: allowedOwnerType,
 		Status:    model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()),
 		Role:      tenantgrpc.Role_ROLE_LIVE.String(),
 	}
@@ -134,7 +134,7 @@ func validRegisterTenantReq() *tenantgrpc.RegisterTenantRequest {
 		Id:        validRandID(),
 		Region:    "region",
 		OwnerId:   "owner123",
-		OwnerType: tenantOwnerType1,
+		OwnerType: allowedOwnerType,
 		Role:      tenantgrpc.Role_ROLE_LIVE,
 	}
 }

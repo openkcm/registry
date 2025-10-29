@@ -42,16 +42,57 @@ func TestSystemService(t *testing.T) {
 	}()
 
 	t.Run("RegisterSystem", func(t *testing.T) {
-		t.Run("should fail", func(t *testing.T) {
-			t.Run("for empty system", func(t *testing.T) {
-				// when
-				result, err := sSubj.RegisterSystem(ctx, &systemgrpc.RegisterSystemRequest{})
+		t.Run("should return error if", func(t *testing.T) {
+			// given
+			tts := map[string]func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest{
+				"request if empty": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					return &systemgrpc.RegisterSystemRequest{}
+				},
+				"external ID is empty": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					req.ExternalId = ""
+					return req
+				},
+				"region is empty": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					req.Region = ""
+					return req
+				},
+				"region is not present in allowlist": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					req.Region = "unknown"
+					return req
+				},
+				"type is empty": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					req.Type = ""
+					return req
+				},
+				"type is not present in allowlist": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					req.Type = "unknown"
+					return req
+				},
+				"status is unspecified": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					req.Status = typespb.Status_STATUS_UNSPECIFIED
+					return req
+				},
+				"l2 key ID is empty": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					req.L2KeyId = ""
+					return req
+				},
+			}
 
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
-				assert.Nil(t, result)
-			})
+			for reason, requestTransformer := range tts {
+				t.Run(reason, func(t *testing.T) {
+					validReq := validRegisterSystemReq()
+					req := requestTransformer(validReq)
+
+					// when
+					resp, err := sSubj.RegisterSystem(ctx, req)
+
+					// then
+					assert.Error(t, err)
+					assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+					assert.Nil(t, resp)
+				})
+			}
+
 			t.Run("if Tenant doesn't exist", func(t *testing.T) {
 				// when
 				req := validRegisterSystemReq()
@@ -63,29 +104,8 @@ func TestSystemService(t *testing.T) {
 				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
 				assert.Nil(t, res)
 			})
-			t.Run("if System has invalid region as defined in the configuration (System.Region)", func(t *testing.T) {
-				// when
-				req := validRegisterSystemReq()
-				req.Region = "INVALID_REGION"
-				res, err := sSubj.RegisterSystem(ctx, req)
-
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
-				assert.Nil(t, res)
-			})
-			t.Run("if System has invalid type as defined in the configuration (System.Type)", func(t *testing.T) {
-				// when
-				req := validRegisterSystemReq()
-				req.Type = "INVALID_TYPE"
-				res, err := sSubj.RegisterSystem(ctx, req)
-
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
-				assert.Nil(t, res)
-			})
 		})
+
 		t.Run("should succeed", func(t *testing.T) {
 			// given
 			req := validRegisterSystemReq()
