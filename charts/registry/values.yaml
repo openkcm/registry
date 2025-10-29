@@ -325,3 +325,25 @@ config:
       enabled: false
     logs:
       enabled: false
+
+# Validation configurations.
+validations:
+  - id: Auth.Type # configures validation rules for the Type field of a Auth
+    constraints: 
+    - type: list # defines the allowed values for the Type field
+      spec:
+        allowlist: ["type1","type2","type3"] # restricts Type to either "type1", "type2" or "type3"
+  - id: Auth.Properties.Issuer # configures validation rules for the Issuer key within the Properties field of Auth
+    skipIfNotExists: true # skips if the this field is not present
+    constraints: 
+    - type: non-empty # defines the value of Issuer cannot be non empty if present
+  - id: Tenant.OwnerType # configures validation rules for the OwnerType field of a Tenant
+    constraints:
+    - type: list # defines the allowed values for the OwnerType field
+      spec:
+        allowlist: ["type1","type2"] # restricts OwnerType to either "type1" or "type2"
+  - id: Tenant.Region # configures validation rules for the Region field of a Tenant
+    constraints:
+    - type: list # defines the allowed values for the Region field
+      spec:
+        allowlist: ["region1","region2"] # restricts Region to either "region1" or "region2"

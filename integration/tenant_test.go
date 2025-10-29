@@ -28,6 +28,8 @@ import (
 
 type expStateFunc func(*tenantgrpc.Tenant) bool
 
+var ErrTenantIDEmpty = status.Error(codes.InvalidArgument, "invalid ID: validation failed for Tenant.ID: value is empty")
+
 func TestTenantReconciliation(t *testing.T) {
 	// given
 	conn, err := newGRPCClientConn()
@@ -54,7 +56,7 @@ func TestTenantReconciliation(t *testing.T) {
 			{
 				name:     "should change status to PROVISIONING_ERROR if region is not found",
 				tenantID: "test-tenant-cancel",
-				region:   "non-existing-region",
+				region:   "region-2",
 				expState: func(t *tenantgrpc.Tenant) bool {
 					return t.GetStatus() == tenantgrpc.Status_STATUS_PROVISIONING_ERROR
 				},
@@ -88,7 +90,7 @@ func TestTenantReconciliation(t *testing.T) {
 				_, err := tSubj.RegisterTenant(ctx, req)
 				assert.NoError(t, err)
 				defer func() {
-					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req.GetId())})
+					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 					assert.NoError(t, err)
 				}()
 
@@ -125,7 +127,7 @@ func TestTenantReconciliation(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				// given
 				tenant := validTenant()
-				tenant.ID = model.ID(tt.tenantID)
+				tenant.ID = tt.tenantID
 				tenant.Region = operatortest.Region
 				err := createTenantInDB(ctx, db, tenant)
 				assert.NoError(t, err)
@@ -136,12 +138,12 @@ func TestTenantReconciliation(t *testing.T) {
 
 				// when
 				_, err = tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
-					Id: tenant.ID.String(),
+					Id: tenant.ID,
 				})
 				assert.NoError(t, err)
 
 				// then
-				err = waitForTenantReconciliation(ctx, tSubj, tenant.ID.String(), tt.expState)
+				err = waitForTenantReconciliation(ctx, tSubj, tenant.ID, tt.expState)
 				assert.NoError(t, err)
 			})
 		}
@@ -173,7 +175,7 @@ func TestTenantReconciliation(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				// given
 				tenant := validTenant()
-				tenant.ID = model.ID(tt.tenantID)
+				tenant.ID = tt.tenantID
 				tenant.Region = operatortest.Region
 				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
 				err := createTenantInDB(ctx, db, tenant)
@@ -185,12 +187,12 @@ func TestTenantReconciliation(t *testing.T) {
 
 				// when
 				_, err = tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
-					Id: tenant.ID.String(),
+					Id: tenant.ID,
 				})
 				assert.NoError(t, err)
 
 				// then
-				err = waitForTenantReconciliation(ctx, tSubj, tenant.ID.String(), tt.expState)
+				err = waitForTenantReconciliation(ctx, tSubj, tenant.ID, tt.expState)
 				assert.NoError(t, err)
 			})
 		}
@@ -222,9 +224,9 @@ func TestTenantReconciliation(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				// given
 				tenant := validTenant()
-				tenant.ID = model.ID(tt.tenantID)
-				tenant.Region = operatortest.Region
+				tenant.ID = tt.tenantID
 				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+				tenant.Region = operatortest.Region
 				err := createTenantInDB(ctx, db, tenant)
 				assert.NoError(t, err)
 				defer func() {
@@ -234,12 +236,12 @@ func TestTenantReconciliation(t *testing.T) {
 
 				// when
 				_, err = tSubj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
-					Id: tenant.ID.String(),
+					Id: tenant.ID,
 				})
 				assert.NoError(t, err)
 
 				// then
-				err = waitForTenantReconciliation(ctx, tSubj, tenant.ID.String(), tt.expState)
+				err = waitForTenantReconciliation(ctx, tSubj, tenant.ID, tt.expState)
 				assert.NoError(t, err)
 			})
 		}
@@ -287,21 +289,53 @@ func TestTenantValidation(t *testing.T) {
 	t.Run("RegisterTenant", func(t *testing.T) {
 		t.Run("should return an error if", func(t *testing.T) {
 			// given
-			invalidRequests := map[string]*tenantgrpc.RegisterTenantRequest{
-				"one argument is empty": {
-					Id:        validRandID(),
-					Region:    "region",
-					OwnerId:   "",
-					OwnerType: "owner_type",
-					Role:      tenantgrpc.Role_ROLE_TEST,
+			tts := map[string]func(t *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest{
+				"ownerID is empty": func(req *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
+					req.OwnerId = ""
+					return req
 				},
-				"request is empty": {},
+				"request is empty": func(_ *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
+					return &tenantgrpc.RegisterTenantRequest{}
+				},
+				"ownerType is empty": func(req *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
+					req.OwnerType = ""
+					return req
+				},
+				"ownerType is not present in allowed list": func(req *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
+					req.OwnerType = "unknown"
+					return req
+				},
+				"role is unspecified": func(req *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
+					req.Role = tenantgrpc.Role_ROLE_UNSPECIFIED
+					return req
+				},
+				"region is empty": func(req *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
+					req.Region = ""
+					return req
+				},
+				"region is not present in allowed list": func(req *tenantgrpc.RegisterTenantRequest) *tenantgrpc.RegisterTenantRequest {
+					req.Region = "unknown"
+					return req
+				},
 			}
 
-			for reason, req := range invalidRequests {
+			for reason, requestTransformer := range tts {
 				t.Run(reason, func(t *testing.T) {
+					validRequest := &tenantgrpc.RegisterTenantRequest{
+						Name:      "SuccessFactor",
+						Id:        validRandID(),
+						Region:    "region",
+						OwnerId:   "owner-id-1",
+						OwnerType: tenantOwnerType1,
+						Role:      tenantgrpc.Role_ROLE_TEST,
+						Labels: map[string]string{
+							"key1": "value1",
+							"key2": "value2",
+						},
+					}
+
 					// when
-					resp, err := tSubj.RegisterTenant(ctx, req)
+					resp, err := tSubj.RegisterTenant(ctx, requestTransformer(validRequest))
 
 					// then
 					assert.Error(t, err)
@@ -316,15 +350,15 @@ func TestTenantValidation(t *testing.T) {
 					Name:      "SuccessFactor",
 					Id:        validRandID(),
 					Region:    "region",
-					OwnerId:   "customer-123",
-					OwnerType: "owner_type",
+					OwnerId:   "owner-id-123",
+					OwnerType: tenantOwnerType1,
 					Role:      tenantgrpc.Role_ROLE_TEST,
 				}
 
 				// when
 				firstResp, err := tSubj.RegisterTenant(ctx, req)
 				defer func() {
-					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req.GetId())})
+					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 					assert.NoError(t, err)
 				}()
 
@@ -348,8 +382,8 @@ func TestTenantValidation(t *testing.T) {
 				Name:      "SuccessFactor",
 				Id:        validRandID(),
 				Region:    "region",
-				OwnerId:   "customer-123",
-				OwnerType: "owner_type",
+				OwnerId:   "owner-id-123",
+				OwnerType: tenantOwnerType1,
 				Role:      tenantgrpc.Role_ROLE_TEST,
 				Labels: map[string]string{
 					"key1": "value1",
@@ -360,7 +394,7 @@ func TestTenantValidation(t *testing.T) {
 			// when
 			resp, err := tSubj.RegisterTenant(ctx, req)
 			defer func() {
-				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req.GetId())})
+				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 				assert.NoError(t, err)
 			}()
 
@@ -408,7 +442,7 @@ func TestTenantValidation(t *testing.T) {
 				{
 					name: "only OwnerType filter is provided",
 					request: &tenantgrpc.ListTenantsRequest{
-						OwnerType: "owner_type",
+						OwnerType: tenantOwnerType1,
 					},
 				},
 				{
@@ -417,8 +451,8 @@ func TestTenantValidation(t *testing.T) {
 						Id:        validRandID(),
 						Name:      "some-name",
 						Region:    "region",
-						OwnerId:   "customer-123",
-						OwnerType: "owner_type",
+						OwnerId:   "owner-id-123",
+						OwnerType: tenantOwnerType1,
 					},
 				},
 			}
@@ -442,8 +476,8 @@ func TestTenantValidation(t *testing.T) {
 				Name:      "SuccessFactor",
 				Id:        validRandID(),
 				Region:    "region",
-				OwnerId:   "customer-123",
-				OwnerType: "owner_type",
+				OwnerId:   "owner-id-123",
+				OwnerType: tenantOwnerType1,
 				Role:      tenantgrpc.Role_ROLE_TEST,
 				Labels: map[string]string{
 					"key11": "value11",
@@ -453,7 +487,7 @@ func TestTenantValidation(t *testing.T) {
 			resp1, err := tSubj.RegisterTenant(ctx, req1)
 			assert.NoError(t, err)
 			defer func() {
-				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req1.GetId())})
+				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req1.GetId()})
 				assert.NoError(t, err)
 			}()
 
@@ -463,8 +497,8 @@ func TestTenantValidation(t *testing.T) {
 				Name:      "Ariba",
 				Id:        validRandID(),
 				Region:    "region-2",
-				OwnerId:   "cost-center-999",
-				OwnerType: "cost-center",
+				OwnerId:   "owner-id-1",
+				OwnerType: "ownerType2",
 				Role:      tenantgrpc.Role_ROLE_TEST,
 				Labels: map[string]string{
 					"key21": "value21",
@@ -474,7 +508,7 @@ func TestTenantValidation(t *testing.T) {
 			resp2, err := tSubj.RegisterTenant(ctx, req2)
 			assert.NoError(t, err)
 			defer func() {
-				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req2.GetId())})
+				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req2.GetId()})
 				assert.NoError(t, err)
 			}()
 
@@ -579,7 +613,7 @@ func TestTenantValidation(t *testing.T) {
 
 				// when
 				resp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
-					Id: tenant.ID.String(),
+					Id: tenant.ID,
 				})
 
 				// then
@@ -604,7 +638,7 @@ func TestTenantValidation(t *testing.T) {
 
 			// when
 			utResp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
-				Id: tenant.ID.String(),
+				Id: tenant.ID,
 			})
 
 			// then
@@ -643,7 +677,7 @@ func TestTenantValidation(t *testing.T) {
 
 				// when
 				resp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
-					Id: tenant.ID.String(),
+					Id: tenant.ID,
 				})
 
 				// then
@@ -668,7 +702,7 @@ func TestTenantValidation(t *testing.T) {
 
 			// when
 			utResp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
-				Id: tenant.ID.String(),
+				Id: tenant.ID,
 			})
 
 			// then
@@ -707,7 +741,7 @@ func TestTenantValidation(t *testing.T) {
 
 				// when
 				resp, err := tSubj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
-					Id: tenant.ID.String(),
+					Id: tenant.ID,
 				})
 
 				// then
@@ -732,7 +766,7 @@ func TestTenantValidation(t *testing.T) {
 
 			// when
 			utResp, err := tSubj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
-				Id: tenant.ID.String(),
+				Id: tenant.ID,
 			})
 
 			// then
@@ -761,7 +795,7 @@ func TestTenantValidation(t *testing.T) {
 
 				// when
 				res, err := tSubj.SetTenantLabels(ctx, &tenantgrpc.SetTenantLabelsRequest{
-					Id: tenant.ID.String(),
+					Id: tenant.ID,
 					Labels: map[string]string{
 						"key1": "value12",
 						"key3": "value3",
@@ -775,7 +809,7 @@ func TestTenantValidation(t *testing.T) {
 				actTenants, err := listTenants(ctx, tSubj)
 				assert.NoError(t, err)
 				assert.Len(t, actTenants.GetTenants(), 1)
-				assert.Equal(t, 3, len(actTenants.GetTenants()[0].GetLabels()))
+				assert.Len(t, actTenants.GetTenants()[0].GetLabels(), 3)
 				assert.Equal(t, "value12", actTenants.GetTenants()[0].GetLabels()["key1"])
 				assert.Equal(t, "value2", actTenants.GetTenants()[0].GetLabels()["key2"])
 				assert.Equal(t, "value3", actTenants.GetTenants()[0].GetLabels()["key3"])
@@ -794,7 +828,7 @@ func TestTenantValidation(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrEmptyID, err)
+				assert.ErrorIs(t, ErrTenantIDEmpty, err)
 				assert.Nil(t, res)
 			})
 			t.Run("labels are empty", func(t *testing.T) {
@@ -870,7 +904,7 @@ func TestTenantValidation(t *testing.T) {
 
 				// when
 				res, err := tSubj.RemoveTenantLabels(ctx, &tenantgrpc.RemoveTenantLabelsRequest{
-					Id:        tenant.ID.String(),
+					Id:        tenant.ID,
 					LabelKeys: []string{"key1"},
 				})
 
@@ -881,7 +915,7 @@ func TestTenantValidation(t *testing.T) {
 				actTenants, err := listTenants(ctx, tSubj)
 				assert.NoError(t, err)
 				assert.Len(t, actTenants.GetTenants(), 1)
-				assert.Equal(t, 1, len(actTenants.GetTenants()[0].GetLabels()))
+				assert.Len(t, actTenants.GetTenants()[0].GetLabels(), 1)
 				assert.Equal(t, "value2", actTenants.GetTenants()[0].GetLabels()["key2"])
 				_, ok := actTenants.GetTenants()[0].GetLabels()["key1"]
 				assert.False(t, ok, "key1 should have been removed")
@@ -900,7 +934,7 @@ func TestTenantValidation(t *testing.T) {
 
 				// when
 				res, err := tSubj.RemoveTenantLabels(ctx, &tenantgrpc.RemoveTenantLabelsRequest{
-					Id:        tenant.ID.String(),
+					Id:        tenant.ID,
 					LabelKeys: []string{"key3"},
 				})
 
@@ -911,7 +945,7 @@ func TestTenantValidation(t *testing.T) {
 				actTenants, err := listTenants(ctx, tSubj)
 				assert.NoError(t, err)
 				assert.Len(t, actTenants.GetTenants(), 1)
-				assert.Equal(t, 2, len(actTenants.GetTenants()[0].GetLabels()))
+				assert.Len(t, actTenants.GetTenants()[0].GetLabels(), 2)
 			})
 		})
 
@@ -925,7 +959,7 @@ func TestTenantValidation(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrEmptyID, err)
+				assert.ErrorIs(t, ErrTenantIDEmpty, err)
 				assert.Nil(t, res)
 			})
 			t.Run("labels keys are empty", func(t *testing.T) {
@@ -983,7 +1017,7 @@ func TestTenantValidation(t *testing.T) {
 			_, err := tSubj.RegisterTenant(ctx, req)
 			assert.NoError(t, err)
 			defer func() {
-				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req.GetId())})
+				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 				assert.NoError(t, err)
 			}()
 
@@ -1097,7 +1131,7 @@ func TestSetTenantUserGroups(t *testing.T) {
 
 				// when
 				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
-					Id: tenant.ID.String(),
+					Id: tenant.ID,
 					UserGroups: []string{
 						"admin",
 						"audit",
@@ -1128,7 +1162,7 @@ func TestSetTenantUserGroups(t *testing.T) {
 
 				// when
 				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
-					Id: tenant.ID.String(),
+					Id: tenant.ID,
 					UserGroups: []string{
 						"admin",
 						"audit",
@@ -1142,7 +1176,7 @@ func TestSetTenantUserGroups(t *testing.T) {
 
 				// when
 				res, err = tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
-					Id: tenant.ID.String(),
+					Id: tenant.ID,
 					UserGroups: []string{
 						"admin 1",
 						"audit 2",
@@ -1183,7 +1217,7 @@ func TestListTenantsPagination(t *testing.T) {
 			_, err := subj.RegisterTenant(ctx, tenantRequest1)
 			assert.NoError(t, err)
 			defer func() {
-				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(tenantRequest1.GetId())})
+				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: tenantRequest1.GetId()})
 				assert.NoError(t, err)
 			}()
 			tenantRequest2 := validRegisterTenantReq()
@@ -1191,7 +1225,7 @@ func TestListTenantsPagination(t *testing.T) {
 			_, err = subj.RegisterTenant(ctx, tenantRequest2)
 			assert.NoError(t, err)
 			defer func() {
-				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(tenantRequest2.GetId())})
+				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: tenantRequest2.GetId()})
 				assert.NoError(t, err)
 			}()
 
@@ -1259,7 +1293,7 @@ func TestListTenantsPagination(t *testing.T) {
 
 			// mirrors the order in which the tenants are queried by ID besides the created_at timestamp
 			sort.Slice(tenants, func(i, j int) bool {
-				return tenants[i].ID.String() > tenants[j].ID.String()
+				return tenants[i].ID > tenants[j].ID
 			})
 
 			t.Run("should avoid duplicates across pages", func(t *testing.T) {
@@ -1276,12 +1310,12 @@ func TestListTenantsPagination(t *testing.T) {
 				})
 				assert.NoError(t, err)
 				assert.Len(t, res2.Tenants, 1)
-				assert.Equal(t, tenants[2].ID.String(), res2.Tenants[0].Id)
+				assert.Equal(t, tenants[2].ID, res2.Tenants[0].Id)
 
 				assert.Equal(t, len(tenants), len(res1.Tenants)+len(res2.Tenants))
 
 				for _, prevTenants := range res1.GetTenants() {
-					assert.False(t, prevTenants.Id == res2.GetTenants()[0].Id)
+					assert.NotEqual(t, prevTenants.Id, res2.GetTenants()[0].Id)
 				}
 			})
 		})
@@ -1297,10 +1331,10 @@ func persistTenant(ctx context.Context, db *gorm.DB, id string, status model.Ten
 	repo := sql.NewRepository(db)
 	tenant := &model.Tenant{
 		Name:      "t1",
-		ID:        model.ID(id),
+		ID:        id,
 		Region:    "region",
-		OwnerID:   "customer-123",
-		OwnerType: "customer",
+		OwnerID:   "owner-id-123",
+		OwnerType: tenantOwnerType1,
 		Status:    status,
 		Role:      "ROLE_LIVE",
 		Labels: map[string]string{

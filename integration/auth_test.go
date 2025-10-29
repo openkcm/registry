@@ -74,7 +74,7 @@ func TestAuth(t *testing.T) {
 				// when
 				resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
 					ExternalId: auth.ExternalID,
-					TenantId:   inactiveTenant.ID.String(),
+					TenantId:   inactiveTenant.ID,
 					Type:       auth.Type,
 				})
 
@@ -106,7 +106,7 @@ func TestAuth(t *testing.T) {
 			// when
 			resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
 				ExternalId: auth.ExternalID,
-				TenantId:   tenant.ID.String(),
+				TenantId:   tenant.ID,
 				Type:       auth.Type,
 			})
 
@@ -148,7 +148,7 @@ func TestAuth(t *testing.T) {
 				auth := validAuth()
 
 				tenant := validTenant()
-				tenant.Region = model.Region(tt.region)
+				tenant.Region = tt.region
 				err := repo.Create(ctx, tenant)
 				assert.NoError(t, err)
 				defer func() {
@@ -159,7 +159,7 @@ func TestAuth(t *testing.T) {
 				// when
 				resp, err := subj.ApplyAuth(ctx, &authgrpc.ApplyAuthRequest{
 					ExternalId: tt.externalID,
-					TenantId:   tenant.ID.String(),
+					TenantId:   tenant.ID,
 					Type:       auth.Type,
 					Properties: map[string]string{
 						"auth_prop": "auth_value",
@@ -186,7 +186,7 @@ func TestAuth(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, getResp)
 				assert.Equal(t, tt.externalID, getResp.Auth.ExternalId)
-				assert.Equal(t, tenant.ID.String(), getResp.Auth.TenantId)
+				assert.Equal(t, tenant.ID, getResp.Auth.TenantId)
 				assert.Equal(t, auth.Type, getResp.Auth.Type)
 				assert.Equal(t, "auth_value", getResp.Auth.Properties["auth_prop"])
 
@@ -266,7 +266,7 @@ func TestAuth(t *testing.T) {
 				}()
 
 				auth := validAuth()
-				auth.TenantID = tenant.ID.String()
+				auth.TenantID = tenant.ID
 				err = repo.Create(ctx, auth)
 				assert.NoError(t, err)
 				defer func() {
@@ -307,7 +307,7 @@ func TestAuth(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				// given
 				tenant := validTenant()
-				tenant.Region = model.Region(operatortest.Region)
+				tenant.Region = operatortest.Region
 				err := repo.Create(ctx, tenant)
 				assert.NoError(t, err)
 				defer func() {
@@ -317,7 +317,7 @@ func TestAuth(t *testing.T) {
 
 				auth := validAuth()
 				auth.ExternalID = tt.externalID
-				auth.TenantID = tenant.ID.String()
+				auth.TenantID = tenant.ID
 				err = repo.Create(ctx, auth)
 				assert.NoError(t, err)
 				defer func() {

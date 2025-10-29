@@ -138,3 +138,13 @@ validations:
     skipIfNotExists: true
     constraints:
     - type: non-empty
+  - id: Tenant.OwnerType
+    constraints:
+    - type: list
+      spec:
+        allowlist: ["ownerType2","ownerType1"]
+  - id: Tenant.Region
+    constraints:
+    - type: list
+      spec:
+        allowlist: ["region","region-2","test-region","region-tenant"]

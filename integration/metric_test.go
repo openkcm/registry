@@ -58,7 +58,7 @@ func TestTenantMetrics(t *testing.T) {
 				assert.NoError(t, err)
 
 				defer func() {
-					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req.GetId())})
+					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 					assert.NoError(t, err)
 				}()
 
@@ -104,7 +104,7 @@ func TestTenantMetrics(t *testing.T) {
 				assert.NoError(t, err)
 
 				defer func() {
-					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req.GetId())})
+					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 					assert.NoError(t, err)
 				}()
 
@@ -152,7 +152,7 @@ func TestTenantMetrics(t *testing.T) {
 
 				// When
 				_, err = subj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
-					Id: tenant.ID.String(),
+					Id: tenant.ID,
 				})
 
 				// Then
@@ -168,7 +168,7 @@ func TestTenantMetrics(t *testing.T) {
 				_, err := subj.RegisterTenant(ctx, req)
 				assert.NoError(t, err)
 				defer func() {
-					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req.GetId())})
+					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 					assert.NoError(t, err)
 				}()
 
@@ -343,7 +343,7 @@ func TestSystemMetrics(t *testing.T) {
 					// Given
 					req := validRegisterSystemReq()
 					req.Region = systemMetricsRegion
-					req.TenantId = tenant.ID.String()
+					req.TenantId = tenant.ID
 
 					// When
 					_, err := sSubj.RegisterSystem(ctx, req)
@@ -382,7 +382,7 @@ func TestSystemMetrics(t *testing.T) {
 					// Given
 					req := validRegisterSystemReq()
 					req.Region = ""
-					req.TenantId = tenant.ID.String()
+					req.TenantId = tenant.ID
 
 					// When
 					_, err := sSubj.RegisterSystem(ctx, req)
@@ -413,7 +413,7 @@ func TestSystemMetrics(t *testing.T) {
 								Region:     req.Region,
 							},
 						},
-						TenantId: tenant.ID.String(),
+						TenantId: tenant.ID,
 					})
 					assert.NoError(t, err)
 					defer func() {
@@ -436,7 +436,7 @@ func TestSystemMetrics(t *testing.T) {
 					// Given
 					req := validRegisterSystemReq()
 					req.Region = systemMetricsRegion
-					req.TenantId = tenant.ID.String()
+					req.TenantId = tenant.ID
 					_, err := sSubj.RegisterSystem(ctx, req)
 					assert.NoError(t, err)
 
@@ -480,7 +480,7 @@ func TestSystemMetrics(t *testing.T) {
 					// When
 					_, err = sSubj.LinkSystemsToTenant(ctx, &systemgrpc.LinkSystemsToTenantRequest{
 						SystemIdentifiers: []*systemgrpc.SystemIdentifier{},
-						TenantId:          tenant.ID.String(),
+						TenantId:          tenant.ID,
 					})
 					assert.Error(t, err)
 
@@ -496,8 +496,9 @@ func TestSystemMetrics(t *testing.T) {
 				t.Run("for unlinking if error occurs", func(t *testing.T) {
 					// Given
 					req := validRegisterSystemReq()
+					req.TenantId = tenant.ID
 					req.Region = systemMetricsRegion
-					req.TenantId = tenant.ID.String()
+
 					_, err := sSubj.RegisterSystem(ctx, req)
 					assert.NoError(t, err)
 					defer func() {
@@ -574,7 +575,7 @@ func initTenantMetrics(
 	}
 
 	defer func() {
-		err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: model.ID(req.GetId())})
+		err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 	}()
 
 	return err
