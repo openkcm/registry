@@ -164,6 +164,35 @@ func TestTenantValidation(t *testing.T) {
 	}
 }
 
+func TestTenantRoleConstraints(t *testing.T) {
+	// given
+	subj := model.TenantRoleConstraint{}
+
+	t.Run("role value", func(t *testing.T) {
+		for role := range tenantpb.Role_value {
+			t.Run(role, func(t *testing.T) {
+				// when
+				err := subj.Validate(role)
+
+				// then
+				if role == tenantpb.Role_ROLE_UNSPECIFIED.String() {
+					assert.Error(t, err)
+					return
+				}
+				assert.NoError(t, err)
+			})
+		}
+
+		t.Run("should return error for empty value", func(t *testing.T) {
+			// when
+			err := subj.Validate("")
+
+			// then
+			assert.Error(t, err)
+		})
+	})
+}
+
 func TestTenantToProto(t *testing.T) {
 	labelKey := "key1"
 	tenant := model.Tenant{
