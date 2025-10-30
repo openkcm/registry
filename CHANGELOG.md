@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.0](https://github.com/openkcm/registry/compare/v1.2.0...v1.3.0) (2025-10-30)
+
+
+### Features
+
+* add validation for tenant model  ([396129c](https://github.com/openkcm/registry/commit/396129c837dccb2b50d463b54efc798abd32221f))
+* configurable system validation ([2897f95](https://github.com/openkcm/registry/commit/2897f9566867081b0d4b1535e752eeb2f11e20f0)), closes [#70](https://github.com/openkcm/registry/issues/70)
+* configurable validation ([a24107e](https://github.com/openkcm/registry/commit/a24107ea6ee94a9de505c4de28e9114b9694809c)), closes [#67](https://github.com/openkcm/registry/issues/67)
+* document validation package ([fb3b3fd](https://github.com/openkcm/registry/commit/fb3b3fdad0773f77e3f31c47e148d32ca7a9e3aa)), closes [#72](https://github.com/openkcm/registry/issues/72)
+
+
+### Bug Fixes
+
+* build info injected using ldflag on build ([#44](https://github.com/openkcm/registry/issues/44)) ([cf58f69](https://github.com/openkcm/registry/commit/cf58f69d48016fb840a2f912c4ea5b1ac6986d35))
+
 ## [1.2.0](https://github.com/openkcm/registry/compare/v1.1.0...v1.2.0) (2025-10-09)
 
 
