@@ -28,7 +28,15 @@ import (
 	"github.com/openkcm/registry/internal/service"
 )
 
-const tenantOwnerType1 = "ownerType1"
+// Allowed system values based on the constraints defined in config.yaml
+const (
+	// Tenant.OwnerType allowed value
+	allowedOwnerType = "ownerType1"
+	// System.Type allowed value
+	allowedSystemType = "application"
+	// System.Region allowed value
+	allowedSystemRegion = "region-application"
+)
 
 var ErrMissingSvrPort = errors.New("server port is missing")
 
@@ -105,7 +113,7 @@ func validTenant() *model.Tenant {
 		ID:        validRandID(),
 		Region:    "region",
 		OwnerID:   "owner123",
-		OwnerType: tenantOwnerType1,
+		OwnerType: allowedOwnerType,
 		Status:    model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()),
 		Role:      tenantgrpc.Role_ROLE_LIVE.String(),
 	}
@@ -126,7 +134,7 @@ func validRegisterTenantReq() *tenantgrpc.RegisterTenantRequest {
 		Id:        validRandID(),
 		Region:    "region",
 		OwnerId:   "owner123",
-		OwnerType: tenantOwnerType1,
+		OwnerType: allowedOwnerType,
 		Role:      tenantgrpc.Role_ROLE_LIVE,
 	}
 }
@@ -136,8 +144,8 @@ func validRegisterSystemReq() *systemgrpc.RegisterSystemRequest {
 		ExternalId: validRandID(),
 		L2KeyId:    "key123",
 		Status:     typespb.Status_STATUS_AVAILABLE,
-		Region:     "region",
-		Type:       "system",
+		Region:     allowedSystemRegion,
+		Type:       allowedSystemType,
 		Labels: map[string]string{
 			"key1": "value1",
 			"key2": "value2",

@@ -29,7 +29,7 @@ func TestExecuteTransactionError(t *testing.T) {
 	ctx := t.Context()
 
 	expSys1 := model.System{
-		ExternalID: model.ExternalID(validRandID()),
+		ExternalID: validRandID(),
 		Region:     "EU",
 	}
 	err = db.Create(&expSys1).Error
@@ -37,7 +37,7 @@ func TestExecuteTransactionError(t *testing.T) {
 	defer db.Delete(expSys1)
 
 	expSys2 := model.System{
-		ExternalID: model.ExternalID(validRandID()),
+		ExternalID: validRandID(),
 		Region:     "US",
 	}
 	err = db.Create(&expSys2).Error
@@ -128,7 +128,7 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 
 	expSys1 := model.System{
 		Region:     "EU",
-		ExternalID: model.ExternalID(validRandID()),
+		ExternalID: validRandID(),
 	}
 	err = db.Create(&expSys1).Error
 	assert.NoError(t, err)
@@ -136,7 +136,7 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 
 	expSys2 := model.System{
 		Region:     "US",
-		ExternalID: model.ExternalID(validRandID()),
+		ExternalID: validRandID(),
 	}
 	err = db.Create(&expSys2).Error
 	assert.NoError(t, err)
@@ -304,7 +304,7 @@ func TestExecuteTransactionWithoutRaceConditions(t *testing.T) {
 	ctx := t.Context()
 
 	expSys1 := model.System{
-		ExternalID: model.ExternalID(validRandID()),
+		ExternalID: validRandID(),
 		Region:     "EU",
 	}
 	err = db.Create(&expSys1).Error
@@ -312,7 +312,7 @@ func TestExecuteTransactionWithoutRaceConditions(t *testing.T) {
 	defer db.Delete(expSys1)
 
 	expSys2 := model.System{
-		ExternalID: model.ExternalID(validRandID()),
+		ExternalID: validRandID(),
 		Region:     "US",
 	}
 	err = db.Create(&expSys2).Error

@@ -326,7 +326,7 @@ func TestTenantValidation(t *testing.T) {
 						Id:        validRandID(),
 						Region:    "region",
 						OwnerId:   "owner-id-1",
-						OwnerType: tenantOwnerType1,
+						OwnerType: allowedOwnerType,
 						Role:      tenantgrpc.Role_ROLE_TEST,
 						Labels: map[string]string{
 							"key1": "value1",
@@ -351,7 +351,7 @@ func TestTenantValidation(t *testing.T) {
 					Id:        validRandID(),
 					Region:    "region",
 					OwnerId:   "owner-id-123",
-					OwnerType: tenantOwnerType1,
+					OwnerType: allowedOwnerType,
 					Role:      tenantgrpc.Role_ROLE_TEST,
 				}
 
@@ -383,7 +383,7 @@ func TestTenantValidation(t *testing.T) {
 				Id:        validRandID(),
 				Region:    "region",
 				OwnerId:   "owner-id-123",
-				OwnerType: tenantOwnerType1,
+				OwnerType: allowedOwnerType,
 				Role:      tenantgrpc.Role_ROLE_TEST,
 				Labels: map[string]string{
 					"key1": "value1",
@@ -442,7 +442,7 @@ func TestTenantValidation(t *testing.T) {
 				{
 					name: "only OwnerType filter is provided",
 					request: &tenantgrpc.ListTenantsRequest{
-						OwnerType: tenantOwnerType1,
+						OwnerType: allowedOwnerType,
 					},
 				},
 				{
@@ -452,7 +452,7 @@ func TestTenantValidation(t *testing.T) {
 						Name:      "some-name",
 						Region:    "region",
 						OwnerId:   "owner-id-123",
-						OwnerType: tenantOwnerType1,
+						OwnerType: allowedOwnerType,
 					},
 				},
 			}
@@ -477,7 +477,7 @@ func TestTenantValidation(t *testing.T) {
 				Id:        validRandID(),
 				Region:    "region",
 				OwnerId:   "owner-id-123",
-				OwnerType: tenantOwnerType1,
+				OwnerType: allowedOwnerType,
 				Role:      tenantgrpc.Role_ROLE_TEST,
 				Labels: map[string]string{
 					"key11": "value11",
@@ -1334,7 +1334,7 @@ func persistTenant(ctx context.Context, db *gorm.DB, id string, status model.Ten
 		ID:        id,
 		Region:    "region",
 		OwnerID:   "owner-id-123",
-		OwnerType: tenantOwnerType1,
+		OwnerType: allowedOwnerType,
 		Status:    status,
 		Role:      "ROLE_LIVE",
 		Labels: map[string]string{

@@ -85,6 +85,8 @@ var (
 	ErrMissingLabelKeys        = status.Error(codes.InvalidArgument, MissingLabelKeysMsg)
 	ErrMissingLabels           = status.Error(codes.InvalidArgument, MissingLabelsMsg)
 	ErrEmptyLabelKeys          = status.Error(codes.InvalidArgument, EmptyLabelKeysMsg)
+	ErrValidationConversion    = status.Error(codes.Internal, "validation conversion error")
+	ErrValidationFailed        = status.Error(codes.InvalidArgument, "validation failed")
 )
 
 // ErrorWithParams will return an error with new message,

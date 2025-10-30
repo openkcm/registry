@@ -18,6 +18,7 @@ import (
 
 	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/service"
+	"github.com/openkcm/registry/internal/validation"
 )
 
 func TestSystemService(t *testing.T) {
@@ -41,17 +42,58 @@ func TestSystemService(t *testing.T) {
 	}()
 
 	t.Run("RegisterSystem", func(t *testing.T) {
-		t.Run("should fail", func(t *testing.T) {
-			t.Run("for empty system", func(t *testing.T) {
-				// when
-				result, err := sSubj.RegisterSystem(ctx, &systemgrpc.RegisterSystemRequest{})
+		t.Run("should return error if", func(t *testing.T) {
+			// given
+			tts := map[string]func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest{
+				"request if empty": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					return &systemgrpc.RegisterSystemRequest{}
+				},
+				"external ID is empty": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					req.ExternalId = ""
+					return req
+				},
+				"region is empty": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					req.Region = ""
+					return req
+				},
+				"region is not present in allowlist": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					req.Region = "unknown"
+					return req
+				},
+				"type is empty": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					req.Type = ""
+					return req
+				},
+				"type is not present in allowlist": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					req.Type = "unknown"
+					return req
+				},
+				"status is unspecified": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					req.Status = typespb.Status_STATUS_UNSPECIFIED
+					return req
+				},
+				"l2 key ID is empty": func(req *systemgrpc.RegisterSystemRequest) *systemgrpc.RegisterSystemRequest {
+					req.L2KeyId = ""
+					return req
+				},
+			}
 
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
-				assert.Nil(t, result)
-			})
-			t.Run("if Tenant doesn't exist", func(t *testing.T) {
+			for reason, requestTransformer := range tts {
+				t.Run(reason, func(t *testing.T) {
+					validReq := validRegisterSystemReq()
+					req := requestTransformer(validReq)
+
+					// when
+					resp, err := sSubj.RegisterSystem(ctx, req)
+
+					// then
+					assert.Error(t, err)
+					assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+					assert.Nil(t, resp)
+				})
+			}
+
+			t.Run("Tenant doesn't exist", func(t *testing.T) {
 				// when
 				req := validRegisterSystemReq()
 				req.TenantId = validRandID()
@@ -63,6 +105,7 @@ func TestSystemService(t *testing.T) {
 				assert.Nil(t, res)
 			})
 		})
+
 		t.Run("should succeed", func(t *testing.T) {
 			// given
 			req := validRegisterSystemReq()
@@ -167,7 +210,7 @@ func TestSystemService(t *testing.T) {
 				// when
 				res, err := sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
 					ExternalId: uuid.NewString(),
-					Region:     "EU",
+					Region:     allowedSystemRegion,
 				})
 
 				// then
@@ -183,7 +226,7 @@ func TestSystemService(t *testing.T) {
 				// when
 				res, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
 					ExternalId: uuid.NewString(),
-					Region:     "EU",
+					Region:     allowedSystemRegion,
 					TenantId:   existingTenantID,
 					L1KeyClaim: true,
 				})
@@ -353,7 +396,8 @@ func TestSystemService(t *testing.T) {
 
 		t.Run("when entries exist", func(t *testing.T) {
 			// given
-			externalID1, region1 := registerSystemWithType(t, ctx, sSubj, existingTenantID, false, "foo")
+			allowedSystemType := "system"
+			externalID1, region1 := registerSystemWithType(t, ctx, sSubj, existingTenantID, false, allowedSystemType)
 			externalID2, region2 := registerSystem(t, ctx, sSubj, "", false)
 
 			// clean up
@@ -397,7 +441,7 @@ func TestSystemService(t *testing.T) {
 						name: "Type",
 						request: &systemgrpc.ListSystemsRequest{
 							TenantId: existingTenantID,
-							Type:     "foo",
+							Type:     allowedSystemType,
 						},
 						expectedExternalID: externalID1,
 					},
@@ -554,12 +598,11 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				expErr := service.ErrExternalIDIsEmpty.Error()
 				assert.Error(t, err)
-				assert.Equal(t, expErr, err.Error())
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
 				assert.Nil(t, res)
 			})
-			t.Run("region in system Identifier is empty", func(t *testing.T) {
+			t.Run("region in system Identifier is not valid", func(t *testing.T) {
 				// when
 				res, err := sSubj.UnlinkSystemsFromTenant(ctx, &systemgrpc.UnlinkSystemsFromTenantRequest{
 					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
@@ -570,15 +613,15 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				expErr := service.ErrRegionIsEmpty.Error()
 				assert.Error(t, err)
-				assert.Equal(t, expErr, err.Error())
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.SystemRegionValidationID)
 				assert.Nil(t, res)
 			})
 			t.Run("system to update is not present in the database", func(t *testing.T) {
 				// when
 				id := uuid.NewString()
-				region := "EU"
+				region := allowedSystemRegion
 				res, err := sSubj.UnlinkSystemsFromTenant(ctx, &systemgrpc.UnlinkSystemsFromTenantRequest{
 					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
 						{
@@ -711,16 +754,17 @@ func TestSystemService(t *testing.T) {
 				// when
 				res, err := sSubj.LinkSystemsToTenant(ctx, &systemgrpc.LinkSystemsToTenantRequest{
 					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-						{ExternalId: uuid.NewString(), Region: "region1"},
-						{ExternalId: "", Region: "region2"},
-						{ExternalId: uuid.NewString(), Region: "region3"},
+						{ExternalId: uuid.NewString(), Region: allowedSystemRegion},
+						{ExternalId: "", Region: allowedSystemRegion},
+						{ExternalId: uuid.NewString(), Region: allowedSystemRegion},
 					},
 				})
 
 				// then
-				expErr := service.ErrExternalIDIsEmpty.Error()
 				assert.Error(t, err)
-				assert.Equal(t, expErr, err.Error())
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.SystemExternalIDValidationID)
+				assert.Contains(t, err.Error(), validation.ErrValueEmpty.Error())
 				assert.Nil(t, res)
 			})
 
@@ -752,7 +796,7 @@ func TestSystemService(t *testing.T) {
 			t.Run("system to update is not present in the database", func(t *testing.T) {
 				// given
 				systemID := uuid.NewString()
-				region := "region1"
+				region := allowedSystemRegion
 				// when
 				res, err := sSubj.LinkSystemsToTenant(ctx, &systemgrpc.LinkSystemsToTenantRequest{
 					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
@@ -944,29 +988,29 @@ func TestSystemService(t *testing.T) {
 				// when
 				res, err := sSubj.UpdateSystemStatus(ctx, &systemgrpc.UpdateSystemStatusRequest{
 					ExternalId: "",
-					Region:     "region1",
+					Region:     allowedSystemRegion,
 					Status:     typespb.Status_STATUS_AVAILABLE,
 				})
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrExternalIDIsEmpty, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.SystemExternalIDValidationID)
+				assert.Contains(t, err.Error(), validation.ErrValueEmpty.Error())
 				assert.Nil(t, res)
 			})
 
 			t.Run("system to update is not present in the database", func(t *testing.T) {
 				// when
-				id := uuid.NewString()
-				region := "region1"
 				res, err := sSubj.UpdateSystemStatus(ctx, &systemgrpc.UpdateSystemStatusRequest{
-					ExternalId: id,
-					Region:     region,
+					ExternalId: uuid.NewString(),
+					Region:     allowedSystemRegion,
 					Status:     typespb.Status_STATUS_AVAILABLE,
 				})
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrSystemNotFound, err)
+				assert.ErrorIs(t, err, service.ErrSystemNotFound)
 				assert.Nil(t, res)
 			})
 		})
@@ -1012,7 +1056,7 @@ func TestSystemService(t *testing.T) {
 				// when
 				res, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
 					ExternalId: "",
-					Region:     "region1",
+					Region:     allowedSystemRegion,
 					Labels: map[string]string{
 						"key1": "value1",
 					},
@@ -1020,10 +1064,12 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrExternalIDIsEmpty, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.SystemExternalIDValidationID)
+				assert.Contains(t, err.Error(), validation.ErrValueEmpty.Error())
 				assert.Nil(t, res)
 			})
-			t.Run("region is empty", func(t *testing.T) {
+			t.Run("region is not valid", func(t *testing.T) {
 				// when
 				res, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
 					ExternalId: "externalID1",
@@ -1035,26 +1081,27 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrRegionIsEmpty, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.SystemRegionValidationID)
 				assert.Nil(t, res)
 			})
 			t.Run("labels are empty", func(t *testing.T) {
 				// when
 				res, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
 					ExternalId: "externalID1",
-					Region:     "region1",
+					Region:     allowedSystemRegion,
 				})
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrMissingLabels, err)
+				assert.ErrorIs(t, err, service.ErrMissingLabels)
 				assert.Nil(t, res)
 			})
 			t.Run("labels keys are empty", func(t *testing.T) {
 				// when
 				res, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
 					ExternalId: "externalID1",
-					Region:     "region1",
+					Region:     allowedSystemRegion,
 					Labels: map[string]string{
 						"": "value1",
 					},
@@ -1062,31 +1109,14 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrLabelsIncludeEmptyString, err)
-				assert.Nil(t, res)
-			})
-			t.Run("labels values are empty", func(t *testing.T) {
-				// when
-				res, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
-					ExternalId: "externalID1",
-					Region:     "region1",
-					Labels: map[string]string{
-						"key1": "",
-					},
-				})
-
-				// then
-				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrLabelsIncludeEmptyString, err)
+				assert.ErrorIs(t, err, model.ErrLabelsIncludeEmptyString)
 				assert.Nil(t, res)
 			})
 			t.Run("system to update is not present in the database", func(t *testing.T) {
 				// when
-				id := uuid.NewString()
-				region := "region1"
 				res, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
-					ExternalId: id,
-					Region:     region,
+					ExternalId: uuid.NewString(),
+					Region:     allowedSystemRegion,
 					Labels: map[string]string{
 						"key1": "value1",
 					},
@@ -1160,16 +1190,18 @@ func TestSystemService(t *testing.T) {
 				// when
 				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
 					ExternalId: "",
-					Region:     "region1",
+					Region:     allowedSystemRegion,
 					LabelKeys:  []string{"key1"},
 				})
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrExternalIDIsEmpty, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.SystemExternalIDValidationID)
+				assert.Contains(t, err.Error(), validation.ErrValueEmpty.Error())
 				assert.Nil(t, res)
 			})
-			t.Run("region is empty", func(t *testing.T) {
+			t.Run("region is not valid", func(t *testing.T) {
 				// when
 				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
 					ExternalId: "externalID1",
@@ -1179,41 +1211,40 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrRegionIsEmpty, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Contains(t, err.Error(), model.SystemRegionValidationID)
 				assert.Nil(t, res)
 			})
 			t.Run("labels keys are empty", func(t *testing.T) {
 				// when
 				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
 					ExternalId: "externalID1",
-					Region:     "region1",
+					Region:     allowedSystemRegion,
 				})
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrMissingLabelKeys, err)
+				assert.ErrorIs(t, err, service.ErrMissingLabelKeys)
 				assert.Nil(t, res)
 			})
 			t.Run("labels keys have empty value", func(t *testing.T) {
 				// when
 				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
 					ExternalId: "externalID1",
-					Region:     "region1",
+					Region:     allowedSystemRegion,
 					LabelKeys:  []string{""},
 				})
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, service.ErrEmptyLabelKeys, err)
+				assert.ErrorIs(t, err, service.ErrEmptyLabelKeys)
 				assert.Nil(t, res)
 			})
 			t.Run("system to update is not present in the database", func(t *testing.T) {
 				// when
-				id := uuid.NewString()
-				region := "region1"
 				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
-					ExternalId: id,
-					Region:     region,
+					ExternalId: uuid.NewString(),
+					Region:     allowedSystemRegion,
 					LabelKeys:  []string{"key1"},
 				})
 
