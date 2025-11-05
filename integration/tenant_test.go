@@ -625,35 +625,18 @@ func TestTenantValidation(t *testing.T) {
 			})
 
 			t.Run("tenant has an auth with transient status should not update tenant and auth", func(t *testing.T) {
-				// given
-				tts := []struct {
-					transientStatus authgrpc.AuthStatus
-				}{
-					{
-						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_APPLYING,
-					},
-					{
-						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_REMOVING,
-					},
-					{
-						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_BLOCKING,
-					},
-					{
-						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING,
-					},
-				}
-
-				for _, tt := range tts {
-					t.Run(tt.transientStatus.String(), func(t *testing.T) {
+				for status := range service.AuthTransientStates {
+					t.Run(status, func(t *testing.T) {
+						// given
 						expActiveStatus := tenantgrpc.Status_STATUS_ACTIVE
 						tenant, err := persistTenant(ctx, db, validRandID(), model.TenantStatus(expActiveStatus.String()), time.Now())
 						assert.NoError(t, err)
 
 						repo := sql.NewRepository(db)
-						authWithTransientState := validAuth()
-						authWithTransientState.TenantID = tenant.ID
-						authWithTransientState.Status = tt.transientStatus.String()
-						err = repo.Create(ctx, authWithTransientState)
+						authWithTransient := validAuth()
+						authWithTransient.TenantID = tenant.ID
+						authWithTransient.Status = status
+						err = repo.Create(ctx, authWithTransient)
 						assert.NoError(t, err)
 
 						assert.NoError(t, err)
@@ -661,29 +644,29 @@ func TestTenantValidation(t *testing.T) {
 							err := deleteTenantFromDB(ctx, db, tenant)
 							assert.NoError(t, err)
 
-							_, err = repo.Delete(ctx, authWithTransientState)
+							_, err = repo.Delete(ctx, authWithTransient)
 							assert.NoError(t, err)
 						}()
 
 						// when
-						utResp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
+						actBlockedResp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
 							Id: tenant.ID,
 						})
 
 						// then
 						assert.Error(t, err)
-						assert.Nil(t, utResp)
+						assert.Nil(t, actBlockedResp)
 
-						ltResp, err := listTenants(ctx, tSubj)
+						actListResp, err := listTenants(ctx, tSubj)
 						assert.NoError(t, err)
-						assert.Len(t, ltResp.Tenants, 1)
-						assert.Equal(t, expActiveStatus, ltResp.Tenants[0].Status)
+						assert.Len(t, actListResp.Tenants, 1)
+						assert.Equal(t, expActiveStatus, actListResp.Tenants[0].Status)
 
 						actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
-							ExternalId: authWithTransientState.ExternalID,
+							ExternalId: authWithTransient.ExternalID,
 						})
 						assert.NoError(t, err)
-						assert.Equal(t, tt.transientStatus, actAuth.GetAuth().GetStatus())
+						assert.Equal(t, status, actAuth.GetAuth().GetStatus().String())
 					})
 				}
 			})
@@ -717,10 +700,10 @@ func TestTenantValidation(t *testing.T) {
 						assert.NoError(t, err)
 
 						repo := sql.NewRepository(db)
-						authWithTerminalState1 := validAuth()
-						authWithTerminalState1.TenantID = tenant.ID
-						authWithTerminalState1.Status = tt.nonTransientStatus.String()
-						err = repo.Create(ctx, authWithTerminalState1)
+						authWithTerminalState := validAuth()
+						authWithTerminalState.TenantID = tenant.ID
+						authWithTerminalState.Status = tt.nonTransientStatus.String()
+						err = repo.Create(ctx, authWithTerminalState)
 						assert.NoError(t, err)
 
 						authWithRemovedState := validAuth()
@@ -733,7 +716,7 @@ func TestTenantValidation(t *testing.T) {
 							err := deleteTenantFromDB(ctx, db, tenant)
 							assert.NoError(t, err)
 
-							_, err = repo.Delete(ctx, authWithTerminalState1)
+							_, err = repo.Delete(ctx, authWithTerminalState)
 							assert.NoError(t, err)
 
 							_, err = repo.Delete(ctx, authWithRemovedState)
@@ -741,22 +724,22 @@ func TestTenantValidation(t *testing.T) {
 						}()
 
 						// when
-						utResp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
+						actBlockResp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
 							Id: tenant.ID,
 						})
 
 						// then
 						assert.NoError(t, err)
-						assert.NotNil(t, utResp)
-						assert.True(t, utResp.Success)
+						assert.NotNil(t, actBlockResp)
+						assert.True(t, actBlockResp.Success)
 
-						ltResp, err := listTenants(ctx, tSubj)
+						actListResp, err := listTenants(ctx, tSubj)
 						assert.NoError(t, err)
-						assert.Len(t, ltResp.Tenants, 1)
-						assert.Equal(t, tenantgrpc.Status_STATUS_BLOCKING, ltResp.Tenants[0].Status)
+						assert.Len(t, actListResp.Tenants, 1)
+						assert.Equal(t, tenantgrpc.Status_STATUS_BLOCKING, actListResp.Tenants[0].Status)
 
 						actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
-							ExternalId: authWithTerminalState1.ExternalID,
+							ExternalId: authWithTerminalState.ExternalID,
 						})
 						assert.NoError(t, err)
 						assert.Equal(t, tt.expStatus, actAuth.GetAuth().GetStatus())
@@ -834,26 +817,9 @@ func TestTenantValidation(t *testing.T) {
 				assert.Equal(t, codes.FailedPrecondition, status.Code(err), err.Error())
 			})
 			t.Run("tenant has an auth with transient status should not update tenant and auth", func(t *testing.T) {
-				// given
-				tts := []struct {
-					transientStatus authgrpc.AuthStatus
-				}{
-					{
-						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_APPLYING,
-					},
-					{
-						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_REMOVING,
-					},
-					{
-						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_BLOCKING,
-					},
-					{
-						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING,
-					},
-				}
-
-				for _, tt := range tts {
-					t.Run(tt.transientStatus.String(), func(t *testing.T) {
+				for status := range service.AuthTransientStates {
+					t.Run(status, func(t *testing.T) {
+						// given
 						expBlockedStatus := tenantgrpc.Status_STATUS_BLOCKED
 						tenant, err := persistTenant(ctx, db, validRandID(), model.TenantStatus(expBlockedStatus.String()), time.Now())
 						assert.NoError(t, err)
@@ -861,7 +827,7 @@ func TestTenantValidation(t *testing.T) {
 						repo := sql.NewRepository(db)
 						authWithTransientState := validAuth()
 						authWithTransientState.TenantID = tenant.ID
-						authWithTransientState.Status = tt.transientStatus.String()
+						authWithTransientState.Status = status
 						err = repo.Create(ctx, authWithTransientState)
 						assert.NoError(t, err)
 
@@ -875,24 +841,24 @@ func TestTenantValidation(t *testing.T) {
 						}()
 
 						// when
-						utResp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
+						actUnblockedResp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
 							Id: tenant.ID,
 						})
 
 						// then
 						assert.Error(t, err)
-						assert.Nil(t, utResp)
+						assert.Nil(t, actUnblockedResp)
 
-						ltResp, err := listTenants(ctx, tSubj)
+						actListResp, err := listTenants(ctx, tSubj)
 						assert.NoError(t, err)
-						assert.Len(t, ltResp.Tenants, 1)
-						assert.Equal(t, expBlockedStatus, ltResp.Tenants[0].Status)
+						assert.Len(t, actListResp.Tenants, 1)
+						assert.Equal(t, expBlockedStatus, actListResp.Tenants[0].Status)
 
 						actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
 							ExternalId: authWithTransientState.ExternalID,
 						})
 						assert.NoError(t, err)
-						assert.Equal(t, tt.transientStatus, actAuth.GetAuth().GetStatus())
+						assert.Equal(t, status, actAuth.GetAuth().GetStatus().String())
 					})
 				}
 			})
@@ -952,10 +918,10 @@ func TestTenantValidation(t *testing.T) {
 						assert.NoError(t, err)
 
 						repo := sql.NewRepository(db)
-						authWithTerminalState1 := validAuth()
-						authWithTerminalState1.TenantID = tenant.ID
-						authWithTerminalState1.Status = tt.nonTransientStatus.String()
-						err = repo.Create(ctx, authWithTerminalState1)
+						authWithTerminalStatus := validAuth()
+						authWithTerminalStatus.TenantID = tenant.ID
+						authWithTerminalStatus.Status = tt.nonTransientStatus.String()
+						err = repo.Create(ctx, authWithTerminalStatus)
 						assert.NoError(t, err)
 
 						authWithRemovedState := validAuth()
@@ -968,7 +934,7 @@ func TestTenantValidation(t *testing.T) {
 							err := deleteTenantFromDB(ctx, db, tenant)
 							assert.NoError(t, err)
 
-							_, err = repo.Delete(ctx, authWithTerminalState1)
+							_, err = repo.Delete(ctx, authWithTerminalStatus)
 							assert.NoError(t, err)
 
 							_, err = repo.Delete(ctx, authWithRemovedState)
@@ -976,22 +942,22 @@ func TestTenantValidation(t *testing.T) {
 						}()
 
 						// when
-						utResp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
+						actUnblockedResp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
 							Id: tenant.ID,
 						})
 
 						// then
 						assert.NoError(t, err)
-						assert.NotNil(t, utResp)
-						assert.True(t, utResp.Success)
+						assert.NotNil(t, actUnblockedResp)
+						assert.True(t, actUnblockedResp.Success)
 
-						ltResp, err := listTenants(ctx, tSubj)
+						actListResp, err := listTenants(ctx, tSubj)
 						assert.NoError(t, err)
-						assert.Len(t, ltResp.Tenants, 1)
-						assert.Equal(t, tenantgrpc.Status_STATUS_UNBLOCKING, ltResp.Tenants[0].Status)
+						assert.Len(t, actListResp.Tenants, 1)
+						assert.Equal(t, tenantgrpc.Status_STATUS_UNBLOCKING, actListResp.Tenants[0].Status)
 
 						actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
-							ExternalId: authWithTerminalState1.ExternalID,
+							ExternalId: authWithTerminalStatus.ExternalID,
 						})
 						assert.NoError(t, err)
 						assert.Equal(t, tt.expStatus, actAuth.GetAuth().GetStatus())

@@ -40,7 +40,7 @@ type (
 	}
 )
 
-var authTransientStates = map[string]struct{}{
+var AuthTransientStates = map[string]struct{}{
 	authgrpc.AuthStatus_AUTH_STATUS_APPLYING.String():   {},
 	authgrpc.AuthStatus_AUTH_STATUS_REMOVING.String():   {},
 	authgrpc.AuthStatus_AUTH_STATUS_BLOCKING.String():   {},

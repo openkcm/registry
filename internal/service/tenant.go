@@ -187,7 +187,7 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 		validateFunc: validateTransition(tenantgrpc.Status_STATUS_BLOCKING),
 		patchAuthOpts: patchAuthOpts{
 			validateFn: func(auth *model.Auth) error {
-				_, ok := authTransientStates[auth.Status]
+				_, ok := AuthTransientStates[auth.Status]
 				if ok {
 					return status.Error(codes.FailedPrecondition, "auth in transient state")
 				}
@@ -236,7 +236,7 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 		validateFunc: validateTransition(tenantgrpc.Status_STATUS_UNBLOCKING),
 		patchAuthOpts: patchAuthOpts{
 			validateFn: func(auth *model.Auth) error {
-				_, ok := authTransientStates[auth.Status]
+				_, ok := AuthTransientStates[auth.Status]
 				if ok {
 					return status.Error(codes.FailedPrecondition, "auth in transient state")
 				}
