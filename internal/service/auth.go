@@ -28,6 +28,25 @@ type Auth struct {
 	validation *validation.Validation
 }
 
+type (
+	authValidateFunc   func(*model.Auth) error
+	authUpdateFunc     func(*model.Auth)
+	authSkipUpdateFunc func(*model.Auth) bool
+
+	patchAuthOpts struct {
+		validateFn   authValidateFunc
+		skipUpdateFn authSkipUpdateFunc
+		updateFn     authUpdateFunc
+	}
+)
+
+var authTransientStates = map[string]struct{}{
+	authgrpc.AuthStatus_AUTH_STATUS_APPLYING.String():   {},
+	authgrpc.AuthStatus_AUTH_STATUS_REMOVING.String():   {},
+	authgrpc.AuthStatus_AUTH_STATUS_BLOCKING.String():   {},
+	authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING.String(): {},
+}
+
 // NewAuth creates and return a new instance of Auth.
 // It also registers the job handlers to the Orbital instance.
 func NewAuth(repo repository.Repository, orbital *Orbital, validation *validation.Validation) *Auth {
@@ -351,6 +370,36 @@ func (a *Auth) handleJobAborted(ctx context.Context, job orbital.Job) error {
 		return nil
 	}
 	return err
+}
+
+// apply applies update and/or validate functions to all auths for a given tenantID.
+func (opts patchAuthOpts) apply(ctx context.Context, r repository.Repository, tenantID string) error {
+	// get all auths for the tenantID
+	cond := repository.NewCompositeKey().Where(repository.TenantIDField, tenantID)
+	var auths []model.Auth
+	if err := r.List(ctx, &auths, *repository.NewQuery(&model.Auth{}).Where(cond)); err != nil {
+		return ErrAuthSelect
+	}
+
+	// iterate through all auths and apply the update and/or validate functions
+	for _, auth := range auths {
+		if opts.validateFn != nil {
+			err := opts.validateFn(&auth)
+			if err != nil {
+				return err
+			}
+		}
+		if opts.updateFn != nil {
+			if opts.skipUpdateFn != nil && opts.skipUpdateFn(&auth) {
+				continue
+			}
+			err := patchAuth(ctx, r, auth.ExternalID, opts.updateFn)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func getAuth(ctx context.Context, r repository.Repository, id string) (*model.Auth, error) {

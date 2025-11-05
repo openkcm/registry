@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/status"
 	"gorm.io/gorm"
 
+	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 
 	"github.com/openkcm/registry/integration/operatortest"
@@ -281,6 +282,7 @@ func TestTenantValidation(t *testing.T) {
 	defer conn.Close()
 
 	tSubj := tenantgrpc.NewServiceClient(conn)
+	authClient := authgrpc.NewServiceClient(conn)
 
 	ctx := t.Context()
 	db, err := startDB()
@@ -473,7 +475,7 @@ func TestTenantValidation(t *testing.T) {
 		t.Run("given entries exist", func(t *testing.T) {
 			// given
 			req1 := &tenantgrpc.RegisterTenantRequest{
-				Name:      "SuccessFactor",
+				Name:      "Name1",
 				Id:        validRandID(),
 				Region:    "region",
 				OwnerId:   "owner-id-123",
@@ -494,7 +496,7 @@ func TestTenantValidation(t *testing.T) {
 			time.Sleep(time.Millisecond)
 
 			req2 := &tenantgrpc.RegisterTenantRequest{
-				Name:      "Ariba",
+				Name:      "Name2",
 				Id:        validRandID(),
 				Region:    "region-2",
 				OwnerId:   "owner-id-1",
@@ -621,33 +623,179 @@ func TestTenantValidation(t *testing.T) {
 				assert.Error(t, err)
 				assert.Equal(t, codes.FailedPrecondition, status.Code(err), err.Error())
 			})
+
+			t.Run("tenant has an auth with transient status should not update tenant and auth", func(t *testing.T) {
+				// given
+				tts := []struct {
+					transientStatus authgrpc.AuthStatus
+				}{
+					{
+						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_APPLYING,
+					},
+					{
+						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_REMOVING,
+					},
+					{
+						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_BLOCKING,
+					},
+					{
+						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING,
+					},
+				}
+
+				for _, tt := range tts {
+					t.Run(tt.transientStatus.String(), func(t *testing.T) {
+						expActiveStatus := tenantgrpc.Status_STATUS_ACTIVE
+						tenant, err := persistTenant(ctx, db, validRandID(), model.TenantStatus(expActiveStatus.String()), time.Now())
+						assert.NoError(t, err)
+
+						repo := sql.NewRepository(db)
+						authWithTransientState := validAuth()
+						authWithTransientState.TenantID = tenant.ID
+						authWithTransientState.Status = tt.transientStatus.String()
+						err = repo.Create(ctx, authWithTransientState)
+						assert.NoError(t, err)
+
+						assert.NoError(t, err)
+						defer func() {
+							err := deleteTenantFromDB(ctx, db, tenant)
+							assert.NoError(t, err)
+
+							_, err = repo.Delete(ctx, authWithTransientState)
+							assert.NoError(t, err)
+						}()
+
+						// when
+						utResp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
+							Id: tenant.ID,
+						})
+
+						// then
+						assert.Error(t, err)
+						assert.Nil(t, utResp)
+
+						ltResp, err := listTenants(ctx, tSubj)
+						assert.NoError(t, err)
+						assert.Len(t, ltResp.Tenants, 1)
+						assert.Equal(t, expActiveStatus, ltResp.Tenants[0].Status)
+
+						actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
+							ExternalId: authWithTransientState.ExternalID,
+						})
+						assert.NoError(t, err)
+						assert.Equal(t, tt.transientStatus, actAuth.GetAuth().GetStatus())
+					})
+				}
+			})
 		})
 
-		t.Run("should succeed if tenant is active", func(t *testing.T) {
-			// given
-			state := model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String())
-			tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
-			assert.NoError(t, err)
+		t.Run("should succeed", func(t *testing.T) {
+			t.Run("when tenant status is not transient, both tenant and auth statuses are set to BLOCKING", func(t *testing.T) {
+				// given
+				tts := []struct {
+					nonTransientStatus authgrpc.AuthStatus
+					expStatus          authgrpc.AuthStatus
+				}{
+					{
+						nonTransientStatus: authgrpc.AuthStatus_AUTH_STATUS_APPLIED,
+						expStatus:          authgrpc.AuthStatus_AUTH_STATUS_BLOCKING,
+					},
+					{
+						nonTransientStatus: authgrpc.AuthStatus_AUTH_STATUS_REMOVED,
+						expStatus:          authgrpc.AuthStatus_AUTH_STATUS_REMOVED,
+					},
+					{
+						nonTransientStatus: authgrpc.AuthStatus_AUTH_STATUS_BLOCKED,
+						expStatus:          authgrpc.AuthStatus_AUTH_STATUS_BLOCKING,
+					},
+				}
 
-			defer func() {
-				err = deleteTenantFromDB(ctx, db, tenant)
-				assert.NoError(t, err)
-			}()
+				for _, tt := range tts {
+					t.Run(tt.nonTransientStatus.String(), func(t *testing.T) {
+						state := model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String())
+						tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
+						assert.NoError(t, err)
 
-			expStatus := tenantgrpc.Status_STATUS_BLOCKING
+						repo := sql.NewRepository(db)
+						authWithTerminalState1 := validAuth()
+						authWithTerminalState1.TenantID = tenant.ID
+						authWithTerminalState1.Status = tt.nonTransientStatus.String()
+						err = repo.Create(ctx, authWithTerminalState1)
+						assert.NoError(t, err)
 
-			// when
-			utResp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
-				Id: tenant.ID,
+						authWithRemovedState := validAuth()
+						authWithRemovedState.TenantID = tenant.ID
+						authWithRemovedState.Status = authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String()
+						err = repo.Create(ctx, authWithRemovedState)
+
+						assert.NoError(t, err)
+						defer func() {
+							err := deleteTenantFromDB(ctx, db, tenant)
+							assert.NoError(t, err)
+
+							_, err = repo.Delete(ctx, authWithTerminalState1)
+							assert.NoError(t, err)
+
+							_, err = repo.Delete(ctx, authWithRemovedState)
+							assert.NoError(t, err)
+						}()
+
+						// when
+						utResp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
+							Id: tenant.ID,
+						})
+
+						// then
+						assert.NoError(t, err)
+						assert.NotNil(t, utResp)
+						assert.True(t, utResp.Success)
+
+						ltResp, err := listTenants(ctx, tSubj)
+						assert.NoError(t, err)
+						assert.Len(t, ltResp.Tenants, 1)
+						assert.Equal(t, tenantgrpc.Status_STATUS_BLOCKING, ltResp.Tenants[0].Status)
+
+						actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
+							ExternalId: authWithTerminalState1.ExternalID,
+						})
+						assert.NoError(t, err)
+						assert.Equal(t, tt.expStatus, actAuth.GetAuth().GetStatus())
+
+						actAuth, err = authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
+							ExternalId: authWithRemovedState.ExternalID,
+						})
+						assert.NoError(t, err)
+						// make sure removed auth remains removed
+						assert.Equal(t, authgrpc.AuthStatus_AUTH_STATUS_REMOVED, actAuth.GetAuth().GetStatus())
+					})
+				}
 			})
+			t.Run("if tenant is active", func(t *testing.T) {
+				// given
+				state := model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String())
+				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
+				assert.NoError(t, err)
 
-			// then
-			assert.NoError(t, err)
-			assert.NotNil(t, utResp)
-			ltResp, err := listTenants(ctx, tSubj)
-			assert.NoError(t, err)
-			assert.Len(t, ltResp.Tenants, 1)
-			assert.Equal(t, expStatus, ltResp.Tenants[0].Status)
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
+
+				expStatus := tenantgrpc.Status_STATUS_BLOCKING
+
+				// when
+				utResp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
+					Id: tenant.ID,
+				})
+
+				// then
+				assert.NoError(t, err)
+				assert.NotNil(t, utResp)
+				ltResp, err := listTenants(ctx, tSubj)
+				assert.NoError(t, err)
+				assert.Len(t, ltResp.Tenants, 1)
+				assert.Equal(t, expStatus, ltResp.Tenants[0].Status)
+			})
 		})
 	})
 
@@ -685,33 +833,178 @@ func TestTenantValidation(t *testing.T) {
 				assert.Error(t, err)
 				assert.Equal(t, codes.FailedPrecondition, status.Code(err), err.Error())
 			})
+			t.Run("tenant has an auth with transient status should not update tenant and auth", func(t *testing.T) {
+				// given
+				tts := []struct {
+					transientStatus authgrpc.AuthStatus
+				}{
+					{
+						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_APPLYING,
+					},
+					{
+						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_REMOVING,
+					},
+					{
+						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_BLOCKING,
+					},
+					{
+						transientStatus: authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING,
+					},
+				}
+
+				for _, tt := range tts {
+					t.Run(tt.transientStatus.String(), func(t *testing.T) {
+						expBlockedStatus := tenantgrpc.Status_STATUS_BLOCKED
+						tenant, err := persistTenant(ctx, db, validRandID(), model.TenantStatus(expBlockedStatus.String()), time.Now())
+						assert.NoError(t, err)
+
+						repo := sql.NewRepository(db)
+						authWithTransientState := validAuth()
+						authWithTransientState.TenantID = tenant.ID
+						authWithTransientState.Status = tt.transientStatus.String()
+						err = repo.Create(ctx, authWithTransientState)
+						assert.NoError(t, err)
+
+						assert.NoError(t, err)
+						defer func() {
+							err := deleteTenantFromDB(ctx, db, tenant)
+							assert.NoError(t, err)
+
+							_, err = repo.Delete(ctx, authWithTransientState)
+							assert.NoError(t, err)
+						}()
+
+						// when
+						utResp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
+							Id: tenant.ID,
+						})
+
+						// then
+						assert.Error(t, err)
+						assert.Nil(t, utResp)
+
+						ltResp, err := listTenants(ctx, tSubj)
+						assert.NoError(t, err)
+						assert.Len(t, ltResp.Tenants, 1)
+						assert.Equal(t, expBlockedStatus, ltResp.Tenants[0].Status)
+
+						actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
+							ExternalId: authWithTransientState.ExternalID,
+						})
+						assert.NoError(t, err)
+						assert.Equal(t, tt.transientStatus, actAuth.GetAuth().GetStatus())
+					})
+				}
+			})
 		})
-
-		t.Run("should succeed if tenant is blocked", func(t *testing.T) {
-			// given
-			state := model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-			tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
-			assert.NoError(t, err)
-
-			defer func() {
-				err = deleteTenantFromDB(ctx, db, tenant)
+		t.Run("should succeed", func(t *testing.T) {
+			t.Run("should succeed if tenant is blocked", func(t *testing.T) {
+				// given
+				state := model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
 				assert.NoError(t, err)
-			}()
 
-			expStatus := tenantgrpc.Status_STATUS_UNBLOCKING
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				}()
 
-			// when
-			utResp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
-				Id: tenant.ID,
+				expStatus := tenantgrpc.Status_STATUS_UNBLOCKING
+
+				// when
+				utResp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
+					Id: tenant.ID,
+				})
+
+				// then
+				assert.NoError(t, err)
+				assert.NotNil(t, utResp)
+				ltResp, err := listTenants(ctx, tSubj)
+				assert.NoError(t, err)
+				assert.Len(t, ltResp.Tenants, 1)
+				assert.Equal(t, expStatus, ltResp.Tenants[0].Status)
 			})
 
-			// then
-			assert.NoError(t, err)
-			assert.NotNil(t, utResp)
-			ltResp, err := listTenants(ctx, tSubj)
-			assert.NoError(t, err)
-			assert.Len(t, ltResp.Tenants, 1)
-			assert.Equal(t, expStatus, ltResp.Tenants[0].Status)
+			t.Run("when tenant status is not transient, both tenant and auth statuses are set to UNBLOCKING", func(t *testing.T) {
+				// given
+				tts := []struct {
+					nonTransientStatus authgrpc.AuthStatus
+					expStatus          authgrpc.AuthStatus
+				}{
+					{
+						nonTransientStatus: authgrpc.AuthStatus_AUTH_STATUS_APPLIED,
+						expStatus:          authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING,
+					},
+					{
+						nonTransientStatus: authgrpc.AuthStatus_AUTH_STATUS_REMOVED,
+						expStatus:          authgrpc.AuthStatus_AUTH_STATUS_REMOVED,
+					},
+					{
+						nonTransientStatus: authgrpc.AuthStatus_AUTH_STATUS_BLOCKED,
+						expStatus:          authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING,
+					},
+				}
+
+				for _, tt := range tts {
+					t.Run(tt.nonTransientStatus.String(), func(t *testing.T) {
+						state := model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+						tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
+						assert.NoError(t, err)
+
+						repo := sql.NewRepository(db)
+						authWithTerminalState1 := validAuth()
+						authWithTerminalState1.TenantID = tenant.ID
+						authWithTerminalState1.Status = tt.nonTransientStatus.String()
+						err = repo.Create(ctx, authWithTerminalState1)
+						assert.NoError(t, err)
+
+						authWithRemovedState := validAuth()
+						authWithRemovedState.TenantID = tenant.ID
+						authWithRemovedState.Status = authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String()
+						err = repo.Create(ctx, authWithRemovedState)
+
+						assert.NoError(t, err)
+						defer func() {
+							err := deleteTenantFromDB(ctx, db, tenant)
+							assert.NoError(t, err)
+
+							_, err = repo.Delete(ctx, authWithTerminalState1)
+							assert.NoError(t, err)
+
+							_, err = repo.Delete(ctx, authWithRemovedState)
+							assert.NoError(t, err)
+						}()
+
+						// when
+						utResp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
+							Id: tenant.ID,
+						})
+
+						// then
+						assert.NoError(t, err)
+						assert.NotNil(t, utResp)
+						assert.True(t, utResp.Success)
+
+						ltResp, err := listTenants(ctx, tSubj)
+						assert.NoError(t, err)
+						assert.Len(t, ltResp.Tenants, 1)
+						assert.Equal(t, tenantgrpc.Status_STATUS_UNBLOCKING, ltResp.Tenants[0].Status)
+
+						actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
+							ExternalId: authWithTerminalState1.ExternalID,
+						})
+						assert.NoError(t, err)
+						assert.Equal(t, tt.expStatus, actAuth.GetAuth().GetStatus())
+
+						actAuth, err = authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
+							ExternalId: authWithRemovedState.ExternalID,
+						})
+						assert.NoError(t, err)
+						// make sure removed auth remains removed
+						assert.Equal(t, authgrpc.AuthStatus_AUTH_STATUS_REMOVED, actAuth.GetAuth().GetStatus())
+					})
+				}
+			})
 		})
 	})
 

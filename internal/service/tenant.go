@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 	slogctx "github.com/veqryn/slog-context"
 
@@ -37,11 +38,12 @@ type (
 	tenantValidateFunc func(tenant *model.Tenant) error
 	orbitalJobFunc     func(ctx context.Context, tenant *model.Tenant) error
 
-	patchTenantParams struct {
-		id           string
-		updateFunc   tenantUpdateFunc
-		validateFunc tenantValidateFunc
-		jobFunc      orbitalJobFunc
+	patchTenantOpts struct {
+		id            string
+		updateFunc    tenantUpdateFunc
+		validateFunc  tenantValidateFunc
+		patchAuthOpts patchAuthOpts
+		jobFunc       orbitalJobFunc
 	}
 )
 
@@ -177,12 +179,27 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 		return nil, err
 	}
 
-	err = t.patchTenant(ctx, patchTenantParams{
+	err = t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
 		updateFunc: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKING.String()))
 		},
 		validateFunc: validateTransition(tenantgrpc.Status_STATUS_BLOCKING),
+		patchAuthOpts: patchAuthOpts{
+			validateFn: func(auth *model.Auth) error {
+				_, ok := authTransientStates[auth.Status]
+				if ok {
+					return status.Error(codes.FailedPrecondition, "auth in transient state")
+				}
+				return nil
+			},
+			skipUpdateFn: func(auth *model.Auth) bool {
+				return auth.Status == authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String()
+			},
+			updateFn: func(auth *model.Auth) {
+				auth.Status = authgrpc.AuthStatus_AUTH_STATUS_BLOCKING.String()
+			},
+		},
 		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
 			data, err := proto.Marshal(tenant.ToProto())
 			if err != nil {
@@ -211,12 +228,27 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 		return nil, err
 	}
 
-	err = t.patchTenant(ctx, patchTenantParams{
+	err = t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
 		updateFunc: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_UNBLOCKING.String()))
 		},
 		validateFunc: validateTransition(tenantgrpc.Status_STATUS_UNBLOCKING),
+		patchAuthOpts: patchAuthOpts{
+			validateFn: func(auth *model.Auth) error {
+				_, ok := authTransientStates[auth.Status]
+				if ok {
+					return status.Error(codes.FailedPrecondition, "auth in transient state")
+				}
+				return nil
+			},
+			skipUpdateFn: func(auth *model.Auth) bool {
+				return auth.Status == authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String()
+			},
+			updateFn: func(auth *model.Auth) {
+				auth.Status = authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING.String()
+			},
+		},
 		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
 			data, err := proto.Marshal(tenant.ToProto())
 			if err != nil {
@@ -247,7 +279,7 @@ func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTe
 		return nil, err
 	}
 
-	err = t.patchTenant(ctx, patchTenantParams{
+	err = t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
 		updateFunc: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATING.String()))
@@ -279,7 +311,7 @@ func (t *Tenant) SetTenantLabels(ctx context.Context, in *tenantgrpc.SetTenantLa
 		return nil, err
 	}
 
-	err := t.patchTenant(ctx, patchTenantParams{
+	err := t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
 		updateFunc: func(tenant *model.Tenant) {
 			if tenant.Labels == nil {
@@ -308,7 +340,7 @@ func (t *Tenant) RemoveTenantLabels(ctx context.Context, in *tenantgrpc.RemoveTe
 		return nil, err
 	}
 
-	err := t.patchTenant(ctx, patchTenantParams{
+	err := t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
 		updateFunc: func(tenant *model.Tenant) {
 			if tenant.Labels == nil {
@@ -426,7 +458,7 @@ func (t *Tenant) HandleJobCanceled(ctx context.Context, job orbital.Job) error {
 
 // HandleJobDone applies the changes to the tenant based on the job type when the job is done.
 func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
-	return t.patchTenant(ctx, patchTenantParams{
+	return t.patchTenant(ctx, patchTenantOpts{
 		id: job.ExternalID,
 		updateFunc: func(tenant *model.Tenant) {
 			switch job.Type {
@@ -454,7 +486,7 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 		return nil, err
 	}
 
-	err = t.patchTenant(ctx, patchTenantParams{
+	err = t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
 		updateFunc: func(tenant *model.Tenant) {
 			tenant.UserGroups = in.GetUserGroups()
@@ -468,7 +500,7 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 }
 
 func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
-	return t.patchTenant(ctx, patchTenantParams{
+	return t.patchTenant(ctx, patchTenantOpts{
 		id: job.ExternalID,
 		updateFunc: func(tenant *model.Tenant) {
 			switch job.Type {
@@ -528,25 +560,30 @@ func (t *Tenant) validateRemoveTenantLabelsRequest(in *tenantgrpc.RemoveTenantLa
 // patchTenant retrieves the Tenant by its ID, applies the update function to it,
 // and then updates the Tenant in the repository.
 // It returns an error if the Tenant is not found, if the validation fails, or if the repository update fails.
-func (t *Tenant) patchTenant(ctx context.Context, params patchTenantParams) error {
+func (t *Tenant) patchTenant(ctx context.Context, opts patchTenantOpts) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
 	defer cancel()
 
 	err := t.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
-		tenant, err := getTenant(ctx, r, params.id)
+		tenant, err := getTenant(ctx, r, opts.id)
 		if err != nil {
 			return err
 		}
 
-		if params.validateFunc != nil {
-			err = params.validateFunc(tenant)
+		if opts.validateFunc != nil {
+			err = opts.validateFunc(tenant)
 			if err != nil {
 				return err
 			}
 		}
 
-		if params.updateFunc != nil {
-			params.updateFunc(tenant)
+		err = opts.patchAuthOpts.apply(ctx, r, tenant.ID)
+		if err != nil {
+			return err
+		}
+
+		if opts.updateFunc != nil {
+			opts.updateFunc(tenant)
 
 			isPatched, err := r.Patch(ctx, tenant)
 			if err != nil {
@@ -558,8 +595,8 @@ func (t *Tenant) patchTenant(ctx context.Context, params patchTenantParams) erro
 			}
 		}
 
-		if params.jobFunc != nil {
-			err = params.jobFunc(ctx, tenant)
+		if opts.jobFunc != nil {
+			err = opts.jobFunc(ctx, tenant)
 			if err != nil {
 				return status.Errorf(codes.Internal, "failed to start orbital job: %v", err)
 			}
