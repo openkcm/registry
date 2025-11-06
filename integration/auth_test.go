@@ -307,7 +307,6 @@ func TestAuth(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				// given
 				tenant := validTenant()
-				tenant.Region = operatortest.Region
 				err := repo.Create(ctx, tenant)
 				assert.NoError(t, err)
 				defer func() {

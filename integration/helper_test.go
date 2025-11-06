@@ -22,6 +22,7 @@ import (
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 	typespb "github.com/openkcm/api-sdk/proto/kms/api/cmk/types/v1"
 
+	"github.com/openkcm/registry/integration/operatortest"
 	"github.com/openkcm/registry/internal/config"
 	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository/sql"
@@ -111,7 +112,7 @@ func validTenant() *model.Tenant {
 	return &model.Tenant{
 		Name:      "SuccessFactor",
 		ID:        validRandID(),
-		Region:    "region",
+		Region:    operatortest.Region,
 		OwnerID:   "owner123",
 		OwnerType: allowedOwnerType,
 		Status:    model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()),
