@@ -624,7 +624,7 @@ func TestTenantValidation(t *testing.T) {
 				assert.Equal(t, codes.FailedPrecondition, status.Code(err), err.Error())
 			})
 
-			t.Run("tenant has an auth with transient status should not update tenant and auth", func(t *testing.T) {
+			t.Run("tenant has an auth with transient state, also should not update both tenant and auth", func(t *testing.T) {
 				for status := range service.AuthTransientStates {
 					t.Run(status, func(t *testing.T) {
 						// given
@@ -673,7 +673,7 @@ func TestTenantValidation(t *testing.T) {
 		})
 
 		t.Run("should succeed", func(t *testing.T) {
-			t.Run("when tenant status is not transient, both tenant and auth statuses are set to BLOCKING", func(t *testing.T) {
+			t.Run("when auth status is not transient, both tenant and auth statuses are set to BLOCKING", func(t *testing.T) {
 				// given
 				tts := []struct {
 					nonTransientStatus authgrpc.AuthStatus
@@ -710,8 +710,8 @@ func TestTenantValidation(t *testing.T) {
 						authWithRemovedState.TenantID = tenant.ID
 						authWithRemovedState.Status = authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String()
 						err = repo.Create(ctx, authWithRemovedState)
-
 						assert.NoError(t, err)
+
 						defer func() {
 							err := deleteTenantFromDB(ctx, db, tenant)
 							assert.NoError(t, err)
@@ -816,7 +816,7 @@ func TestTenantValidation(t *testing.T) {
 				assert.Error(t, err)
 				assert.Equal(t, codes.FailedPrecondition, status.Code(err), err.Error())
 			})
-			t.Run("tenant has an auth with transient status should not update tenant and auth", func(t *testing.T) {
+			t.Run("tenant has an auth with transient state, also should not update both tenant and auth", func(t *testing.T) {
 				for status := range service.AuthTransientStates {
 					t.Run(status, func(t *testing.T) {
 						// given
@@ -864,7 +864,7 @@ func TestTenantValidation(t *testing.T) {
 			})
 		})
 		t.Run("should succeed", func(t *testing.T) {
-			t.Run("should succeed if tenant is blocked", func(t *testing.T) {
+			t.Run("if tenant is blocked", func(t *testing.T) {
 				// given
 				state := model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
 				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
@@ -891,7 +891,7 @@ func TestTenantValidation(t *testing.T) {
 				assert.Equal(t, expStatus, ltResp.Tenants[0].Status)
 			})
 
-			t.Run("when tenant status is not transient, both tenant and auth statuses are set to UNBLOCKING", func(t *testing.T) {
+			t.Run("when auth status is not transient, both tenant and auth statuses are set to UNBLOCKING", func(t *testing.T) {
 				// given
 				tts := []struct {
 					nonTransientStatus authgrpc.AuthStatus
