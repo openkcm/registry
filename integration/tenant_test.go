@@ -129,7 +129,6 @@ func TestTenantReconciliation(t *testing.T) {
 				// given
 				tenant := validTenant()
 				tenant.ID = tt.tenantID
-				tenant.Region = operatortest.Region
 				err := createTenantInDB(ctx, db, tenant)
 				assert.NoError(t, err)
 				defer func() {
@@ -177,7 +176,6 @@ func TestTenantReconciliation(t *testing.T) {
 				// given
 				tenant := validTenant()
 				tenant.ID = tt.tenantID
-				tenant.Region = operatortest.Region
 				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
 				err := createTenantInDB(ctx, db, tenant)
 				assert.NoError(t, err)
@@ -227,7 +225,6 @@ func TestTenantReconciliation(t *testing.T) {
 				tenant := validTenant()
 				tenant.ID = tt.tenantID
 				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-				tenant.Region = operatortest.Region
 				err := createTenantInDB(ctx, db, tenant)
 				assert.NoError(t, err)
 				defer func() {
@@ -695,8 +692,9 @@ func TestTenantValidation(t *testing.T) {
 
 				for _, tt := range tts {
 					t.Run(tt.nonTransientStatus.String(), func(t *testing.T) {
-						state := model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String())
-						tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
+						tenant := validTenant()
+						tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String())
+						err := createTenantInDB(ctx, db, tenant)
 						assert.NoError(t, err)
 
 						repo := sql.NewRepository(db)
@@ -714,6 +712,9 @@ func TestTenantValidation(t *testing.T) {
 
 						defer func() {
 							err := deleteTenantFromDB(ctx, db, tenant)
+							assert.NoError(t, err)
+
+							err = deleteOrbitalResources(ctx, db, tenant.ID)
 							assert.NoError(t, err)
 
 							_, err = repo.Delete(ctx, authWithTerminalState)
@@ -755,12 +756,16 @@ func TestTenantValidation(t *testing.T) {
 			})
 			t.Run("if tenant is active", func(t *testing.T) {
 				// given
-				state := model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String())
-				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
+				tenant := validTenant()
+				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String())
+				err := createTenantInDB(ctx, db, tenant)
 				assert.NoError(t, err)
 
 				defer func() {
-					err = deleteTenantFromDB(ctx, db, tenant)
+					err := deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+
+					err = deleteOrbitalResources(ctx, db, tenant.ID)
 					assert.NoError(t, err)
 				}()
 
@@ -866,12 +871,16 @@ func TestTenantValidation(t *testing.T) {
 		t.Run("should succeed", func(t *testing.T) {
 			t.Run("if tenant is blocked", func(t *testing.T) {
 				// given
-				state := model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
+				tenant := validTenant()
+				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+				err := createTenantInDB(ctx, db, tenant)
 				assert.NoError(t, err)
 
 				defer func() {
-					err = deleteTenantFromDB(ctx, db, tenant)
+					err := deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+
+					err = deleteOrbitalResources(ctx, db, tenant.ID)
 					assert.NoError(t, err)
 				}()
 
@@ -913,8 +922,9 @@ func TestTenantValidation(t *testing.T) {
 
 				for _, tt := range tts {
 					t.Run(tt.nonTransientStatus.String(), func(t *testing.T) {
-						state := model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-						tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
+						tenant := validTenant()
+						tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+						err := createTenantInDB(ctx, db, tenant)
 						assert.NoError(t, err)
 
 						repo := sql.NewRepository(db)
@@ -932,6 +942,9 @@ func TestTenantValidation(t *testing.T) {
 						assert.NoError(t, err)
 						defer func() {
 							err := deleteTenantFromDB(ctx, db, tenant)
+							assert.NoError(t, err)
+
+							err = deleteOrbitalResources(ctx, db, tenant.ID)
 							assert.NoError(t, err)
 
 							_, err = repo.Delete(ctx, authWithTerminalStatus)
