@@ -183,9 +183,14 @@ func TestTenantReconciliation(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				// given
-				tenant, cleanup := createBlockedTenant(ctx, t, tt.tenantID, db)
+				tenant := validTenant()
+				tenant.ID = tt.tenantID
+				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+				err := createTenantInDB(ctx, db, tenant)
+				assert.NoError(t, err)
 				defer func() {
-					cleanup()
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
 				}()
 
 				// when
@@ -226,9 +231,14 @@ func TestTenantReconciliation(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				// given
-				tenant, cleanup := createBlockedTenant(ctx, t, tt.tenantID, db)
+				tenant := validTenant()
+				tenant.ID = tt.tenantID
+				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+				err := createTenantInDB(ctx, db, tenant)
+				assert.NoError(t, err)
 				defer func() {
-					cleanup()
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
 				}()
 
 				// when
@@ -1770,19 +1780,4 @@ func assertEqualValues(t *testing.T, req1 *tenantgrpc.RegisterTenantRequest, ten
 	assert.Equal(t, req1.OwnerType, tenant.OwnerType)
 	assert.Equal(t, req1.Role, tenant.Role)
 	assert.Equal(t, req1.Labels, tenant.Labels)
-}
-
-func createBlockedTenant(ctx context.Context, t *testing.T, tenantID string, db *gorm.DB) (*model.Tenant, func()) {
-	t.Helper()
-	tenant := validTenant()
-	tenant.ID = tenantID
-	tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-	err := createTenantInDB(ctx, db, tenant)
-	require.NoError(t, err)
-	f := func() {
-		err = deleteTenantFromDB(ctx, db, tenant)
-		assert.NoError(t, err)
-	}
-
-	return tenant, f
 }

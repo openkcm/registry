@@ -13,7 +13,6 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository"
 )
 
@@ -190,7 +189,7 @@ func handleCompositeKey(db *gorm.DB, compositeKey repository.CompositeKey) (*gor
 
 	for field, value := range compositeKey {
 		var err error
-		tx, err = handleQueryField(value, tx, field)
+		tx, err = handleQueryField(tx, field, value)
 		if err != nil {
 			return nil, err
 		}
@@ -200,7 +199,7 @@ func handleCompositeKey(db *gorm.DB, compositeKey repository.CompositeKey) (*gor
 }
 
 // handleQueryField applies the query field to the query.
-func handleQueryField(value any, tx *gorm.DB, field repository.QueryField) (*gorm.DB, error) {
+func handleQueryField(tx *gorm.DB, field repository.QueryField, value any) (*gorm.DB, error) {
 	switch value {
 	case repository.NotEmpty:
 		tx = tx.Where(field+" IS NOT NULL").Where(field+" != ?", "")
@@ -212,7 +211,7 @@ func handleQueryField(value any, tx *gorm.DB, field repository.QueryField) (*gor
 		case reflect.Array:
 			tx = tx.Where(field+" IN ?", value)
 		case reflect.Map:
-			labels, ok := value.(model.Labels)
+			labels, ok := value.(map[string]any)
 			if !ok {
 				return nil, fmt.Errorf("%w: %T", ErrUnknownTypeForJSONBField, value)
 			}
