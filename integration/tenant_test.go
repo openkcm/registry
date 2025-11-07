@@ -27,6 +27,15 @@ import (
 	"github.com/openkcm/registry/internal/service"
 )
 
+const (
+	labelKeyA   = "key-a"
+	labelKeyB   = "key-b"
+	labelKeyC   = "key-c"
+	labelValueA = "value-a"
+	labelValueB = "value-b"
+	labelValueC = "value-c"
+)
+
 type expStateFunc func(*tenantgrpc.Tenant) bool
 
 var ErrTenantIDEmpty = status.Error(codes.InvalidArgument, "invalid ID: validation failed for Tenant.ID: value is empty")
@@ -174,14 +183,9 @@ func TestTenantReconciliation(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				// given
-				tenant := validTenant()
-				tenant.ID = tt.tenantID
-				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-				err := createTenantInDB(ctx, db, tenant)
-				assert.NoError(t, err)
+				tenant, cleanup := createBlockedTenant(ctx, t, tt.tenantID, db)
 				defer func() {
-					err = deleteTenantFromDB(ctx, db, tenant)
-					assert.NoError(t, err)
+					cleanup()
 				}()
 
 				// when
@@ -222,14 +226,9 @@ func TestTenantReconciliation(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				// given
-				tenant := validTenant()
-				tenant.ID = tt.tenantID
-				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-				err := createTenantInDB(ctx, db, tenant)
-				assert.NoError(t, err)
+				tenant, cleanup := createBlockedTenant(ctx, t, tt.tenantID, db)
 				defer func() {
-					err = deleteTenantFromDB(ctx, db, tenant)
-					assert.NoError(t, err)
+					cleanup()
 				}()
 
 				// when
@@ -448,7 +447,7 @@ func TestTenantValidation(t *testing.T) {
 					name: "only Labels filter is provided",
 					request: &tenantgrpc.ListTenantsRequest{
 						Labels: map[string]string{
-							"key-a": "value-a",
+							labelKeyA: labelValueA,
 						},
 					},
 				},
@@ -461,7 +460,7 @@ func TestTenantValidation(t *testing.T) {
 						OwnerId:   "owner-id-123",
 						OwnerType: allowedOwnerType,
 						Labels: map[string]string{
-							"key-a": "value-a",
+							labelKeyA: labelValueA,
 						},
 					},
 				},
@@ -490,7 +489,7 @@ func TestTenantValidation(t *testing.T) {
 					name: "label with empty key is provided",
 					request: &tenantgrpc.ListTenantsRequest{
 						Labels: map[string]string{
-							"": "value-a",
+							"": labelValueA,
 						},
 					},
 				},
@@ -498,7 +497,7 @@ func TestTenantValidation(t *testing.T) {
 					name: "label with empty value is provided",
 					request: &tenantgrpc.ListTenantsRequest{
 						Labels: map[string]string{
-							"key-a": "",
+							labelKeyA: "",
 						},
 					},
 				},
@@ -536,8 +535,8 @@ func TestTenantValidation(t *testing.T) {
 				OwnerType: allowedOwnerType,
 				Role:      tenantgrpc.Role_ROLE_TEST,
 				Labels: map[string]string{
-					"key-a": "value-a",
-					"key-c": "value-c",
+					labelKeyA: labelValueA,
+					labelKeyC: labelValueC,
 				},
 			}
 			resp1, err := tSubj.RegisterTenant(ctx, req1)
@@ -557,9 +556,9 @@ func TestTenantValidation(t *testing.T) {
 				OwnerType: "ownerType2",
 				Role:      tenantgrpc.Role_ROLE_TEST,
 				Labels: map[string]string{
-					"key-b": "value-b",
-					"key-c": "value-c",
-					"key-d": "$value-d",
+					labelKeyB: labelValueB,
+					labelKeyC: labelValueC,
+					"key-d":   "$value-d",
 				},
 			}
 			resp2, err := tSubj.RegisterTenant(ctx, req2)
@@ -589,7 +588,7 @@ func TestTenantValidation(t *testing.T) {
 				// Given
 				request := tenantgrpc.ListTenantsRequest{
 					Labels: map[string]string{
-						"key-c": "value-c",
+						labelKeyC: labelValueC,
 					},
 				}
 
@@ -655,7 +654,7 @@ func TestTenantValidation(t *testing.T) {
 						name: "Label",
 						request: &tenantgrpc.ListTenantsRequest{
 							Labels: map[string]string{
-								"key-a": "value-a",
+								labelKeyA: labelValueA,
 							},
 						},
 						expectedTenantID: resp1.GetId(),
@@ -664,7 +663,7 @@ func TestTenantValidation(t *testing.T) {
 						name: "Another label",
 						request: &tenantgrpc.ListTenantsRequest{
 							Labels: map[string]string{
-								"key-b": "value-b",
+								labelKeyB: labelValueB,
 							},
 						},
 						expectedTenantID: resp2.GetId(),
@@ -682,8 +681,8 @@ func TestTenantValidation(t *testing.T) {
 						name: "Combined labels",
 						request: &tenantgrpc.ListTenantsRequest{
 							Labels: map[string]string{
-								"key-b": "value-b",
-								"key-c": "value-c",
+								labelKeyB: labelValueB,
+								labelKeyC: labelValueC,
 							},
 						},
 						expectedTenantID: resp2.GetId(),
@@ -693,7 +692,7 @@ func TestTenantValidation(t *testing.T) {
 						request: &tenantgrpc.ListTenantsRequest{
 							Name: req1.Name,
 							Labels: map[string]string{
-								"key-c": "value-c",
+								labelKeyC: labelValueC,
 							},
 						},
 						expectedTenantID: resp1.GetId(),
@@ -705,7 +704,7 @@ func TestTenantValidation(t *testing.T) {
 							OwnerType: req2.OwnerType,
 							Region:    req2.Region,
 							Labels: map[string]string{
-								"key-c": "value-c",
+								labelKeyC: labelValueC,
 							},
 						},
 						expectedTenantID: resp2.GetId(),
@@ -1771,4 +1770,19 @@ func assertEqualValues(t *testing.T, req1 *tenantgrpc.RegisterTenantRequest, ten
 	assert.Equal(t, req1.OwnerType, tenant.OwnerType)
 	assert.Equal(t, req1.Role, tenant.Role)
 	assert.Equal(t, req1.Labels, tenant.Labels)
+}
+
+func createBlockedTenant(ctx context.Context, t *testing.T, tenantID string, db *gorm.DB) (*model.Tenant, func()) {
+	t.Helper()
+	tenant := validTenant()
+	tenant.ID = tenantID
+	tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+	err := createTenantInDB(ctx, db, tenant)
+	require.NoError(t, err)
+	f := func() {
+		err = deleteTenantFromDB(ctx, db, tenant)
+		assert.NoError(t, err)
+	}
+
+	return tenant, f
 }
