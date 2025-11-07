@@ -8,6 +8,7 @@ import (
 	"github.com/openkcm/common-sdk/pkg/commoncfg"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	"github.com/openkcm/registry/internal/config"
 	"github.com/openkcm/registry/internal/model"
@@ -41,7 +42,9 @@ func startDBConnection(conf config.DB) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.LogLevel(conf.LogLevel)),
+	})
 	if err != nil {
 		return nil, err
 	}

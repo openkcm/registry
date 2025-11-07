@@ -660,6 +660,16 @@ func (t *Tenant) buildListTenantsQuery(in *tenantgrpc.ListTenantsRequest) (*repo
 		cond.Where(repository.OwnerTypeField, in.GetOwnerType())
 	}
 
+	labels := model.Labels(in.GetLabels())
+	if len(labels) > 0 {
+		err := labels.Validate()
+		if err != nil {
+			return nil, err
+		}
+
+		cond.Where(repository.LabelsField, labels)
+	}
+
 	return query.Where(cond), nil
 }
 

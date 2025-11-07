@@ -6,7 +6,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
-	github.com/openkcm/api-sdk v0.11.0
+	github.com/openkcm/api-sdk v0.12.0
 	github.com/openkcm/common-sdk v1.5.2
 	github.com/openkcm/orbital v0.2.0
 	github.com/samber/oops v1.19.3

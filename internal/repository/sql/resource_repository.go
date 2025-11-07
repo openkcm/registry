@@ -13,11 +13,16 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository"
 )
 
 const (
 	pqUniqueViolationErrCode = "23505" // see https://www.postgresql.org/docs/14/errcodes-appendix.html
+)
+
+var (
+	ErrUnknownTypeForJSONBField = errors.New("unknown type for jsonb field")
 )
 
 // ResourceRepository represents the repository for managing Resource data.
@@ -54,10 +59,15 @@ func (r ResourceRepository) Create(ctx context.Context, resource repository.Reso
 // List retrieves records from the database based on the provided query parameters and model.
 func (r ResourceRepository) List(ctx context.Context, result any, query repository.Query) error {
 	dbQuery := r.db.WithContext(ctx).Model(result)
-	dbQuery = applyQuery(dbQuery, query)
-
-	err := dbQuery.Find(result).Error
+	dbQuery, err := applyQuery(dbQuery, query)
 	if err != nil {
+		slog.Error("error applying query for listing resources", slog.Any("err", err))
+		return err
+	}
+
+	err = dbQuery.Find(result).Error
+	if err != nil {
+		slog.Error("error listing resources", slog.Any("err", err))
 		return err
 	}
 
@@ -109,7 +119,11 @@ func (r ResourceRepository) Patch(ctx context.Context, resource repository.Resou
 // and error if there was an error during the patch operation.
 func (r ResourceRepository) PatchAll(ctx context.Context, resource repository.Resource, result any, query repository.Query) (int64, error) {
 	db := r.db.WithContext(ctx).Model(result).Clauses(clause.Returning{})
-	db = applyQuery(db, query)
+	db, err := applyQuery(db, query)
+	if err != nil {
+		slog.Error("error applying query for updating resources", slog.Any("err", err))
+		return 0, err
+	}
 
 	db = db.Updates(resource)
 	if db.Error != nil {
@@ -143,17 +157,21 @@ func (r ResourceRepository) Transaction(ctx context.Context, txFunc repository.T
 }
 
 // applyQuery applies the query to the database.
-func applyQuery(db *gorm.DB, query repository.Query) *gorm.DB {
+func applyQuery(db *gorm.DB, query repository.Query) (*gorm.DB, error) {
 	if len(query.CompositeKeys) > 0 {
 		baseQuery := db.Session(&gorm.Session{NewDB: true})
 
 		for i, ck := range query.CompositeKeys {
+			tx, err := handleCompositeKey(db, ck)
+			if err != nil {
+				return nil, err
+			}
 			if i == 0 {
-				baseQuery = baseQuery.Where(handleCompositeKey(db, ck))
+				baseQuery = baseQuery.Where(tx)
 				continue
 			}
 
-			baseQuery = baseQuery.Or(handleCompositeKey(db, ck))
+			baseQuery = baseQuery.Or(tx)
 		}
 
 		db = db.Where(baseQuery)
@@ -163,30 +181,49 @@ func applyQuery(db *gorm.DB, query repository.Query) *gorm.DB {
 		query.Limit = repository.DefaultPaginationLimit
 	}
 
-	return handlePagination(query.Paginator, db).Limit(query.Limit)
+	return handlePagination(query.Paginator, db).Limit(query.Limit), nil
 }
 
 // handleCompositeKey applies the composite key to the query.
-func handleCompositeKey(db *gorm.DB, compositeKey repository.CompositeKey) *gorm.DB {
+func handleCompositeKey(db *gorm.DB, compositeKey repository.CompositeKey) (*gorm.DB, error) {
 	tx := db.Session(&gorm.Session{NewDB: true})
 
 	for field, value := range compositeKey {
-		switch value {
-		case repository.NotEmpty:
-			tx = tx.Where(field+" IS NOT NULL").Where(field+" != ?", "")
-		case repository.Empty:
-			tx = tx.Where(field+" IS NULL OR "+field+" = ?", "")
-		default:
-			v := reflect.ValueOf(value)
-			if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
-				tx = tx.Where(field+" IN ?", value)
-			} else {
-				tx = tx.Where(field+" = ?", value)
-			}
+		var err error
+		tx, err = handleQueryField(value, tx, field)
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	return tx
+	return tx, nil
+}
+
+// handleQueryField applies the query field to the query.
+func handleQueryField(value any, tx *gorm.DB, field repository.QueryField) (*gorm.DB, error) {
+	switch value {
+	case repository.NotEmpty:
+		tx = tx.Where(field+" IS NOT NULL").Where(field+" != ?", "")
+	case repository.Empty:
+		tx = tx.Where(field+" IS NULL OR "+field+" = ?", "")
+	default:
+		switch reflect.ValueOf(value).Kind() { //nolint:exhaustive
+		case reflect.Slice:
+		case reflect.Array:
+			tx = tx.Where(field+" IN ?", value)
+		case reflect.Map:
+			labels, ok := value.(model.Labels)
+			if !ok {
+				return nil, fmt.Errorf("%w: %T", ErrUnknownTypeForJSONBField, value)
+			}
+			for k, v := range labels {
+				tx = tx.Where(field+" ->> ? = ?", k, v)
+			}
+		default:
+			tx = tx.Where(field+" = ?", value)
+		}
+	}
+	return tx, nil
 }
 
 // handlePagination applies pagination to the query.
