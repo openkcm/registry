@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0](https://github.com/openkcm/registry/compare/v1.3.0...v1.4.0) (2025-11-07)
+
+
+### Features
+
+* List tenants by labels ([#83](https://github.com/openkcm/registry/issues/83)) ([30739b1](https://github.com/openkcm/registry/commit/30739b16fd3ff055369a2b634f75e139535129a7))
+* sync tenant and auth status transitions  ([77e19fc](https://github.com/openkcm/registry/commit/77e19fc6c508294678bdb086435915845c0aa214))
+
 ## [1.3.0](https://github.com/openkcm/registry/compare/v1.2.0...v1.3.0) (2025-10-30)
 
 
