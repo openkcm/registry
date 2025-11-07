@@ -660,6 +660,11 @@ func (t *Tenant) buildListTenantsQuery(in *tenantgrpc.ListTenantsRequest) (*repo
 		cond.Where(repository.OwnerTypeField, in.GetOwnerType())
 	}
 
+	err = addLabelsCondition(&cond, in.GetLabels())
+	if err != nil {
+		return nil, err
+	}
+
 	return query.Where(cond), nil
 }
 
@@ -681,6 +686,24 @@ func (t *Tenant) validateID(id string) error {
 	if err != nil {
 		return status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
 	}
+	return nil
+}
+
+func addLabelsCondition(cond *repository.CompositeKey, labels model.Labels) error {
+	if len(labels) > 0 {
+		err := labels.Validate()
+		if err != nil {
+			return err
+		}
+
+		queryLabels := make(map[string]any)
+		// Convert labels to map[string]any for querying
+		for k, v := range labels {
+			queryLabels[k] = v
+		}
+		cond.Where(repository.LabelsField, queryLabels)
+	}
+
 	return nil
 }
 

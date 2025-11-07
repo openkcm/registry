@@ -86,6 +86,7 @@ type DB struct {
 	Password commoncfg.SourceRef `yaml:"password" json:"password"`
 	Name     string              `yaml:"name" json:"name"` // database name
 	Port     string              `yaml:"port" json:"port"`
+	LogLevel int                 `yaml:"logLevel" json:"logLevel" default:"1"`
 }
 
 // Server holds server config.

@@ -16,6 +16,7 @@ const (
 	OwnerTypeField  QueryField = "owner_type"
 	CreatedAtField  QueryField = "created_at"
 	TypeField       QueryField = "type"
+	LabelsField     QueryField = "labels"
 
 	NotEmpty QueryFieldValue = "not_empty"
 	Empty    QueryFieldValue = "empty"

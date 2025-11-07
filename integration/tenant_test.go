@@ -27,6 +27,15 @@ import (
 	"github.com/openkcm/registry/internal/service"
 )
 
+const (
+	labelKeyA   = "key-a"
+	labelKeyB   = "key-b"
+	labelKeyC   = "key-c"
+	labelValueA = "value-a"
+	labelValueB = "value-b"
+	labelValueC = "value-c"
+)
+
 type expStateFunc func(*tenantgrpc.Tenant) bool
 
 var ErrTenantIDEmpty = status.Error(codes.InvalidArgument, "invalid ID: validation failed for Tenant.ID: value is empty")
@@ -445,6 +454,14 @@ func TestTenantValidation(t *testing.T) {
 					},
 				},
 				{
+					name: "only Labels filter is provided",
+					request: &tenantgrpc.ListTenantsRequest{
+						Labels: map[string]string{
+							labelKeyA: labelValueA,
+						},
+					},
+				},
+				{
 					name: "all filter are provided",
 					request: &tenantgrpc.ListTenantsRequest{
 						Id:        validRandID(),
@@ -452,6 +469,9 @@ func TestTenantValidation(t *testing.T) {
 						Region:    "region",
 						OwnerId:   "owner-id-123",
 						OwnerType: allowedOwnerType,
+						Labels: map[string]string{
+							labelKeyA: labelValueA,
+						},
 					},
 				},
 			}
@@ -469,6 +489,52 @@ func TestTenantValidation(t *testing.T) {
 			}
 		})
 
+		t.Run("should return error given invalid", func(t *testing.T) {
+			// given
+			tests := []struct {
+				name    string
+				request *tenantgrpc.ListTenantsRequest
+			}{
+				{
+					name: "label with empty key is provided",
+					request: &tenantgrpc.ListTenantsRequest{
+						Labels: map[string]string{
+							"": labelValueA,
+						},
+					},
+				},
+				{
+					name: "label with empty value is provided",
+					request: &tenantgrpc.ListTenantsRequest{
+						Labels: map[string]string{
+							labelKeyA: "",
+						},
+					},
+				},
+				{
+					name: "labels with empty key and value are provided",
+					request: &tenantgrpc.ListTenantsRequest{
+						Labels: map[string]string{
+							"": "",
+						},
+					},
+				},
+			}
+
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					// when
+					result, err := tSubj.ListTenants(ctx, tt.request)
+
+					// then
+					require.Error(t, err)
+					assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+					assert.Equal(t, model.ErrLabelsIncludeEmptyString.Error(), err.Error())
+					assert.Nil(t, result)
+				})
+			}
+		})
+
 		t.Run("given entries exist", func(t *testing.T) {
 			// given
 			req1 := &tenantgrpc.RegisterTenantRequest{
@@ -479,8 +545,8 @@ func TestTenantValidation(t *testing.T) {
 				OwnerType: allowedOwnerType,
 				Role:      tenantgrpc.Role_ROLE_TEST,
 				Labels: map[string]string{
-					"key11": "value11",
-					"key12": "value12",
+					labelKeyA: labelValueA,
+					labelKeyC: labelValueC,
 				},
 			}
 			resp1, err := tSubj.RegisterTenant(ctx, req1)
@@ -500,8 +566,9 @@ func TestTenantValidation(t *testing.T) {
 				OwnerType: "ownerType2",
 				Role:      tenantgrpc.Role_ROLE_TEST,
 				Labels: map[string]string{
-					"key21": "value21",
-					"key22": "value22",
+					labelKeyB: labelValueB,
+					labelKeyC: labelValueC,
+					"key-d":   "$value-d",
 				},
 			}
 			resp2, err := tSubj.RegisterTenant(ctx, req2)
@@ -517,6 +584,30 @@ func TestTenantValidation(t *testing.T) {
 
 				// then
 				assert.NoError(t, err)
+				assert.Len(t, resp.GetTenants(), 2)
+				assert.Empty(t, resp.GetNextPageToken())
+				assertEqualValues(t, req1, resp.Tenants[1])
+				assert.Equal(t, tenantgrpc.Status_STATUS_PROVISIONING, resp.Tenants[1].Status)
+				assert.Empty(t, resp.Tenants[1].GetUserGroups())
+				assertEqualValues(t, req2, resp.Tenants[0])
+				assert.Equal(t, tenantgrpc.Status_STATUS_PROVISIONING, resp.Tenants[0].Status)
+				assert.Empty(t, resp.Tenants[0].GetUserGroups())
+			})
+
+			t.Run("should return all tenants if filtered by common label", func(t *testing.T) {
+				// Given
+				request := tenantgrpc.ListTenantsRequest{
+					Labels: map[string]string{
+						labelKeyC: labelValueC,
+					},
+				}
+
+				// when
+				resp, err := tSubj.ListTenants(ctx, &request)
+
+				// then
+				assert.NoError(t, err)
+				assert.NotNil(t, resp.Tenants, "tenants should not be nil")
 				assert.Len(t, resp.GetTenants(), 2)
 				assert.Empty(t, resp.GetNextPageToken())
 				assertEqualValues(t, req1, resp.Tenants[1])
@@ -569,6 +660,65 @@ func TestTenantValidation(t *testing.T) {
 						},
 						expectedTenantID: resp2.GetId(),
 					},
+					{
+						name: "Label",
+						request: &tenantgrpc.ListTenantsRequest{
+							Labels: map[string]string{
+								labelKeyA: labelValueA,
+							},
+						},
+						expectedTenantID: resp1.GetId(),
+					},
+					{
+						name: "Another label",
+						request: &tenantgrpc.ListTenantsRequest{
+							Labels: map[string]string{
+								labelKeyB: labelValueB,
+							},
+						},
+						expectedTenantID: resp2.GetId(),
+					},
+					{
+						name: "Label with special character",
+						request: &tenantgrpc.ListTenantsRequest{
+							Labels: map[string]string{
+								"key-d": "$value-d",
+							},
+						},
+						expectedTenantID: resp2.GetId(),
+					},
+					{
+						name: "Combined labels",
+						request: &tenantgrpc.ListTenantsRequest{
+							Labels: map[string]string{
+								labelKeyB: labelValueB,
+								labelKeyC: labelValueC,
+							},
+						},
+						expectedTenantID: resp2.GetId(),
+					},
+					{
+						name: "Name and label",
+						request: &tenantgrpc.ListTenantsRequest{
+							Name: req1.Name,
+							Labels: map[string]string{
+								labelKeyC: labelValueC,
+							},
+						},
+						expectedTenantID: resp1.GetId(),
+					},
+					{
+						name: "OwnerID, ownerType, region and label",
+						request: &tenantgrpc.ListTenantsRequest{
+							OwnerId:   req2.OwnerId,
+							OwnerType: req2.OwnerType,
+							Region:    req2.Region,
+							Labels: map[string]string{
+								labelKeyC: labelValueC,
+							},
+						},
+						expectedTenantID: resp2.GetId(),
+					},
 				}
 
 				for _, test := range tests {
@@ -577,9 +727,11 @@ func TestTenantValidation(t *testing.T) {
 						list, err := tSubj.ListTenants(ctx, test.request)
 
 						// then
-						assert.NoError(t, err)
-						assert.Len(t, list.GetTenants(), 1)
-						assert.Equal(t, test.expectedTenantID, list.GetTenants()[0].Id)
+						require.NoError(t, err)
+						tenants := list.GetTenants()
+						require.NotNil(t, tenants, "tenants should not be nil")
+						require.Len(t, tenants, 1)
+						assert.Equal(t, test.expectedTenantID, tenants[0].Id)
 					})
 				}
 			})
