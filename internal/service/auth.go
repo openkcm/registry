@@ -373,7 +373,12 @@ func (a *Auth) handleJobAborted(ctx context.Context, job orbital.Job) error {
 }
 
 // apply applies update and/or validate functions to all auths for a given tenantID.
+//
+//nolint:cyclop
 func (opts patchAuthOpts) apply(ctx context.Context, r repository.Repository, tenantID string) error {
+	if opts.validateFn == nil && opts.updateFn == nil {
+		return nil
+	}
 	// get all auths for the tenantID
 	cond := repository.NewCompositeKey().Where(repository.TenantIDField, tenantID)
 	var auths []model.Auth

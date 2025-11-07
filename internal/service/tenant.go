@@ -194,7 +194,8 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 				return nil
 			},
 			skipUpdateFn: func(auth *model.Auth) bool {
-				return auth.Status == authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String()
+				return auth.Status == authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String() ||
+					auth.Status == authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()
 			},
 			updateFn: func(auth *model.Auth) {
 				auth.Status = authgrpc.AuthStatus_AUTH_STATUS_BLOCKING.String()
@@ -243,7 +244,8 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 				return nil
 			},
 			skipUpdateFn: func(auth *model.Auth) bool {
-				return auth.Status == authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String()
+				return auth.Status == authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String() ||
+					auth.Status == authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()
 			},
 			updateFn: func(auth *model.Auth) {
 				auth.Status = authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING.String()
@@ -457,18 +459,36 @@ func (t *Tenant) HandleJobCanceled(ctx context.Context, job orbital.Job) error {
 }
 
 // HandleJobDone applies the changes to the tenant based on the job type when the job is done.
+//
+//nolint:dupl
 func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
+	var tenantUpdateFn tenantUpdateFunc
+	var authUpdateFn authUpdateFunc
+	switch job.Type {
+	case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String():
+		tenantUpdateFn = newTenantUpdateFn(tenantgrpc.Status_STATUS_ACTIVE)
+	case tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String():
+		tenantUpdateFn = newTenantUpdateFn(tenantgrpc.Status_STATUS_ACTIVE)
+		authUpdateFn = newAuthUpdateFn(authgrpc.AuthStatus_AUTH_STATUS_APPLIED)
+	case tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String():
+		tenantUpdateFn = newTenantUpdateFn(tenantgrpc.Status_STATUS_BLOCKED)
+		authUpdateFn = newAuthUpdateFn(authgrpc.AuthStatus_AUTH_STATUS_BLOCKED)
+	case tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String():
+		tenantUpdateFn = newTenantUpdateFn(tenantgrpc.Status_STATUS_TERMINATED)
+	default:
+		slogctx.Error(ctx, "unexpected job type in handleJobDone")
+		return nil
+	}
+
 	return t.patchTenant(ctx, patchTenantOpts{
-		id: job.ExternalID,
-		updateFunc: func(tenant *model.Tenant) {
-			switch job.Type {
-			case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String(), tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String():
-				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()))
-			case tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String():
-				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String()))
-			case tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String():
-				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATED.String()))
-			}
+		id:         job.ExternalID,
+		updateFunc: tenantUpdateFn,
+		patchAuthOpts: patchAuthOpts{
+			skipUpdateFn: func(auth *model.Auth) bool {
+				return auth.Status == authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String() ||
+					auth.Status == authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()
+			},
+			updateFn: authUpdateFn,
 		},
 	})
 }
@@ -499,20 +519,35 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 	return &tenantgrpc.SetTenantUserGroupsResponse{Success: true}, nil
 }
 
+//nolint:dupl
 func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
+	var tenantUpdateFn tenantUpdateFunc
+	var authUpdateFn authUpdateFunc
+
+	switch job.Type {
+	case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String():
+		tenantUpdateFn = newTenantUpdateFn(tenantgrpc.Status_STATUS_PROVISIONING_ERROR)
+	case tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String():
+		tenantUpdateFn = newTenantUpdateFn(tenantgrpc.Status_STATUS_UNBLOCKING_ERROR)
+		authUpdateFn = newAuthUpdateFn(authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING_ERROR)
+	case tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String():
+		tenantUpdateFn = newTenantUpdateFn(tenantgrpc.Status_STATUS_BLOCKING_ERROR)
+		authUpdateFn = newAuthUpdateFn(authgrpc.AuthStatus_AUTH_STATUS_BLOCKING_ERROR)
+	case tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String():
+		tenantUpdateFn = newTenantUpdateFn(tenantgrpc.Status_STATUS_TERMINATION_ERROR)
+	default:
+		slogctx.Error(ctx, "unexpected job type in handleJobAborted")
+		return nil
+	}
 	return t.patchTenant(ctx, patchTenantOpts{
-		id: job.ExternalID,
-		updateFunc: func(tenant *model.Tenant) {
-			switch job.Type {
-			case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String():
-				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_PROVISIONING_ERROR.String()))
-			case tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String():
-				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_UNBLOCKING_ERROR.String()))
-			case tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String():
-				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKING_ERROR.String()))
-			case tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String():
-				tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATION_ERROR.String()))
-			}
+		id:         job.ExternalID,
+		updateFunc: tenantUpdateFn,
+		patchAuthOpts: patchAuthOpts{
+			skipUpdateFn: func(auth *model.Auth) bool {
+				return auth.Status == authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String() ||
+					auth.Status == authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()
+			},
+			updateFn: authUpdateFn,
 		},
 	})
 }
@@ -787,4 +822,16 @@ func (t *Tenant) validateTenant(tenant *model.Tenant) error {
 		return err
 	}
 	return nil
+}
+
+func newTenantUpdateFn(status tenantgrpc.Status) tenantUpdateFunc {
+	return func(tenant *model.Tenant) {
+		tenant.SetStatus(model.TenantStatus(status.String()))
+	}
+}
+
+func newAuthUpdateFn(status authgrpc.AuthStatus) authUpdateFunc {
+	return func(auth *model.Auth) {
+		auth.Status = status.String()
+	}
 }

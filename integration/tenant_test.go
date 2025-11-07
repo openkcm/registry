@@ -47,6 +47,7 @@ func TestTenantReconciliation(t *testing.T) {
 	defer conn.Close()
 
 	tSubj := tenantgrpc.NewServiceClient(conn)
+	authClient := authgrpc.NewServiceClient(conn)
 
 	ctx := t.Context()
 	db, err := startDB()
@@ -112,10 +113,12 @@ func TestTenantReconciliation(t *testing.T) {
 	})
 
 	t.Run("BlockTenant", func(t *testing.T) {
+		repo := sql.NewRepository(db)
 		tests := []struct {
-			name     string
-			tenantID string
-			expState expStateFunc
+			name         string
+			tenantID     string
+			expState     expStateFunc
+			expAuthState authgrpc.AuthStatus
 		}{
 			{
 				name:     "should change status to BLOCKING_ERROR if operator fails to process the request",
@@ -123,6 +126,7 @@ func TestTenantReconciliation(t *testing.T) {
 				expState: func(t *tenantgrpc.Tenant) bool {
 					return t.GetStatus() == tenantgrpc.Status_STATUS_BLOCKING_ERROR
 				},
+				expAuthState: authgrpc.AuthStatus_AUTH_STATUS_BLOCKING_ERROR,
 			},
 			{
 				name:     "should change status to BLOCKED if tenant is blocked successfully",
@@ -130,6 +134,7 @@ func TestTenantReconciliation(t *testing.T) {
 				expState: func(t *tenantgrpc.Tenant) bool {
 					return t.GetStatus() == tenantgrpc.Status_STATUS_BLOCKED
 				},
+				expAuthState: authgrpc.AuthStatus_AUTH_STATUS_BLOCKED,
 			},
 		}
 
@@ -140,8 +145,39 @@ func TestTenantReconciliation(t *testing.T) {
 				tenant.ID = tt.tenantID
 				err := createTenantInDB(ctx, db, tenant)
 				assert.NoError(t, err)
+
+				authWithAppliedState := validAuth()
+				authWithAppliedState.TenantID = tenant.ID
+				authWithAppliedState.Status = authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String()
+				err = repo.Create(ctx, authWithAppliedState)
+				assert.NoError(t, err)
+
+				authWithRemovedState := validAuth()
+				authWithRemovedState.TenantID = tenant.ID
+				authWithRemovedState.Status = authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String()
+				err = repo.Create(ctx, authWithRemovedState)
+				assert.NoError(t, err)
+
+				authWithApplyingErrState := validAuth()
+				authWithApplyingErrState.TenantID = tenant.ID
+				authWithApplyingErrState.Status = authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()
+				err = repo.Create(ctx, authWithApplyingErrState)
+				assert.NoError(t, err)
+
 				defer func() {
-					err = deleteTenantFromDB(ctx, db, tenant)
+					err := deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+
+					err = deleteOrbitalResources(ctx, db, tenant.ID)
+					assert.NoError(t, err)
+
+					_, err = repo.Delete(ctx, authWithAppliedState)
+					assert.NoError(t, err)
+
+					_, err = repo.Delete(ctx, authWithRemovedState)
+					assert.NoError(t, err)
+
+					_, err = repo.Delete(ctx, authWithApplyingErrState)
 					assert.NoError(t, err)
 				}()
 
@@ -154,15 +190,38 @@ func TestTenantReconciliation(t *testing.T) {
 				// then
 				err = waitForTenantReconciliation(ctx, tSubj, tenant.ID, tt.expState)
 				assert.NoError(t, err)
+
+				// check auths
+				actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
+					ExternalId: authWithAppliedState.ExternalID,
+				})
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expAuthState, actAuth.Auth.Status)
+
+				// making sure the removed states are not updated
+				actAuth, err = authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
+					ExternalId: authWithRemovedState.ExternalID,
+				})
+				assert.NoError(t, err)
+				assert.Equal(t, authgrpc.AuthStatus_AUTH_STATUS_REMOVED, actAuth.Auth.Status)
+
+				// make sure removed auth remains applying error
+				actAuth, err = authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
+					ExternalId: authWithApplyingErrState.ExternalID,
+				})
+				assert.NoError(t, err)
+				assert.Equal(t, authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR, actAuth.GetAuth().GetStatus())
 			})
 		}
 	})
 
 	t.Run("UnblockTenant", func(t *testing.T) {
+		repo := sql.NewRepository(db)
 		tests := []struct {
-			name     string
-			tenantID string
-			expState expStateFunc
+			name         string
+			tenantID     string
+			expState     expStateFunc
+			expAuthState authgrpc.AuthStatus
 		}{
 			{
 				name:     "should change status to UNBLOCKING_ERROR if operator fails to process the request",
@@ -170,6 +229,7 @@ func TestTenantReconciliation(t *testing.T) {
 				expState: func(t *tenantgrpc.Tenant) bool {
 					return t.GetStatus() == tenantgrpc.Status_STATUS_UNBLOCKING_ERROR
 				},
+				expAuthState: authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING_ERROR,
 			},
 			{
 				name:     "should change status to ACTIVE if tenant is unblocked successfully",
@@ -177,6 +237,7 @@ func TestTenantReconciliation(t *testing.T) {
 				expState: func(t *tenantgrpc.Tenant) bool {
 					return t.GetStatus() == tenantgrpc.Status_STATUS_ACTIVE
 				},
+				expAuthState: authgrpc.AuthStatus_AUTH_STATUS_APPLIED,
 			},
 		}
 
@@ -188,8 +249,39 @@ func TestTenantReconciliation(t *testing.T) {
 				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
 				err := createTenantInDB(ctx, db, tenant)
 				assert.NoError(t, err)
+
+				authWithBlockedState := validAuth()
+				authWithBlockedState.TenantID = tenant.ID
+				authWithBlockedState.Status = authgrpc.AuthStatus_AUTH_STATUS_BLOCKED.String()
+				err = repo.Create(ctx, authWithBlockedState)
+				assert.NoError(t, err)
+
+				authWithRemovedState := validAuth()
+				authWithRemovedState.TenantID = tenant.ID
+				authWithRemovedState.Status = authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String()
+				err = repo.Create(ctx, authWithRemovedState)
+				assert.NoError(t, err)
+
+				authWithApplyingErrState := validAuth()
+				authWithApplyingErrState.TenantID = tenant.ID
+				authWithApplyingErrState.Status = authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()
+				err = repo.Create(ctx, authWithApplyingErrState)
+				assert.NoError(t, err)
+
 				defer func() {
-					err = deleteTenantFromDB(ctx, db, tenant)
+					err := deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+
+					err = deleteOrbitalResources(ctx, db, tenant.ID)
+					assert.NoError(t, err)
+
+					_, err = repo.Delete(ctx, authWithBlockedState)
+					assert.NoError(t, err)
+
+					_, err = repo.Delete(ctx, authWithRemovedState)
+					assert.NoError(t, err)
+
+					_, err = repo.Delete(ctx, authWithApplyingErrState)
 					assert.NoError(t, err)
 				}()
 
@@ -202,6 +294,27 @@ func TestTenantReconciliation(t *testing.T) {
 				// then
 				err = waitForTenantReconciliation(ctx, tSubj, tenant.ID, tt.expState)
 				assert.NoError(t, err)
+
+				// check auths
+				actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
+					ExternalId: authWithBlockedState.ExternalID,
+				})
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expAuthState, actAuth.Auth.Status)
+
+				// making sure the removed states are not updated
+				actAuth, err = authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
+					ExternalId: authWithRemovedState.ExternalID,
+				})
+				assert.NoError(t, err)
+				assert.Equal(t, authgrpc.AuthStatus_AUTH_STATUS_REMOVED, actAuth.Auth.Status)
+
+				// make sure removed auth remains applying error
+				actAuth, err = authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
+					ExternalId: authWithApplyingErrState.ExternalID,
+				})
+				assert.NoError(t, err)
+				assert.Equal(t, authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR, actAuth.GetAuth().GetStatus())
 			})
 		}
 	})
@@ -862,6 +975,12 @@ func TestTenantValidation(t *testing.T) {
 						err = repo.Create(ctx, authWithRemovedState)
 						assert.NoError(t, err)
 
+						authWithApplyingErrState := validAuth()
+						authWithApplyingErrState.TenantID = tenant.ID
+						authWithApplyingErrState.Status = authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()
+						err = repo.Create(ctx, authWithApplyingErrState)
+						assert.NoError(t, err)
+
 						defer func() {
 							err := deleteTenantFromDB(ctx, db, tenant)
 							assert.NoError(t, err)
@@ -873,6 +992,9 @@ func TestTenantValidation(t *testing.T) {
 							assert.NoError(t, err)
 
 							_, err = repo.Delete(ctx, authWithRemovedState)
+							assert.NoError(t, err)
+
+							_, err = repo.Delete(ctx, authWithApplyingErrState)
 							assert.NoError(t, err)
 						}()
 
@@ -903,6 +1025,13 @@ func TestTenantValidation(t *testing.T) {
 						assert.NoError(t, err)
 						// make sure removed auth remains removed
 						assert.Equal(t, authgrpc.AuthStatus_AUTH_STATUS_REMOVED, actAuth.GetAuth().GetStatus())
+
+						actAuth, err = authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
+							ExternalId: authWithApplyingErrState.ExternalID,
+						})
+						assert.NoError(t, err)
+						// make sure removed auth remains applying error
+						assert.Equal(t, authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR, actAuth.GetAuth().GetStatus())
 					})
 				}
 			})
@@ -1090,8 +1219,14 @@ func TestTenantValidation(t *testing.T) {
 						authWithRemovedState.TenantID = tenant.ID
 						authWithRemovedState.Status = authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String()
 						err = repo.Create(ctx, authWithRemovedState)
-
 						assert.NoError(t, err)
+
+						authWithApplyingErrState := validAuth()
+						authWithApplyingErrState.TenantID = tenant.ID
+						authWithApplyingErrState.Status = authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()
+						err = repo.Create(ctx, authWithApplyingErrState)
+						assert.NoError(t, err)
+
 						defer func() {
 							err := deleteTenantFromDB(ctx, db, tenant)
 							assert.NoError(t, err)
@@ -1103,6 +1238,9 @@ func TestTenantValidation(t *testing.T) {
 							assert.NoError(t, err)
 
 							_, err = repo.Delete(ctx, authWithRemovedState)
+							assert.NoError(t, err)
+
+							_, err = repo.Delete(ctx, authWithApplyingErrState)
 							assert.NoError(t, err)
 						}()
 
@@ -1133,6 +1271,13 @@ func TestTenantValidation(t *testing.T) {
 						assert.NoError(t, err)
 						// make sure removed auth remains removed
 						assert.Equal(t, authgrpc.AuthStatus_AUTH_STATUS_REMOVED, actAuth.GetAuth().GetStatus())
+
+						actAuth, err = authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
+							ExternalId: authWithApplyingErrState.ExternalID,
+						})
+						assert.NoError(t, err)
+						// make sure removed auth remains applying error
+						assert.Equal(t, authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR, actAuth.GetAuth().GetStatus())
 					})
 				}
 			})
