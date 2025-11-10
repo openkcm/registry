@@ -47,6 +47,11 @@ var AuthTransientStates = map[string]struct{}{
 	authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING.String(): {},
 }
 
+var AuthNonUpdatableState = map[string]struct{}{
+	authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String():        {},
+	authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String(): {},
+}
+
 // NewAuth creates and return a new instance of Auth.
 // It also registers the job handlers to the Orbital instance.
 func NewAuth(repo repository.Repository, orbital *Orbital, validation *validation.Validation) *Auth {
@@ -373,7 +378,12 @@ func (a *Auth) handleJobAborted(ctx context.Context, job orbital.Job) error {
 }
 
 // apply applies update and/or validate functions to all auths for a given tenantID.
+//
+//nolint:cyclop
 func (opts patchAuthOpts) apply(ctx context.Context, r repository.Repository, tenantID string) error {
+	if opts.validateFn == nil && opts.updateFn == nil {
+		return nil
+	}
 	// get all auths for the tenantID
 	cond := repository.NewCompositeKey().Where(repository.TenantIDField, tenantID)
 	var auths []model.Auth
