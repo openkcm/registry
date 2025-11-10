@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/openkcm/registry/compare/v1.4.0...v1.5.0) (2025-11-10)
+
+
+### Features
+
+* sync auth status with tenant block/unblock  ([34e4fe7](https://github.com/openkcm/registry/commit/34e4fe7cfb08ee7d6f03a06e29ab16ce219396f5))
+
 ## [1.4.0](https://github.com/openkcm/registry/compare/v1.3.0...v1.4.0) (2025-11-07)
 
 
