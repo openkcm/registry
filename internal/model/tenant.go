@@ -26,7 +26,7 @@ type Tenant struct {
 	StatusUpdatedAt time.Time    `gorm:"column:status_updated_at"`
 	Role            string       `gorm:"column:role" validationID:"Tenant.Role"`
 	Labels          Labels       `gorm:"column:labels;type:jsonb"`
-	UserGroups      UserGroups   `gorm:"column:user_groups;type:jsonb"`
+	UserGroups      UserGroups   `gorm:"column:user_groups;type:jsonb" validationID:"Tenant.UserGroups"`
 	UpdatedAt       time.Time    `gorm:"column:updated_at;autoUpdateTime"`
 	CreatedAt       time.Time    `gorm:"column:created_at;autoCreateTime"`
 }

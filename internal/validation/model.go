@@ -21,6 +21,11 @@ type (
 	Map interface {
 		Map() map[string]any
 	}
+
+	// StringCollection represents an interface for types that can be represented as a slice of strings.
+	StringCollection interface {
+		Strings() []string
+	}
 )
 
 // GetValues gets all values from the given model

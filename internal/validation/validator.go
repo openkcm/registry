@@ -3,6 +3,7 @@ package validation
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 )
 
@@ -69,5 +70,89 @@ func (n NonEmptyKeysConstraint) Validate(value any) error {
 			return fmt.Errorf("%w in key-value pair: '%s':'%v'", ErrKeyEmpty, k, v)
 		}
 	}
+	return nil
+}
+
+// RegexConstraint validates that the string matches the configured regex patern.
+type RegexConstraint struct {
+	re *regexp.Regexp
+}
+
+// NewRegexConstraint takes a pattern and returns a RegexConstraint with the compiled regex patern.
+func NewRegexConstraint(pattern string) (*RegexConstraint, error) {
+	compiled, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	return &RegexConstraint{
+		re: compiled,
+	}, nil
+}
+
+// Validate checks if the provided value satisfies the regex constraint.
+func (r *RegexConstraint) Validate(value any) error {
+	if value == nil {
+		return nil
+	}
+
+	switch v := value.(type) {
+	case string:
+		if !r.re.MatchString(v) {
+			return fmt.Errorf("%w: %s", ErrValueNotAllowed, v)
+		}
+
+	case []string:
+		err := r.validateStringSliceForRegExConstraint(v)
+		if err != nil {
+			return err
+		}
+
+	case StringCollection:
+		err := r.validateStringCollectionForRegExConstraint(v)
+		if err != nil {
+			return err
+		}
+
+	default:
+		return fmt.Errorf("%w: %T", ErrWrongType, value)
+	}
+
+	return nil
+}
+
+// validateStringCollectionForRegExConstraint validates the elements in the StringCollection against the regex validator.
+func (r *RegexConstraint) validateStringCollectionForRegExConstraint(v StringCollection) error {
+	slice := v.Strings()
+	if slice == nil {
+		return nil
+	}
+	if len(slice) == 0 {
+		return fmt.Errorf("%w: %v", ErrValueNotAllowed, v)
+	}
+
+	for _, s := range slice {
+		if !r.re.MatchString(s) {
+			return fmt.Errorf("%w: %s", ErrValueNotAllowed, s)
+		}
+	}
+
+	return nil
+}
+
+// validateStringSliceForRegExConstraint validates the elements in the string slice against the regex validator.
+func (r *RegexConstraint) validateStringSliceForRegExConstraint(v []string) error {
+	if v == nil {
+		return nil
+	}
+	if len(v) == 0 {
+		return fmt.Errorf("%w: %v", ErrValueNotAllowed, v)
+	}
+	for _, s := range v {
+		if !r.re.MatchString(s) {
+			return fmt.Errorf("%w: %s", ErrValueNotAllowed, s)
+		}
+	}
+
 	return nil
 }

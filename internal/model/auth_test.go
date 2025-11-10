@@ -38,7 +38,7 @@ func TestAuthToProto(t *testing.T) {
 
 func TestAuthValidationIDs(t *testing.T) {
 	// given
-	authType := reflect.TypeOf(model.Auth{})
+	authType := reflect.TypeFor[model.Auth]()
 
 	var tagValidationIDs []string
 	for i := range authType.NumField() {

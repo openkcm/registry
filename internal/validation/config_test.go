@@ -27,7 +27,7 @@ func TestGetValidators(t *testing.T) {
 					Type: "unknown",
 				},
 			},
-			expErr: validation.ErrUnkownConstraintType,
+			expErr: validation.ErrUnknownConstraintType,
 		},
 		{
 			name: "should return validator for valid constraint",
@@ -75,7 +75,7 @@ func TestGetValidator(t *testing.T) {
 			constraint: validation.Constraint{
 				Type: "unknown",
 			},
-			expErr: validation.ErrUnkownConstraintType,
+			expErr: validation.ErrUnknownConstraintType,
 		},
 		{
 			name: "should return error when spec is missing for list constraint",
@@ -101,6 +101,24 @@ func TestGetValidator(t *testing.T) {
 				},
 			},
 			expValidator: validation.ListConstraint{},
+		},
+		{
+			name: "should return validator for valid regex constraint",
+			constraint: validation.Constraint{
+				Type: validation.ConstraintTypeRegex,
+				Spec: &validation.ConstraintSpec{
+					Pattern: "^KMS_(TenantAdministrator|TenantAuditor)_[A-Za-z0-9-]+$",
+				},
+			},
+			expValidator: &validation.RegexConstraint{},
+		},
+		{
+			name: "should return an error when pattern is empty for regex validator",
+			constraint: validation.Constraint{
+				Type: validation.ConstraintTypeRegex,
+				Spec: &validation.ConstraintSpec{},
+			},
+			expErr: validation.ErrConstraintPatternMissing,
 		},
 		{
 			name: "should return validator for valid non-empty constraint",

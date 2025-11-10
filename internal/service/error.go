@@ -40,6 +40,7 @@ const (
 	MissingLabelKeysMsg = "missing label keys"
 	MissingLabelsMsg    = "missing labels"
 	EmptyLabelKeysMsg   = "label keys cannot be empty"
+	UserGroupsNilMsg    = "user groups cannot be nil"
 )
 
 var (
@@ -52,6 +53,7 @@ var (
 	ErrTenantEncoding                   = status.Error(codes.Internal, "failed to encode tenant data")
 	ErrTenantStatusTransitionNotAllowed = errors.New(TenantStatusTransitionNotAllowedMsg)
 	ErrInvalidTenantStatus              = errors.New(InvalidTenantStatusMsg)
+	ErrTenantUserGroups                 = status.Error(codes.InvalidArgument, UserGroupsNilMsg)
 )
 
 var (
