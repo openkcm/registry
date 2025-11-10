@@ -75,7 +75,11 @@ func New(ctx context.Context) (*orbital.Operator, error) {
 		return nil, err
 	}
 
-	operator, err := orbital.NewOperator(client)
+	operatorTarget := orbital.OperatorTarget{
+		Client: client,
+	}
+
+	operator, err := orbital.NewOperator(operatorTarget)
 	if err != nil {
 		return nil, err
 	}

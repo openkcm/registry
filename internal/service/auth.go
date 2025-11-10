@@ -231,7 +231,7 @@ func (a *Auth) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConf
 }
 
 // ResolveTasks determines the tasks to be executed for a given job.
-func (a *Auth) ResolveTasks(ctx context.Context, job orbital.Job, targetsByRegion map[string]orbital.Initiator) (orbital.TaskResolverResult, error) {
+func (a *Auth) ResolveTasks(ctx context.Context, job orbital.Job, targetsByRegion map[string]orbital.ManagerTarget) (orbital.TaskResolverResult, error) {
 	auth := &authgrpc.Auth{}
 	err := proto.Unmarshal(job.Data, auth)
 	if err != nil {
