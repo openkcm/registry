@@ -23,6 +23,7 @@ import (
 
 	"github.com/openkcm/registry/integration/operatortest"
 	"github.com/openkcm/registry/internal/model"
+	"github.com/openkcm/registry/internal/repository"
 	"github.com/openkcm/registry/internal/repository/sql"
 	"github.com/openkcm/registry/internal/service"
 )
@@ -154,21 +155,10 @@ func TestTenantReconciliation(t *testing.T) {
 					assert.NoError(t, err)
 				}()
 
-				authStatusExtIDs := map[string]string{}
-				for _, status := range nonTransientAuthStatus() {
-					auth := validAuth()
-					auth.TenantID = tenant.ID
-					auth.Status = status
-					err = repo.Create(ctx, auth)
-					assert.NoError(t, err)
-
-					authStatusExtIDs[status] = auth.ExternalID
-
-					defer func() {
-						_, err = repo.Delete(ctx, auth)
-						assert.NoError(t, err)
-					}()
-				}
+				authWithStatus, authCleanup := authWithNonTransientState(t, repo, tenant)
+				defer func() {
+					authCleanup(ctx)
+				}()
 
 				// when
 				_, err = tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
@@ -179,22 +169,7 @@ func TestTenantReconciliation(t *testing.T) {
 				// then
 				err = waitForTenantReconciliation(ctx, tSubj, tenant.ID, tt.expState)
 				assert.NoError(t, err)
-
-				for expStatus, externalID := range authStatusExtIDs {
-					// check auths
-					actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
-						ExternalId: externalID,
-					})
-					assert.NoError(t, err)
-
-					switch expStatus {
-					case authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String(),
-						authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String():
-						assert.Equal(t, expStatus, actAuth.Auth.Status.String())
-					default:
-						assert.Equal(t, tt.expAuthState, actAuth.Auth.Status)
-					}
-				}
+				assertAuthUpdatableStateConsistency(t, authClient, authWithStatus, tt.expAuthState)
 			})
 		}
 	})
@@ -242,21 +217,10 @@ func TestTenantReconciliation(t *testing.T) {
 					assert.NoError(t, err)
 				}()
 
-				authStatusExtIDs := map[string]string{}
-				for _, status := range nonTransientAuthStatus() {
-					auth := validAuth()
-					auth.TenantID = tenant.ID
-					auth.Status = status
-					err = repo.Create(ctx, auth)
-					assert.NoError(t, err)
-
-					authStatusExtIDs[status] = auth.ExternalID
-
-					defer func() {
-						_, err = repo.Delete(ctx, auth)
-						assert.NoError(t, err)
-					}()
-				}
+				authWithStatus, authCleanupFns := authWithNonTransientState(t, repo, tenant)
+				defer func() {
+					authCleanupFns(ctx)
+				}()
 
 				// when
 				_, err = tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
@@ -268,21 +232,7 @@ func TestTenantReconciliation(t *testing.T) {
 				err = waitForTenantReconciliation(ctx, tSubj, tenant.ID, tt.expState)
 				assert.NoError(t, err)
 
-				for expStatus, externalID := range authStatusExtIDs {
-					// check auths
-					actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
-						ExternalId: externalID,
-					})
-					assert.NoError(t, err)
-
-					switch expStatus {
-					case authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String(),
-						authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String():
-						assert.Equal(t, expStatus, actAuth.Auth.Status.String())
-					default:
-						assert.Equal(t, tt.expAuthState, actAuth.Auth.Status)
-					}
-				}
+				assertAuthUpdatableStateConsistency(t, authClient, authWithStatus, tt.expAuthState)
 			})
 		}
 	})
@@ -1838,4 +1788,60 @@ func nonTransientAuthStatus() []string {
 		result = append(result, status)
 	}
 	return result
+}
+
+// authWithNonTransientState creates authentication records for a tenant
+// with all non-transient statuses and returns them in a map keyed by status.
+// It also returns a cleanup function to delete the created records.
+func authWithNonTransientState(t *testing.T, repo repository.Repository, tenant *model.Tenant) (map[string]*model.Auth, func(context.Context)) {
+	t.Helper()
+	ctx := t.Context()
+
+	authWithStatus := map[string]*model.Auth{}
+	for _, status := range nonTransientAuthStatus() {
+		auth := validAuth()
+		auth.Status = status
+		auth.TenantID = tenant.ID
+		err := repo.Create(ctx, auth)
+		assert.NoError(t, err)
+
+		authWithStatus[status] = auth
+	}
+
+	deferFn := func(ctx context.Context) {
+		for _, auth := range authWithStatus {
+			_, err := repo.Delete(ctx, auth)
+			assert.NoError(t, err)
+		}
+	}
+
+	return authWithStatus, deferFn
+}
+
+// assertAuthUpdatableStateConsistency verifies that authentication records
+// with non-updatable states remain unchanged, while others are updated to
+// the expected state. It fetches each auth by external ID and asserts the
+// correct status based on whether the state is updatable.
+func assertAuthUpdatableStateConsistency(t *testing.T,
+	authClient authgrpc.ServiceClient,
+	authsByStatus map[string]*model.Auth,
+	expState authgrpc.AuthStatus,
+) {
+	t.Helper()
+
+	ctx := t.Context()
+
+	for _, auth := range authsByStatus {
+		actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
+			ExternalId: auth.ExternalID,
+		})
+		assert.NoError(t, err)
+
+		_, isNonUpdatableState := service.AuthNonUpdatableState[auth.Status]
+		if isNonUpdatableState {
+			assert.Equal(t, auth.Status, actAuth.Auth.Status.String())
+		} else {
+			assert.Equal(t, expState, actAuth.Auth.Status)
+		}
+	}
 }

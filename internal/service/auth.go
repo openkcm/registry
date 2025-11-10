@@ -47,6 +47,11 @@ var AuthTransientStates = map[string]struct{}{
 	authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING.String(): {},
 }
 
+var AuthNonUpdatableState = map[string]struct{}{
+	authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String():        {},
+	authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String(): {},
+}
+
 // NewAuth creates and return a new instance of Auth.
 // It also registers the job handlers to the Orbital instance.
 func NewAuth(repo repository.Repository, orbital *Orbital, validation *validation.Validation) *Auth {

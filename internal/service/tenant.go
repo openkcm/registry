@@ -194,8 +194,8 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 				return nil
 			},
 			skipUpdateFn: func(auth *model.Auth) bool {
-				return auth.Status == authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String() ||
-					auth.Status == authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()
+				_, ok := AuthNonUpdatableState[auth.Status]
+				return ok
 			},
 			updateFn: func(auth *model.Auth) {
 				auth.Status = authgrpc.AuthStatus_AUTH_STATUS_BLOCKING.String()
@@ -244,8 +244,8 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 				return nil
 			},
 			skipUpdateFn: func(auth *model.Auth) bool {
-				return auth.Status == authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String() ||
-					auth.Status == authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()
+				_, ok := AuthNonUpdatableState[auth.Status]
+				return ok
 			},
 			updateFn: func(auth *model.Auth) {
 				auth.Status = authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING.String()
@@ -485,8 +485,8 @@ func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 		updateFunc: tenantUpdateFn,
 		patchAuthOpts: patchAuthOpts{
 			skipUpdateFn: func(auth *model.Auth) bool {
-				return auth.Status == authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String() ||
-					auth.Status == authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()
+				_, ok := AuthNonUpdatableState[auth.Status]
+				return ok
 			},
 			updateFn: authUpdateFn,
 		},
@@ -544,8 +544,8 @@ func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
 		updateFunc: tenantUpdateFn,
 		patchAuthOpts: patchAuthOpts{
 			skipUpdateFn: func(auth *model.Auth) bool {
-				return auth.Status == authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String() ||
-					auth.Status == authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String()
+				_, ok := AuthNonUpdatableState[auth.Status]
+				return ok
 			},
 			updateFn: authUpdateFn,
 		},
