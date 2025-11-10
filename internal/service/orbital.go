@@ -27,7 +27,7 @@ type (
 	// Orbital manages jobs and their execution targets.
 	Orbital struct {
 		manager  *orbital.Manager
-		targets  map[string]orbital.Initiator
+		targets  map[string]orbital.ManagerTarget
 		registry handlerRegistry
 	}
 
@@ -40,7 +40,7 @@ type (
 	// JobHandler defines the lifecycle callbacks for job processing.
 	JobHandler interface {
 		ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error)
-		ResolveTasks(ctx context.Context, job orbital.Job, targets map[string]orbital.Initiator) (orbital.TaskResolverResult, error)
+		ResolveTasks(ctx context.Context, job orbital.Job, targets map[string]orbital.ManagerTarget) (orbital.TaskResolverResult, error)
 		HandleJobDone(ctx context.Context, job orbital.Job) error
 		HandleJobCanceled(ctx context.Context, job orbital.Job) error
 		HandleJobFailed(ctx context.Context, job orbital.Job) error
@@ -73,7 +73,7 @@ func NewOrbital(ctx context.Context, db *gorm.DB, cfg config.Orbital) (*Orbital,
 
 	manager, err := orbital.NewManager(orbRepo,
 		o.resolveTasks(),
-		orbital.WithTargetClients(targets),
+		orbital.WithTargets(targets),
 		orbital.WithJobConfirmFunc(o.confirmJob()),
 		orbital.WithJobDoneEventFunc(o.handleJobDone()),
 		orbital.WithJobCanceledEventFunc(o.handleJobCanceled()),
@@ -121,8 +121,8 @@ func (o *Orbital) PrepareJob(ctx context.Context, data []byte, externalID, jobTy
 	return nil
 }
 
-func createTargets(ctx context.Context, cfgTargets []config.Target) (map[string]orbital.Initiator, error) {
-	targets := make(map[string]orbital.Initiator, len(cfgTargets))
+func createTargets(ctx context.Context, cfgTargets []config.Target) (map[string]orbital.ManagerTarget, error) {
+	targets := make(map[string]orbital.ManagerTarget, len(cfgTargets))
 	for _, cfgTarget := range cfgTargets {
 		slogctx.Info(ctx, "creating orbital target", slog.String("Region", cfgTarget.Region))
 
@@ -131,13 +131,15 @@ func createTargets(ctx context.Context, cfgTargets []config.Target) (map[string]
 			return nil, fmt.Errorf("failed to create AMQP client for %s: %w", cfgTarget.Region, err)
 		}
 
-		targets[cfgTarget.Region] = client
+		targets[cfgTarget.Region] = orbital.ManagerTarget{
+			Client: client,
+		}
 	}
 
 	return targets, nil
 }
 
-func createAMQPClient(ctx context.Context, cfgTarget config.Target) (*amqp.AMQP, error) {
+func createAMQPClient(ctx context.Context, cfgTarget config.Target) (*amqp.Client, error) {
 	if cfgTarget.Connection.Type != config.ConnectionTypeAMQP {
 		return nil, fmt.Errorf("%w: %s", ErrWrongConnectionType, cfgTarget.Connection.Type)
 	}

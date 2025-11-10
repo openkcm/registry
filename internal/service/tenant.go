@@ -415,7 +415,7 @@ func (t *Tenant) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobCo
 }
 
 // ResolveTasks creates a task for the job based on the tenant's region.
-func (t *Tenant) ResolveTasks(ctx context.Context, job orbital.Job, targetsByRegion map[string]orbital.Initiator) (orbital.TaskResolverResult, error) {
+func (t *Tenant) ResolveTasks(_ context.Context, job orbital.Job, targetsByRegion map[string]orbital.ManagerTarget) (orbital.TaskResolverResult, error) {
 	tenant := &tenantgrpc.Tenant{}
 
 	err := proto.Unmarshal(job.Data, tenant)
