@@ -1481,7 +1481,7 @@ func TestSetTenantUserGroups(t *testing.T) {
 			tts := []struct {
 				name       string
 				tenantID   string
-				userGroups model.UserGroups
+				userGroups []string
 				expCode    codes.Code
 			}{
 				{
@@ -1511,13 +1511,13 @@ func TestSetTenantUserGroups(t *testing.T) {
 				{
 					name:       "tenant is not present",
 					tenantID:   "some-tenant-id",
-					userGroups: []string{"admin", "audit"},
+					userGroups: []string{"KMS_TenantAdministrator_1234"},
 					expCode:    codes.NotFound,
 				},
 				{
 					name:       "tenant is empty",
 					tenantID:   "",
-					userGroups: []string{"admin", "audit"},
+					userGroups: []string{"KMS_TenantAdministrator_1234"},
 					expCode:    codes.InvalidArgument,
 				},
 			}

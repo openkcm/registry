@@ -103,13 +103,7 @@ func (r *RegexConstraint) Validate(value any) error {
 		}
 
 	case []string:
-		err := r.validateStringSliceForRegExConstraint(v)
-		if err != nil {
-			return err
-		}
-
-	case StringCollection:
-		err := r.validateStringCollectionForRegExConstraint(v)
+		err := r.validateStringSlice(v)
 		if err != nil {
 			return err
 		}
@@ -121,27 +115,8 @@ func (r *RegexConstraint) Validate(value any) error {
 	return nil
 }
 
-// validateStringCollectionForRegExConstraint validates the elements in the StringCollection against the regex validator.
-func (r *RegexConstraint) validateStringCollectionForRegExConstraint(v StringCollection) error {
-	slice := v.Strings()
-	if slice == nil {
-		return nil
-	}
-	if len(slice) == 0 {
-		return fmt.Errorf("%w: %v", ErrValueNotAllowed, v)
-	}
-
-	for _, s := range slice {
-		if !r.re.MatchString(s) {
-			return fmt.Errorf("%w: %s", ErrValueNotAllowed, s)
-		}
-	}
-
-	return nil
-}
-
-// validateStringSliceForRegExConstraint validates the elements in the string slice against the regex validator.
-func (r *RegexConstraint) validateStringSliceForRegExConstraint(v []string) error {
+// validateStringSlice validates the elements in the string slice against the regex validator.
+func (r *RegexConstraint) validateStringSlice(v []string) error {
 	if v == nil {
 		return nil
 	}

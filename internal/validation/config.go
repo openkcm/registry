@@ -70,12 +70,7 @@ func (c Constraint) getValidator() (Validator, error) {
 		if len(c.Spec.Pattern) == 0 {
 			return nil, ErrConstraintPatternMissing
 		}
-		rc, err := NewRegexConstraint(c.Spec.Pattern)
-		if err != nil {
-			return nil, err
-		}
-		return rc, nil
-
+		return NewRegexConstraint(c.Spec.Pattern)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnknownConstraintType, c.Type)
 	}

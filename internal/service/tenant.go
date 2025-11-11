@@ -501,7 +501,14 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 		return nil, err
 	}
 
-	if in.GetUserGroups() == nil {
+	userGroups := in.GetUserGroups()
+
+	if userGroups == nil {
+		return nil, ErrTenantUserGroups
+	}
+
+	err = t.validation.Validate(model.TenantUserGroupsValidationID, in.GetUserGroups())
+	if err != nil {
 		return nil, ErrTenantUserGroups
 	}
 
