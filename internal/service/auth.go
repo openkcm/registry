@@ -506,3 +506,22 @@ func patchAuth(ctx context.Context, r repository.Repository, id string, updateFu
 
 	return nil
 }
+
+func newPatchAuthOptsWith(updateStatus authgrpc.AuthStatus) patchAuthOpts {
+	return patchAuthOpts{
+		validateFn: func(auth *model.Auth) error {
+			_, isTransient := AuthTransientStates[auth.Status]
+			if isTransient {
+				return status.Error(codes.FailedPrecondition, "auth in transient state")
+			}
+			return nil
+		},
+		skipUpdateFn: func(auth *model.Auth) bool {
+			_, isNonUpdatable := AuthNonUpdatableState[auth.Status]
+			return isNonUpdatable
+		},
+		updateFn: func(auth *model.Auth) {
+			auth.Status = updateStatus.String()
+		},
+	}
+}

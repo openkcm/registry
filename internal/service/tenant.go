@@ -184,23 +184,8 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 		updateFunc: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKING.String()))
 		},
-		validateFunc: validateTransition(tenantgrpc.Status_STATUS_BLOCKING),
-		patchAuthOpts: patchAuthOpts{
-			validateFn: func(auth *model.Auth) error {
-				_, ok := AuthTransientStates[auth.Status]
-				if ok {
-					return status.Error(codes.FailedPrecondition, "auth in transient state")
-				}
-				return nil
-			},
-			skipUpdateFn: func(auth *model.Auth) bool {
-				_, ok := AuthNonUpdatableState[auth.Status]
-				return ok
-			},
-			updateFn: func(auth *model.Auth) {
-				auth.Status = authgrpc.AuthStatus_AUTH_STATUS_BLOCKING.String()
-			},
-		},
+		validateFunc:  validateTransition(tenantgrpc.Status_STATUS_BLOCKING),
+		patchAuthOpts: newPatchAuthOptsWith(authgrpc.AuthStatus_AUTH_STATUS_BLOCKING),
 		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
 			data, err := proto.Marshal(tenant.ToProto())
 			if err != nil {
@@ -234,23 +219,8 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 		updateFunc: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_UNBLOCKING.String()))
 		},
-		validateFunc: validateTransition(tenantgrpc.Status_STATUS_UNBLOCKING),
-		patchAuthOpts: patchAuthOpts{
-			validateFn: func(auth *model.Auth) error {
-				_, ok := AuthTransientStates[auth.Status]
-				if ok {
-					return status.Error(codes.FailedPrecondition, "auth in transient state")
-				}
-				return nil
-			},
-			skipUpdateFn: func(auth *model.Auth) bool {
-				_, ok := AuthNonUpdatableState[auth.Status]
-				return ok
-			},
-			updateFn: func(auth *model.Auth) {
-				auth.Status = authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING.String()
-			},
-		},
+		validateFunc:  validateTransition(tenantgrpc.Status_STATUS_UNBLOCKING),
+		patchAuthOpts: newPatchAuthOptsWith(authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING),
 		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
 			data, err := proto.Marshal(tenant.ToProto())
 			if err != nil {
@@ -295,6 +265,7 @@ func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTe
 			}
 			return t.orbital.PrepareJob(ctx, data, tenant.ID, tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String())
 		},
+		patchAuthOpts: newPatchAuthOptsWith(authgrpc.AuthStatus_AUTH_STATUS_REMOVING),
 	})
 	if err != nil {
 		return nil, err
@@ -475,6 +446,7 @@ func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 		authUpdateFn = newAuthUpdateFn(authgrpc.AuthStatus_AUTH_STATUS_BLOCKED)
 	case tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String():
 		tenantUpdateFn = newTenantUpdateFn(tenantgrpc.Status_STATUS_TERMINATED)
+		authUpdateFn = newAuthUpdateFn(authgrpc.AuthStatus_AUTH_STATUS_REMOVED)
 	default:
 		slogctx.Error(ctx, "unexpected job type in handleJobDone")
 		return nil
@@ -541,6 +513,7 @@ func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
 		authUpdateFn = newAuthUpdateFn(authgrpc.AuthStatus_AUTH_STATUS_BLOCKING_ERROR)
 	case tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String():
 		tenantUpdateFn = newTenantUpdateFn(tenantgrpc.Status_STATUS_TERMINATION_ERROR)
+		authUpdateFn = newAuthUpdateFn(authgrpc.AuthStatus_AUTH_STATUS_REMOVING_ERROR)
 	default:
 		slogctx.Error(ctx, "unexpected job type in handleJobAborted")
 		return nil
