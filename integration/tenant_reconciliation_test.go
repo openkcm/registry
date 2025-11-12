@@ -12,11 +12,12 @@ import (
 	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/openkcm/registry/integration/operatortest"
 	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository/sql"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type expStateFunc func(*tenantgrpc.Tenant) bool
