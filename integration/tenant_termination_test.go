@@ -10,35 +10,28 @@ import (
 	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/openkcm/registry/internal/model"
-	"github.com/openkcm/registry/internal/repository/sql"
 	"github.com/openkcm/registry/internal/service"
 )
 
 func TestTenantTerminate(t *testing.T) {
 	// given
-	conn, err := newGRPCClientConn()
-	require.NoError(t, err)
-	defer conn.Close()
 
-	sub := tenantgrpc.NewServiceClient(conn)
-	authClient := authgrpc.NewServiceClient(conn)
-
+	testCtx := newTenantTestContext(t)
+	subj := testCtx.tenantClient
+	db := testCtx.db
+	repo := testCtx.repo
+	authClient := testCtx.authClient
 	ctx := t.Context()
-	db, err := startDB()
-	require.NoError(t, err)
-
-	repo := sql.NewRepository(db)
 
 	t.Run("TerminateTenant", func(t *testing.T) {
 		t.Run("should return an error if", func(t *testing.T) {
 			t.Run("tenant cannot be found", func(t *testing.T) {
 				// when
-				actResp, err := sub.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
+				actResp, err := subj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
 					Id: validRandID(),
 				})
 
@@ -53,13 +46,13 @@ func TestTenantTerminate(t *testing.T) {
 				state := model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATING.String())
 				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
 				assert.NoError(t, err)
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
-				}()
+				})
 
 				// when
-				actResp, err := sub.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
+				actResp, err := subj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
 					Id: tenant.ID,
 				})
 
@@ -77,23 +70,23 @@ func TestTenantTerminate(t *testing.T) {
 						state := model.TenantStatus(expBlockedStatus.String())
 						tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
 						assert.NoError(t, err)
-						defer func() {
+						t.Cleanup(func() {
 							err = deleteTenantFromDB(ctx, db, tenant)
 							assert.NoError(t, err)
-						}()
+						})
 
 						authWithTransient := validAuth()
 						authWithTransient.TenantID = tenant.ID
 						authWithTransient.Status = status
 						err = repo.Create(ctx, authWithTransient)
 						assert.NoError(t, err)
-						defer func() {
+						t.Cleanup(func() {
 							_, err = repo.Delete(ctx, authWithTransient)
 							assert.NoError(t, err)
-						}()
+						})
 
 						// when
-						actResp, err := sub.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
+						actResp, err := subj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
 							Id: tenant.ID,
 						})
 
@@ -101,7 +94,7 @@ func TestTenantTerminate(t *testing.T) {
 						assert.Error(t, err)
 						assert.Nil(t, actResp)
 
-						ltResp, err := listTenants(ctx, sub)
+						ltResp, err := listTenants(ctx, subj)
 						assert.NoError(t, err)
 						assert.Len(t, ltResp.Tenants, 1)
 						assert.Equal(t, expBlockedStatus, ltResp.Tenants[0].Status)
@@ -123,23 +116,23 @@ func TestTenantTerminate(t *testing.T) {
 				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
 				assert.NoError(t, err)
 
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
 
 					err = deleteOrbitalResources(ctx, db, tenant.ID)
 					assert.NoError(t, err)
-				}()
+				})
 
 				auths, authCleanup := authWithNonTransientState(t, repo, tenant)
-				defer func() {
+				t.Cleanup(func() {
 					authCleanup(ctx)
-				}()
+				})
 
 				expStatus := tenantgrpc.Status_STATUS_TERMINATING
 
 				// when
-				actResp, err := sub.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
+				actResp, err := subj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
 					Id: tenant.ID,
 				})
 
@@ -147,7 +140,7 @@ func TestTenantTerminate(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, actResp)
 
-				ltResp, err := listTenants(ctx, sub)
+				ltResp, err := listTenants(ctx, subj)
 				assert.NoError(t, err)
 				assert.Len(t, ltResp.Tenants, 1)
 				assert.Equal(t, expStatus, ltResp.Tenants[0].Status)
@@ -161,25 +154,25 @@ func TestTenantTerminate(t *testing.T) {
 				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
 				assert.NoError(t, err)
 
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
 
 					err = deleteOrbitalResources(ctx, db, tenant.ID)
 					assert.NoError(t, err)
-				}()
+				})
 
 				expStatus := tenantgrpc.Status_STATUS_TERMINATING
 
 				// when
-				actResp, err := sub.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
+				actResp, err := subj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
 					Id: tenant.ID,
 				})
 
 				// then
 				assert.NoError(t, err)
 				assert.NotNil(t, actResp)
-				ltResp, err := listTenants(ctx, sub)
+				ltResp, err := listTenants(ctx, subj)
 				assert.NoError(t, err)
 				assert.Len(t, ltResp.Tenants, 1)
 				assert.Equal(t, expStatus, ltResp.Tenants[0].Status)

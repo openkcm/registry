@@ -17,30 +17,23 @@ import (
 
 	"github.com/openkcm/registry/integration/operatortest"
 	"github.com/openkcm/registry/internal/model"
-	"github.com/openkcm/registry/internal/repository/sql"
 )
 
 type expStateFunc func(*tenantgrpc.Tenant) bool
 
 func TestTenantReconciliation(t *testing.T) {
 	// given
-	conn, err := newGRPCClientConn()
-	require.NoError(t, err)
-	defer conn.Close()
-
-	subj := tenantgrpc.NewServiceClient(conn)
-	authClient := authgrpc.NewServiceClient(conn)
-
+	testCtx := newTenantTestContext(t)
+	subj := testCtx.tenantClient
+	db := testCtx.db
+	repo := testCtx.repo
+	authClient := testCtx.authClient
 	ctx := t.Context()
-	db, err := startDB()
-	require.NoError(t, err)
 
 	operator, err := operatortest.New(ctx)
 	require.NoError(t, err)
 
 	go operator.ListenAndRespond(ctx)
-
-	repo := sql.NewRepository(db)
 
 	t.Run("ProvisionTenant", func(t *testing.T) {
 		tests := []struct {
@@ -85,10 +78,10 @@ func TestTenantReconciliation(t *testing.T) {
 				// when
 				_, err := subj.RegisterTenant(ctx, req)
 				assert.NoError(t, err)
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 					assert.NoError(t, err)
-				}()
+				})
 
 				// then
 				err = waitForTenantReconciliation(ctx, subj, req.GetId(), tt.expState)
@@ -130,18 +123,18 @@ func TestTenantReconciliation(t *testing.T) {
 				err := createTenantInDB(ctx, db, tenant)
 				assert.NoError(t, err)
 
-				defer func() {
+				t.Cleanup(func() {
 					err := deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
 
 					err = deleteOrbitalResources(ctx, db, tenant.ID)
 					assert.NoError(t, err)
-				}()
+				})
 
 				auths, authCleanup := authWithNonTransientState(t, repo, tenant)
-				defer func() {
+				t.Cleanup(func() {
 					authCleanup(ctx)
-				}()
+				})
 
 				// when
 				_, err = subj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
@@ -191,18 +184,18 @@ func TestTenantReconciliation(t *testing.T) {
 				err := createTenantInDB(ctx, db, tenant)
 				assert.NoError(t, err)
 
-				defer func() {
+				t.Cleanup(func() {
 					err := deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
 
 					err = deleteOrbitalResources(ctx, db, tenant.ID)
 					assert.NoError(t, err)
-				}()
+				})
 
 				auths, authCleanupFns := authWithNonTransientState(t, repo, tenant)
-				defer func() {
+				t.Cleanup(func() {
 					authCleanupFns(ctx)
-				}()
+				})
 
 				// when
 				_, err = subj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
@@ -252,18 +245,18 @@ func TestTenantReconciliation(t *testing.T) {
 				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
 				err := createTenantInDB(ctx, db, tenant)
 				assert.NoError(t, err)
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
 
 					err = deleteOrbitalResources(ctx, db, tenant.ID)
 					assert.NoError(t, err)
-				}()
+				})
 
 				auths, authCleanup := authWithNonTransientState(t, repo, tenant)
-				defer func() {
+				t.Cleanup(func() {
 					authCleanup(ctx)
-				}()
+				})
 
 				// when
 				_, err = subj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{

@@ -10,29 +10,22 @@ import (
 	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/openkcm/registry/internal/model"
-	"github.com/openkcm/registry/internal/repository/sql"
 	"github.com/openkcm/registry/internal/service"
 )
 
 func TestTenantUnblock(t *testing.T) {
 	// given
+	testCtx := newTenantTestContext(t)
+	subj := testCtx.tenantClient
+	db := testCtx.db
+	repo := testCtx.repo
+	authClient := testCtx.authClient
+
 	ctx := t.Context()
-	conn, err := newGRPCClientConn()
-	require.NoError(t, err)
-	defer conn.Close()
-
-	subj := tenantgrpc.NewServiceClient(conn)
-	authClient := authgrpc.NewServiceClient(conn)
-
-	db, err := startDB()
-	require.NoError(t, err)
-
-	repo := sql.NewRepository(db)
 
 	t.Run("UnblockTenant", func(t *testing.T) {
 		t.Run("should return an error if", func(t *testing.T) {
@@ -53,10 +46,10 @@ func TestTenantUnblock(t *testing.T) {
 				state := model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATED.String())
 				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
 				assert.NoError(t, err)
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
-				}()
+				})
 
 				// when
 				actResp, err := subj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
@@ -73,26 +66,26 @@ func TestTenantUnblock(t *testing.T) {
 					t.Run(status, func(t *testing.T) {
 						// given
 						expBlockedStatus := tenantgrpc.Status_STATUS_BLOCKED
-						tenant, err := persistTenant(ctx, db, validRandID(), model.TenantStatus(expBlockedStatus.String()), time.Now())
+						blockedTenant, err := persistTenant(ctx, db, validRandID(), model.TenantStatus(expBlockedStatus.String()), time.Now())
 						assert.NoError(t, err)
-						defer func() {
-							err := deleteTenantFromDB(ctx, db, tenant)
+						t.Cleanup(func() {
+							err := deleteTenantFromDB(ctx, db, blockedTenant)
 							assert.NoError(t, err)
-						}()
+						})
 
 						authWithTransientState := validAuth()
-						authWithTransientState.TenantID = tenant.ID
+						authWithTransientState.TenantID = blockedTenant.ID
 						authWithTransientState.Status = status
 						err = repo.Create(ctx, authWithTransientState)
 						assert.NoError(t, err)
-						defer func() {
+						t.Cleanup(func() {
 							_, err = repo.Delete(ctx, authWithTransientState)
 							assert.NoError(t, err)
-						}()
+						})
 
 						// when
 						actResp, err := subj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
-							Id: tenant.ID,
+							Id: blockedTenant.ID,
 						})
 
 						// then
@@ -116,24 +109,24 @@ func TestTenantUnblock(t *testing.T) {
 		t.Run("should succeed", func(t *testing.T) {
 			t.Run("if tenant is blocked", func(t *testing.T) {
 				// given
-				tenant := validTenant()
-				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-				err := createTenantInDB(ctx, db, tenant)
+				blockedTenant := validTenant()
+				blockedTenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+				err := createTenantInDB(ctx, db, blockedTenant)
 				assert.NoError(t, err)
 
-				defer func() {
-					err := deleteTenantFromDB(ctx, db, tenant)
+				t.Cleanup(func() {
+					err := deleteTenantFromDB(ctx, db, blockedTenant)
 					assert.NoError(t, err)
 
-					err = deleteOrbitalResources(ctx, db, tenant.ID)
+					err = deleteOrbitalResources(ctx, db, blockedTenant.ID)
 					assert.NoError(t, err)
-				}()
+				})
 
 				expStatus := tenantgrpc.Status_STATUS_UNBLOCKING
 
 				// when
 				actResp, err := subj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
-					Id: tenant.ID,
+					Id: blockedTenant.ID,
 				})
 
 				// then
@@ -148,26 +141,26 @@ func TestTenantUnblock(t *testing.T) {
 
 			t.Run("when auth status is not transient, both tenant and auth statuses are set to UNBLOCKING", func(t *testing.T) {
 				// given
-				tenant := validTenant()
-				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-				err := createTenantInDB(ctx, db, tenant)
+				blockedTenant := validTenant()
+				blockedTenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+				err := createTenantInDB(ctx, db, blockedTenant)
 				assert.NoError(t, err)
-				defer func() {
-					err := deleteTenantFromDB(ctx, db, tenant)
+				t.Cleanup(func() {
+					err := deleteTenantFromDB(ctx, db, blockedTenant)
 					assert.NoError(t, err)
 
-					err = deleteOrbitalResources(ctx, db, tenant.ID)
+					err = deleteOrbitalResources(ctx, db, blockedTenant.ID)
 					assert.NoError(t, err)
-				}()
+				})
 
-				auths, authCleanup := authWithNonTransientState(t, repo, tenant)
-				defer func() {
+				auths, authCleanup := authWithNonTransientState(t, repo, blockedTenant)
+				t.Cleanup(func() {
 					authCleanup(ctx)
-				}()
+				})
 
 				// when
 				actResp, err := subj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
-					Id: tenant.ID,
+					Id: blockedTenant.ID,
 				})
 
 				// then

@@ -37,17 +37,39 @@ const (
 
 var ErrTenantIDEmpty = status.Error(codes.InvalidArgument, "invalid ID: validation failed for Tenant.ID: value is empty")
 
-func TestTenantValidation(t *testing.T) {
-	// given
+type TenantTestContext struct {
+	db           *gorm.DB
+	repo         *sql.ResourceRepository
+	authClient   authgrpc.ServiceClient
+	tenantClient tenantgrpc.ServiceClient
+}
+
+func newTenantTestContext(t *testing.T) *TenantTestContext {
+	t.Helper()
+
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
-	defer conn.Close()
+	t.Cleanup(func() {
+		conn.Close()
+	})
 
-	tSubj := tenantgrpc.NewServiceClient(conn)
-
-	ctx := t.Context()
 	db, err := startDB()
 	require.NoError(t, err)
+
+	return &TenantTestContext{
+		repo:         sql.NewRepository(db),
+		db:           db,
+		authClient:   authgrpc.NewServiceClient(conn),
+		tenantClient: tenantgrpc.NewServiceClient(conn),
+	}
+}
+
+func TestTenantValidation(t *testing.T) {
+	// given
+	testCtx := newTenantTestContext(t)
+	tSubj := testCtx.tenantClient
+	db := testCtx.db
+	ctx := t.Context()
 
 	t.Run("RegisterTenant", func(t *testing.T) {
 		t.Run("should return an error if", func(t *testing.T) {
@@ -757,15 +779,9 @@ func TestTenantValidation(t *testing.T) {
 }
 
 func TestSetTenantUserGroups(t *testing.T) {
-	conn, err := newGRPCClientConn()
-	require.NoError(t, err)
-	defer conn.Close()
-
-	tSubj := tenantgrpc.NewServiceClient(conn)
-
-	db, err := startDB()
-	require.NoError(t, err)
-
+	testCtx := newTenantTestContext(t)
+	tSubj := testCtx.tenantClient
+	db := testCtx.db
 	ctx := t.Context()
 
 	t.Run("SetTenantUserGroups", func(t *testing.T) {
