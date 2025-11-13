@@ -1469,46 +1469,55 @@ func TestSetTenantUserGroups(t *testing.T) {
 
 	t.Run("SetTenantUserGroups", func(t *testing.T) {
 		t.Run("should return error if", func(t *testing.T) {
+			tenant, err := persistTenant(ctx, db, validRandID(),
+				model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
+			assert.NoError(t, err)
+
+			defer func() {
+				err = deleteTenantFromDB(ctx, db, tenant)
+				assert.NoError(t, err)
+			}()
+
 			tts := []struct {
 				name       string
 				tenantID   string
-				userGroups model.UserGroups
+				userGroups []string
 				expCode    codes.Code
 			}{
 				{
 					name:       "UserGroups is nil",
-					tenantID:   "some-tenant-id",
+					tenantID:   tenant.ID,
 					userGroups: nil,
 					expCode:    codes.InvalidArgument,
 				},
 				{
 					name:       "UserGroups is empty",
-					tenantID:   "some-tenant-id",
+					tenantID:   tenant.ID,
 					userGroups: []string{},
 					expCode:    codes.InvalidArgument,
 				},
 				{
-					name:       "UserGroups has a empty string",
-					tenantID:   "some-tenant-id",
-					userGroups: []string{"admin", ""},
+					name:       "UserGroups has invalid string",
+					tenantID:   tenant.ID,
+					userGroups: []string{"admin", "audit"},
 					expCode:    codes.InvalidArgument,
 				},
 				{
-					name:       "UserGroups has a blank string",
-					tenantID:   "some-tenant-id",
-					userGroups: []string{"admin", " "},
+					name:       "UserGroups has an empty string",
+					tenantID:   tenant.ID,
+					userGroups: []string{"KMS_TenantAdministrator_1234", " "},
 					expCode:    codes.InvalidArgument,
 				},
 				{
 					name:       "tenant is not present",
 					tenantID:   "some-tenant-id",
-					userGroups: []string{"admin", "audit"},
+					userGroups: []string{"KMS_TenantAdministrator_1234"},
 					expCode:    codes.NotFound,
 				},
 				{
 					name:       "tenant is empty",
 					tenantID:   "",
-					userGroups: []string{"admin", "audit"},
+					userGroups: []string{"KMS_TenantAdministrator_1234"},
 					expCode:    codes.InvalidArgument,
 				},
 			}
@@ -1546,8 +1555,8 @@ func TestSetTenantUserGroups(t *testing.T) {
 				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
 					Id: tenant.ID,
 					UserGroups: []string{
-						"admin",
-						"audit",
+						"KMS_TenantAdministrator_1234",
+						"KMS_TenantAuditor_1234",
 					},
 				})
 
@@ -1558,7 +1567,7 @@ func TestSetTenantUserGroups(t *testing.T) {
 				actTenants, err := listTenants(ctx, tSubj)
 				assert.NoError(t, err)
 				assert.Len(t, actTenants.GetTenants(), 1)
-				assert.Equal(t, []string{"admin", "audit"}, actTenants.GetTenants()[0].GetUserGroups())
+				assert.Equal(t, []string{"KMS_TenantAdministrator_1234", "KMS_TenantAuditor_1234"}, actTenants.GetTenants()[0].GetUserGroups())
 			})
 
 			t.Run("if UserGroups are updated twice", func(t *testing.T) {
@@ -1577,8 +1586,8 @@ func TestSetTenantUserGroups(t *testing.T) {
 				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
 					Id: tenant.ID,
 					UserGroups: []string{
-						"admin",
-						"audit",
+						"KMS_TenantAdministrator_1234",
+						"KMS_TenantAuditor_1234",
 					},
 				})
 
@@ -1591,8 +1600,8 @@ func TestSetTenantUserGroups(t *testing.T) {
 				res, err = tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
 					Id: tenant.ID,
 					UserGroups: []string{
-						"admin 1",
-						"audit 2",
+						"KMS_TenantAdministrator_12345",
+						"KMS_TenantAuditor_1235",
 					},
 				})
 
@@ -1603,7 +1612,10 @@ func TestSetTenantUserGroups(t *testing.T) {
 				actTenants, err := listTenants(ctx, tSubj)
 				assert.NoError(t, err)
 				assert.Len(t, actTenants.GetTenants(), 1)
-				assert.Equal(t, []string{"admin 1", "audit 2"}, actTenants.GetTenants()[0].GetUserGroups())
+				assert.Equal(t, []string{
+					"KMS_TenantAdministrator_12345",
+					"KMS_TenantAuditor_1235",
+				}, actTenants.GetTenants()[0].GetUserGroups())
 			})
 		})
 	})

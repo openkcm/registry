@@ -9,14 +9,16 @@ const (
 	ConstraintTypeList         = "list"
 	ConstraintTypeNonEmpty     = "non-empty"
 	ConstraintTypeNonEmptyKeys = "non-empty-keys"
+	ConstraintTypeRegex        = "regex"
 )
 
 var (
 	ErrConstraintsMissing         = errors.New("no constraints provided")
 	ErrEmptyConstraintType        = errors.New("constraint type is empty")
-	ErrUnkownConstraintType       = errors.New("unknown constraint type")
+	ErrUnknownConstraintType      = errors.New("unknown constraint type")
 	ErrConstraintSpecMissing      = errors.New("constraint spec is missing")
 	ErrConstraintAllowListMissing = errors.New("constraint allow list is missing")
+	ErrConstraintPatternMissing   = errors.New("constraint pattern is missing")
 )
 
 type (
@@ -38,9 +40,11 @@ type (
 	// ConstraintSpec holds the specification for a constraint.
 	ConstraintSpec struct {
 		AllowList []string `yaml:"allowList,omitempty"`
+		Pattern   string   `yaml:"pattern, omitempty"`
 	}
 )
 
+//nolint:cyclop
 func (c Constraint) getValidator() (Validator, error) {
 	switch c.Type {
 	case "":
@@ -59,8 +63,16 @@ func (c Constraint) getValidator() (Validator, error) {
 		return NonEmptyConstraint{}, nil
 	case ConstraintTypeNonEmptyKeys:
 		return NonEmptyKeysConstraint{}, nil
+	case ConstraintTypeRegex:
+		if c.Spec == nil {
+			return nil, ErrConstraintSpecMissing
+		}
+		if len(c.Spec.Pattern) == 0 {
+			return nil, ErrConstraintPatternMissing
+		}
+		return NewRegexConstraint(c.Spec.Pattern)
 	default:
-		return nil, fmt.Errorf("%w: %s", ErrUnkownConstraintType, c.Type)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownConstraintType, c.Type)
 	}
 }
 

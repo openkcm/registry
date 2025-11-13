@@ -3,10 +3,13 @@ package model
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/openkcm/registry/internal/validation"
 )
+
+var ErrMarshalMapValue = errors.New("failed to marshal map value")
 
 // Map represents a map of string key-value pairs.
 //
@@ -33,7 +36,7 @@ func (m *Map) Scan(src any) error {
 
 	bytes, ok := src.([]byte)
 	if !ok {
-		return fmt.Errorf("%w: %v", ErrMarshalUserGroupValue, src)
+		return fmt.Errorf("%w: %v", ErrMarshalMapValue, src)
 	}
 
 	return json.Unmarshal(bytes, m)

@@ -90,7 +90,7 @@ func TestLabelsValue(t *testing.T) {
 
 func TestLabelsScan(t *testing.T) {
 	tests := map[string]struct {
-		src       interface{}
+		src       any
 		expectErr bool
 		expected  model.Labels
 	}{

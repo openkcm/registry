@@ -501,9 +501,15 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 		return nil, err
 	}
 
-	err = model.UserGroups(in.GetUserGroups()).Validate()
+	userGroups := in.GetUserGroups()
+
+	if userGroups == nil {
+		return nil, ErrTenantUserGroups
+	}
+
+	err = t.validation.Validate(model.TenantUserGroupsValidationID, in.GetUserGroups())
 	if err != nil {
-		return nil, err
+		return nil, ErrTenantUserGroups
 	}
 
 	err = t.patchTenant(ctx, patchTenantOpts{
@@ -595,6 +601,8 @@ func (t *Tenant) validateRemoveTenantLabelsRequest(in *tenantgrpc.RemoveTenantLa
 // patchTenant retrieves the Tenant by its ID, applies the update function to it,
 // and then updates the Tenant in the repository.
 // It returns an error if the Tenant is not found, if the validation fails, or if the repository update fails.
+//
+//nolint:cyclop
 func (t *Tenant) patchTenant(ctx context.Context, opts patchTenantOpts) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
 	defer cancel()
@@ -619,6 +627,10 @@ func (t *Tenant) patchTenant(ctx context.Context, opts patchTenantOpts) error {
 
 		if opts.updateFunc != nil {
 			opts.updateFunc(tenant)
+			err = t.validateTenant(tenant)
+			if err != nil {
+				return err
+			}
 
 			isPatched, err := r.Patch(ctx, tenant)
 			if err != nil {
