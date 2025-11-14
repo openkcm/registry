@@ -149,6 +149,56 @@ func (a *Auth) GetAuth(ctx context.Context, req *authgrpc.GetAuthRequest) (*auth
 	}, nil
 }
 
+func (a *Auth) ListAuths(ctx context.Context, in *authgrpc.ListAuthsRequest) (*authgrpc.ListAuthsResponse, error) {
+	ctx = slogctx.With(ctx, "tenantID", in.TenantId)
+	slogctx.Debug(ctx, "list auth")
+
+	err := a.validation.Validate(model.AuthTenantIDValidationID, in.TenantId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid tenant ID: %v", err)
+	}
+
+	query := repository.NewQuery(&model.Auth{})
+	err = query.ApplyPagination(in.GetLimit(), in.GetNextPageToken())
+	if err != nil {
+		return nil, err
+	}
+
+	cond := repository.NewCompositeKey()
+	cond.Where(repository.TenantIDField, in.GetTenantId())
+	query.Where(cond)
+
+	var auths []model.Auth
+	if err := a.repo.List(ctx, &auths, *query); err != nil {
+		return nil, err
+	}
+	pbAuths := a.mapToGRPCResponse(auths)
+	if len(pbAuths) == 0 {
+		return nil, ErrAuthNotFound
+	}
+
+	if len(auths) < query.Limit {
+		return &authgrpc.ListAuthsResponse{
+			Auth: pbAuths,
+		}, nil
+	}
+
+	lastItem := auths[len(auths)-1]
+
+	nextPageToken, err := repository.PageInfo{
+		LastKey:       lastItem.PaginationKey(),
+		LastCreatedAt: lastItem.CreatedAt,
+	}.Encode()
+	if err != nil {
+		return nil, err
+	}
+
+	return &authgrpc.ListAuthsResponse{
+		Auth:          pbAuths,
+		NextPageToken: nextPageToken,
+	}, nil
+}
+
 // RemoveAuth marks an auth for removal by its external ID and starts a job to remove it from the linked tenant.
 // If the auth does not exist or is not in APPLIED status, it returns an error.
 // If the linked tenant does not exist or is not active, it returns an error.
@@ -375,6 +425,16 @@ func (a *Auth) handleJobAborted(ctx context.Context, job orbital.Job) error {
 		return nil
 	}
 	return err
+}
+
+// mapToGRPCResponse maps model Auths to GRPC Tenants to be compatible for response.
+func (a *Auth) mapToGRPCResponse(auths []model.Auth) []*authgrpc.Auth {
+	pbAuths := make([]*authgrpc.Auth, 0, len(auths))
+	for _, auth := range auths {
+		pbAuths = append(pbAuths, auth.ToProto())
+	}
+
+	return pbAuths
 }
 
 // apply applies update and/or validate functions to all auths for a given tenantID.

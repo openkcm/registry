@@ -367,6 +367,136 @@ func waitForAuthReconciliation(ctx context.Context, subj authgrpc.ServiceClient,
 	}
 }
 
+func TestListAuth(t *testing.T) {
+	// given
+	conn, err := newGRPCClientConn()
+	require.NoError(t, err)
+	defer conn.Close()
+
+	db, err := startDB()
+	require.NoError(t, err)
+	repo := sql.NewRepository(db)
+
+	subj := authgrpc.NewServiceClient(conn)
+
+	ctx := t.Context()
+
+	t.Run("ListAuth", func(t *testing.T) {
+		t.Run("should return an error", func(t *testing.T) {
+			t.Run("if no entries exist", func(t *testing.T) {
+				// when
+				resp, err := subj.ListAuths(ctx, &authgrpc.ListAuthsRequest{
+					TenantId: "random-tenant-id",
+				})
+
+				// then
+				assert.Error(t, err)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+				assert.Nil(t, resp)
+			})
+			t.Run("if tenantID is empty", func(t *testing.T) {
+				// when
+				resp, err := subj.ListAuths(ctx, &authgrpc.ListAuthsRequest{
+					TenantId: "",
+				})
+
+				// then
+				assert.Error(t, err)
+				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+				assert.Nil(t, resp)
+			})
+		})
+
+		t.Run("when entries exist", func(t *testing.T) {
+			// given
+			tenantID1 := model.Tenant{ID: validRandID()}
+			_, cleanupAuth1 := authWithNonTransientState(t, repo, &tenantID1)
+			t.Cleanup(func() {
+				cleanupAuth1(ctx)
+			})
+
+			tenantID2 := model.Tenant{ID: validRandID()}
+			_, cleanupAuth2 := authWithNonTransientState(t, repo, &tenantID2)
+			t.Cleanup(func() {
+				cleanupAuth2(ctx)
+			})
+
+			t.Run("should retrieve", func(t *testing.T) {
+				t.Run("records only for a given tenantID", func(t *testing.T) {
+					// when
+					resp, err := subj.ListAuths(ctx, &authgrpc.ListAuthsRequest{TenantId: tenantID1.ID})
+
+					// then
+					assert.NoError(t, err)
+					assert.Len(t, resp.GetAuth(), len(nonTransientAuthStatus()))
+					for _, auth := range resp.GetAuth() {
+						assert.Equal(t, tenantID1.ID, auth.GetTenantId())
+					}
+				})
+
+				t.Run("records and a next page token when a limit is specified", func(t *testing.T) {
+					// when
+					resp, err := subj.ListAuths(ctx, &authgrpc.ListAuthsRequest{
+						TenantId: tenantID2.ID,
+						Limit:    1,
+					})
+
+					// then
+					assert.NoError(t, err)
+					assert.Len(t, resp.GetAuth(), 1)
+					for _, auth := range resp.GetAuth() {
+						assert.Equal(t, tenantID2.ID, auth.GetTenantId())
+					}
+					assert.NotEmpty(t, resp.GetNextPageToken())
+				})
+
+				t.Run("records without a next page token if limit is greater than number of auths", func(t *testing.T) {
+					// when
+					resp, err := subj.ListAuths(ctx, &authgrpc.ListAuthsRequest{
+						TenantId: tenantID2.ID,
+						Limit:    100,
+					})
+
+					// then
+					assert.NoError(t, err)
+					assert.Len(t, resp.GetAuth(), len(nonTransientAuthStatus()))
+					for _, auth := range resp.GetAuth() {
+						assert.Equal(t, tenantID2.ID, auth.GetTenantId())
+					}
+					assert.Empty(t, resp.GetNextPageToken())
+				})
+
+				t.Run("next page records from the next page token", func(t *testing.T) {
+					// given
+					resp1, err := subj.ListAuths(ctx, &authgrpc.ListAuthsRequest{
+						TenantId: tenantID2.ID,
+						Limit:    1,
+					})
+
+					assert.NoError(t, err)
+					assert.NotEmpty(t, resp1.GetNextPageToken())
+
+					// when
+					resp2, err := subj.ListAuths(ctx, &authgrpc.ListAuthsRequest{
+						TenantId:      tenantID2.ID,
+						Limit:         100,
+						NextPageToken: resp1.GetNextPageToken(),
+					})
+
+					// then
+					assert.NoError(t, err)
+					assert.NotNil(t, resp2)
+					assert.Len(t, resp2.GetAuth(), len(nonTransientAuthStatus())-1)
+					for _, auth := range resp2.GetAuth() {
+						//  making sure that there i no duplicates
+						assert.NotEqual(t, resp1.GetAuth()[0].Status, auth.Status)
+					}
+				})
+			})
+		})
+	})
+}
+
 func TestAuthValidation(t *testing.T) {
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
