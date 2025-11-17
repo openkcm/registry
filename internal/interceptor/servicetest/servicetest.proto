@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "github.tools.sap/kms/registry/internal/interceptor/servicetest";
+option go_package = "github.com/openkcm/registry/internal/interceptor/servicetest";
 
 service TestService {
   rpc TestCall(TestCallRequest) returns (TestCallResponse) {}
