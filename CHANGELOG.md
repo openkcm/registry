@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0](https://github.com/openkcm/registry/compare/v1.5.0...v1.6.0) (2025-11-14)
+
+
+### Features
+
+* add paginated ListAuths endpoint ([85abd4b](https://github.com/openkcm/registry/commit/85abd4b26e42dd0a9781b67ea7badc790740217e))
+* add regex validation for UserGroups ([#86](https://github.com/openkcm/registry/issues/86)) ([60488c2](https://github.com/openkcm/registry/commit/60488c2d7e3ce1877472d97bfaaf43cf452e264e))
+
 ## [1.5.0](https://github.com/openkcm/registry/compare/v1.4.0...v1.5.0) (2025-11-10)
 
 
