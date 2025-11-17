@@ -119,9 +119,6 @@ func TestTenantTerminate(t *testing.T) {
 				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
-
-					err = deleteOrbitalResources(ctx, db, tenant.ID)
-					assert.NoError(t, err)
 				})
 
 				auths, authCleanup := authWithNonTransientState(t, repo, tenant)
@@ -156,9 +153,6 @@ func TestTenantTerminate(t *testing.T) {
 
 				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
-					assert.NoError(t, err)
-
-					err = deleteOrbitalResources(ctx, db, tenant.ID)
 					assert.NoError(t, err)
 				})
 

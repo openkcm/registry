@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"gorm.io/gorm"
@@ -142,10 +141,10 @@ func TestTenantValidation(t *testing.T) {
 
 				// when
 				firstResp, err := tSubj.RegisterTenant(ctx, req)
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 					assert.NoError(t, err)
-				}()
+				})
 
 				// then
 				assert.NoError(t, err)
@@ -178,10 +177,10 @@ func TestTenantValidation(t *testing.T) {
 
 			// when
 			resp, err := tSubj.RegisterTenant(ctx, req)
-			defer func() {
+			t.Cleanup(func() {
 				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 				assert.NoError(t, err)
-			}()
+			})
 
 			// then
 			assert.Equal(t, req.Id, resp.GetId())
@@ -328,10 +327,10 @@ func TestTenantValidation(t *testing.T) {
 			}
 			resp1, err := tSubj.RegisterTenant(ctx, req1)
 			assert.NoError(t, err)
-			defer func() {
+			t.Cleanup(func() {
 				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req1.GetId()})
 				assert.NoError(t, err)
-			}()
+			})
 
 			time.Sleep(time.Millisecond)
 
@@ -350,10 +349,10 @@ func TestTenantValidation(t *testing.T) {
 			}
 			resp2, err := tSubj.RegisterTenant(ctx, req2)
 			assert.NoError(t, err)
-			defer func() {
+			t.Cleanup(func() {
 				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req2.GetId()})
 				assert.NoError(t, err)
-			}()
+			})
 
 			t.Run("should return all tenants if no filter is applied", func(t *testing.T) {
 				// when
@@ -524,10 +523,10 @@ func TestTenantValidation(t *testing.T) {
 					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
 				assert.NoError(t, err)
 
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
-				}()
+				})
 
 				// when
 				res, err := tSubj.SetTenantLabels(ctx, &tenantgrpc.SetTenantLabelsRequest{
@@ -633,10 +632,10 @@ func TestTenantValidation(t *testing.T) {
 					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
 				assert.NoError(t, err)
 
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
-				}()
+				})
 
 				// when
 				res, err := tSubj.RemoveTenantLabels(ctx, &tenantgrpc.RemoveTenantLabelsRequest{
@@ -663,10 +662,10 @@ func TestTenantValidation(t *testing.T) {
 					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
 				assert.NoError(t, err)
 
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
-				}()
+				})
 
 				// when
 				res, err := tSubj.RemoveTenantLabels(ctx, &tenantgrpc.RemoveTenantLabelsRequest{
@@ -752,10 +751,10 @@ func TestTenantValidation(t *testing.T) {
 			req := validRegisterTenantReq()
 			_, err := tSubj.RegisterTenant(ctx, req)
 			assert.NoError(t, err)
-			defer func() {
+			t.Cleanup(func() {
 				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 				assert.NoError(t, err)
-			}()
+			})
 
 			resp, err := tSubj.GetTenant(ctx, &tenantgrpc.GetTenantRequest{
 				Id: req.GetId(),
@@ -790,10 +789,10 @@ func TestSetTenantUserGroups(t *testing.T) {
 				model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
 			assert.NoError(t, err)
 
-			defer func() {
+			t.Cleanup(func() {
 				err = deleteTenantFromDB(ctx, db, tenant)
 				assert.NoError(t, err)
-			}()
+			})
 
 			tts := []struct {
 				name       string
@@ -863,10 +862,10 @@ func TestSetTenantUserGroups(t *testing.T) {
 					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
 				assert.NoError(t, err)
 
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
-				}()
+				})
 
 				// when
 				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
@@ -894,10 +893,10 @@ func TestSetTenantUserGroups(t *testing.T) {
 					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
 				assert.NoError(t, err)
 
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
-				}()
+				})
 
 				// when
 				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
@@ -939,17 +938,10 @@ func TestSetTenantUserGroups(t *testing.T) {
 }
 
 func TestListTenantsPagination(t *testing.T) {
-	conn, err := newGRPCClientConn()
-	require.NoError(t, err)
-	defer func(conn *grpc.ClientConn) {
-		err := conn.Close()
-		assert.NoError(t, err)
-	}(conn)
-	subj := tenantgrpc.NewServiceClient(conn)
-
+	testCtx := newTenantTestContext(t)
+	subj := testCtx.tenantClient
+	db := testCtx.db
 	ctx := t.Context()
-	db, err := startDB()
-	require.NoError(t, err)
 
 	t.Run("ListTenantsPagination", func(t *testing.T) {
 		t.Run("given tenants with different creation timestamps", func(t *testing.T) {
@@ -958,18 +950,18 @@ func TestListTenantsPagination(t *testing.T) {
 			tenantRequest1.Name = "t1"
 			_, err := subj.RegisterTenant(ctx, tenantRequest1)
 			assert.NoError(t, err)
-			defer func() {
+			t.Cleanup(func() {
 				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: tenantRequest1.GetId()})
 				assert.NoError(t, err)
-			}()
+			})
 			tenantRequest2 := validRegisterTenantReq()
 			tenantRequest2.Name = "t2"
 			_, err = subj.RegisterTenant(ctx, tenantRequest2)
 			assert.NoError(t, err)
-			defer func() {
+			t.Cleanup(func() {
 				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: tenantRequest2.GetId()})
 				assert.NoError(t, err)
-			}()
+			})
 
 			t.Run("should return next page token with applied limit", func(t *testing.T) {
 				req := &tenantgrpc.ListTenantsRequest{
@@ -1017,7 +1009,6 @@ func TestListTenantsPagination(t *testing.T) {
 		t.Run("given tenants with same creation timestamp", func(t *testing.T) {
 			// for reliably creating tenants with the same created_at timestamp
 			// direct database access is needed
-			require.NoError(t, err)
 			tenants := make([]model.Tenant, 3)
 			now := time.Now()
 			for i := range tenants {
@@ -1026,12 +1017,12 @@ func TestListTenantsPagination(t *testing.T) {
 				assert.NoError(t, err)
 				tenants[i] = *tenant
 			}
-			defer func() {
+			t.Cleanup(func() {
 				for _, tenant := range tenants {
-					err = deleteTenantFromDB(ctx, db, &tenant)
+					err := deleteTenantFromDB(ctx, db, &tenant)
 					assert.NoError(t, err)
 				}
-			}()
+			})
 
 			// mirrors the order in which the tenants are queried by ID besides the created_at timestamp
 			sort.Slice(tenants, func(i, j int) bool {

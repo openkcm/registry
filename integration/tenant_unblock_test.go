@@ -117,9 +117,6 @@ func TestTenantUnblock(t *testing.T) {
 				t.Cleanup(func() {
 					err := deleteTenantFromDB(ctx, db, blockedTenant)
 					assert.NoError(t, err)
-
-					err = deleteOrbitalResources(ctx, db, blockedTenant.ID)
-					assert.NoError(t, err)
 				})
 
 				expStatus := tenantgrpc.Status_STATUS_UNBLOCKING
@@ -147,9 +144,6 @@ func TestTenantUnblock(t *testing.T) {
 				assert.NoError(t, err)
 				t.Cleanup(func() {
 					err := deleteTenantFromDB(ctx, db, blockedTenant)
-					assert.NoError(t, err)
-
-					err = deleteOrbitalResources(ctx, db, blockedTenant.ID)
 					assert.NoError(t, err)
 				})
 
