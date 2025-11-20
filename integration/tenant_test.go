@@ -5,7 +5,6 @@ package integration_test
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"testing"
 	"time"
@@ -13,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"gorm.io/gorm"
@@ -21,7 +19,6 @@ import (
 	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 
-	"github.com/openkcm/registry/integration/operatortest"
 	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository"
 	"github.com/openkcm/registry/internal/repository/sql"
@@ -37,293 +34,41 @@ const (
 	labelValueC = "value-c"
 )
 
-type expStateFunc func(*tenantgrpc.Tenant) bool
-
 var ErrTenantIDEmpty = status.Error(codes.InvalidArgument, "invalid ID: validation failed for Tenant.ID: value is empty")
 
-func TestTenantReconciliation(t *testing.T) {
-	// given
+type TenantTestContext struct {
+	db           *gorm.DB
+	repo         *sql.ResourceRepository
+	authClient   authgrpc.ServiceClient
+	tenantClient tenantgrpc.ServiceClient
+}
+
+func newTenantTestContext(t *testing.T) *TenantTestContext {
+	t.Helper()
+
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
-	defer conn.Close()
+	t.Cleanup(func() {
+		conn.Close()
+	})
 
-	tSubj := tenantgrpc.NewServiceClient(conn)
-	authClient := authgrpc.NewServiceClient(conn)
-
-	ctx := t.Context()
 	db, err := startDB()
 	require.NoError(t, err)
 
-	operator, err := operatortest.New(ctx)
-	require.NoError(t, err)
-	go operator.ListenAndRespond(ctx)
-
-	t.Run("ProvisionTenant", func(t *testing.T) {
-		tests := []struct {
-			name     string
-			tenantID string
-			region   string
-			expState expStateFunc
-		}{
-			{
-				name:     "should change status to PROVISIONING_ERROR if region is not found",
-				tenantID: "test-tenant-cancel",
-				region:   "region-2",
-				expState: func(t *tenantgrpc.Tenant) bool {
-					return t.GetStatus() == tenantgrpc.Status_STATUS_PROVISIONING_ERROR
-				},
-			},
-			{
-				name:     "should change status to PROVISIONING_ERROR if operator fails to process the request",
-				tenantID: operatortest.TenantIDFail,
-				region:   operatortest.Region,
-				expState: func(t *tenantgrpc.Tenant) bool {
-					return t.GetStatus() == tenantgrpc.Status_STATUS_PROVISIONING_ERROR
-				},
-			},
-			{
-				name:     "should change status to ACTIVE if tenant is provisioned successfully",
-				tenantID: operatortest.TenantIDSuccess,
-				region:   operatortest.Region,
-				expState: func(t *tenantgrpc.Tenant) bool {
-					return t.GetStatus() == tenantgrpc.Status_STATUS_ACTIVE
-				},
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				// given
-				req := validRegisterTenantReq()
-				req.Id = tt.tenantID
-				req.Region = tt.region
-
-				// when
-				_, err := tSubj.RegisterTenant(ctx, req)
-				assert.NoError(t, err)
-				defer func() {
-					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
-					assert.NoError(t, err)
-				}()
-
-				// then
-				err = waitForTenantReconciliation(ctx, tSubj, req.GetId(), tt.expState)
-				assert.NoError(t, err)
-			})
-		}
-	})
-
-	t.Run("BlockTenant", func(t *testing.T) {
-		repo := sql.NewRepository(db)
-		tests := []struct {
-			name         string
-			tenantID     string
-			expState     expStateFunc
-			expAuthState authgrpc.AuthStatus
-		}{
-			{
-				name:     "should change status to BLOCKING_ERROR if operator fails to process the request",
-				tenantID: operatortest.TenantIDFail,
-				expState: func(t *tenantgrpc.Tenant) bool {
-					return t.GetStatus() == tenantgrpc.Status_STATUS_BLOCKING_ERROR
-				},
-				expAuthState: authgrpc.AuthStatus_AUTH_STATUS_BLOCKING_ERROR,
-			},
-			{
-				name:     "should change status to BLOCKED if tenant is blocked successfully",
-				tenantID: operatortest.TenantIDSuccess,
-				expState: func(t *tenantgrpc.Tenant) bool {
-					return t.GetStatus() == tenantgrpc.Status_STATUS_BLOCKED
-				},
-				expAuthState: authgrpc.AuthStatus_AUTH_STATUS_BLOCKED,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				// given
-				tenant := validTenant()
-				tenant.ID = tt.tenantID
-				err := createTenantInDB(ctx, db, tenant)
-				assert.NoError(t, err)
-
-				defer func() {
-					err := deleteTenantFromDB(ctx, db, tenant)
-					assert.NoError(t, err)
-
-					err = deleteOrbitalResources(ctx, db, tenant.ID)
-					assert.NoError(t, err)
-				}()
-
-				authWithStatus, authCleanup := authWithNonTransientState(t, repo, tenant)
-				defer func() {
-					authCleanup(ctx)
-				}()
-
-				// when
-				_, err = tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
-					Id: tenant.ID,
-				})
-				assert.NoError(t, err)
-
-				// then
-				err = waitForTenantReconciliation(ctx, tSubj, tenant.ID, tt.expState)
-				assert.NoError(t, err)
-				assertAuthUpdatableStateConsistency(t, authClient, authWithStatus, tt.expAuthState)
-			})
-		}
-	})
-
-	t.Run("UnblockTenant", func(t *testing.T) {
-		repo := sql.NewRepository(db)
-		tests := []struct {
-			name         string
-			tenantID     string
-			expState     expStateFunc
-			expAuthState authgrpc.AuthStatus
-		}{
-			{
-				name:     "should change status to UNBLOCKING_ERROR if operator fails to process the request",
-				tenantID: operatortest.TenantIDFail,
-				expState: func(t *tenantgrpc.Tenant) bool {
-					return t.GetStatus() == tenantgrpc.Status_STATUS_UNBLOCKING_ERROR
-				},
-				expAuthState: authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING_ERROR,
-			},
-			{
-				name:     "should change status to ACTIVE if tenant is unblocked successfully",
-				tenantID: operatortest.TenantIDSuccess,
-				expState: func(t *tenantgrpc.Tenant) bool {
-					return t.GetStatus() == tenantgrpc.Status_STATUS_ACTIVE
-				},
-				expAuthState: authgrpc.AuthStatus_AUTH_STATUS_APPLIED,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				// given
-				tenant := validTenant()
-				tenant.ID = tt.tenantID
-				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-				err := createTenantInDB(ctx, db, tenant)
-				assert.NoError(t, err)
-
-				defer func() {
-					err := deleteTenantFromDB(ctx, db, tenant)
-					assert.NoError(t, err)
-
-					err = deleteOrbitalResources(ctx, db, tenant.ID)
-					assert.NoError(t, err)
-				}()
-
-				authWithStatus, authCleanupFns := authWithNonTransientState(t, repo, tenant)
-				defer func() {
-					authCleanupFns(ctx)
-				}()
-
-				// when
-				_, err = tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
-					Id: tenant.ID,
-				})
-				assert.NoError(t, err)
-
-				// then
-				err = waitForTenantReconciliation(ctx, tSubj, tenant.ID, tt.expState)
-				assert.NoError(t, err)
-
-				assertAuthUpdatableStateConsistency(t, authClient, authWithStatus, tt.expAuthState)
-			})
-		}
-	})
-
-	t.Run("TerminateTenant", func(t *testing.T) {
-		tests := []struct {
-			name     string
-			tenantID string
-			expState expStateFunc
-		}{
-			{
-				name:     "should change status to TERMINATION_ERROR if operator fails to process the request",
-				tenantID: operatortest.TenantIDFail,
-				expState: func(t *tenantgrpc.Tenant) bool {
-					return t.GetStatus() == tenantgrpc.Status_STATUS_TERMINATION_ERROR
-				},
-			},
-			{
-				name:     "should change status to TERMINATED if tenant is terminated successfully",
-				tenantID: operatortest.TenantIDSuccess,
-				expState: func(t *tenantgrpc.Tenant) bool {
-					return t.GetStatus() == tenantgrpc.Status_STATUS_TERMINATED
-				},
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				// given
-				tenant := validTenant()
-				tenant.ID = tt.tenantID
-				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-				err := createTenantInDB(ctx, db, tenant)
-				assert.NoError(t, err)
-				defer func() {
-					err = deleteTenantFromDB(ctx, db, tenant)
-					assert.NoError(t, err)
-				}()
-
-				// when
-				_, err = tSubj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
-					Id: tenant.ID,
-				})
-				assert.NoError(t, err)
-
-				// then
-				err = waitForTenantReconciliation(ctx, tSubj, tenant.ID, tt.expState)
-				assert.NoError(t, err)
-			})
-		}
-	})
-}
-
-func waitForTenantReconciliation(ctx context.Context, tSubj tenantgrpc.ServiceClient, tenantID string, expState expStateFunc) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	var currentTenant *tenantgrpc.Tenant
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("%w; tenant: %s", ctx.Err(), currentTenant)
-		default:
-			resp, err := tSubj.GetTenant(ctx, &tenantgrpc.GetTenantRequest{
-				Id: tenantID,
-			})
-			if err != nil {
-				return err
-			}
-			if expState(resp.GetTenant()) {
-				return nil
-			}
-
-			currentTenant = resp.GetTenant()
-		}
-		time.Sleep(100 * time.Millisecond)
+	return &TenantTestContext{
+		repo:         sql.NewRepository(db),
+		db:           db,
+		authClient:   authgrpc.NewServiceClient(conn),
+		tenantClient: tenantgrpc.NewServiceClient(conn),
 	}
 }
 
 func TestTenantValidation(t *testing.T) {
 	// given
-	conn, err := newGRPCClientConn()
-	require.NoError(t, err)
-	defer conn.Close()
-
-	tSubj := tenantgrpc.NewServiceClient(conn)
-	authClient := authgrpc.NewServiceClient(conn)
-
+	testCtx := newTenantTestContext(t)
+	tSubj := testCtx.tenantClient
+	db := testCtx.db
 	ctx := t.Context()
-	db, err := startDB()
-	require.NoError(t, err)
 
 	t.Run("RegisterTenant", func(t *testing.T) {
 		t.Run("should return an error if", func(t *testing.T) {
@@ -396,10 +141,10 @@ func TestTenantValidation(t *testing.T) {
 
 				// when
 				firstResp, err := tSubj.RegisterTenant(ctx, req)
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 					assert.NoError(t, err)
-				}()
+				})
 
 				// then
 				assert.NoError(t, err)
@@ -432,10 +177,10 @@ func TestTenantValidation(t *testing.T) {
 
 			// when
 			resp, err := tSubj.RegisterTenant(ctx, req)
-			defer func() {
+			t.Cleanup(func() {
 				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 				assert.NoError(t, err)
-			}()
+			})
 
 			// then
 			assert.Equal(t, req.Id, resp.GetId())
@@ -582,10 +327,10 @@ func TestTenantValidation(t *testing.T) {
 			}
 			resp1, err := tSubj.RegisterTenant(ctx, req1)
 			assert.NoError(t, err)
-			defer func() {
+			t.Cleanup(func() {
 				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req1.GetId()})
 				assert.NoError(t, err)
-			}()
+			})
 
 			time.Sleep(time.Millisecond)
 
@@ -604,10 +349,10 @@ func TestTenantValidation(t *testing.T) {
 			}
 			resp2, err := tSubj.RegisterTenant(ctx, req2)
 			assert.NoError(t, err)
-			defer func() {
+			t.Cleanup(func() {
 				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req2.GetId()})
 				assert.NoError(t, err)
-			}()
+			})
 
 			t.Run("should return all tenants if no filter is applied", func(t *testing.T) {
 				// when
@@ -769,429 +514,6 @@ func TestTenantValidation(t *testing.T) {
 		})
 	})
 
-	t.Run("BlockTenant", func(t *testing.T) {
-		t.Run("should return an error if", func(t *testing.T) {
-			t.Run("tenant cannot be found", func(t *testing.T) {
-				// when
-				resp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
-					Id: validRandID(),
-				})
-
-				// then
-				assert.Nil(t, resp)
-				assert.Error(t, err)
-				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
-			})
-
-			t.Run("tenant is in a state that prevents blocking", func(t *testing.T) {
-				// given
-				state := model.TenantStatus(tenantgrpc.Status_STATUS_PROVISIONING.String())
-				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
-				assert.NoError(t, err)
-				defer func() {
-					err = deleteTenantFromDB(ctx, db, tenant)
-					assert.NoError(t, err)
-				}()
-
-				// when
-				resp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
-					Id: tenant.ID,
-				})
-
-				// then
-				assert.Nil(t, resp)
-				assert.Error(t, err)
-				assert.Equal(t, codes.FailedPrecondition, status.Code(err), err.Error())
-			})
-
-			t.Run("tenant has an auth with transient state, also should not update both tenant and auth", func(t *testing.T) {
-				for status := range service.AuthTransientStates {
-					t.Run(status, func(t *testing.T) {
-						// given
-						expActiveStatus := tenantgrpc.Status_STATUS_ACTIVE
-						tenant, err := persistTenant(ctx, db, validRandID(), model.TenantStatus(expActiveStatus.String()), time.Now())
-						assert.NoError(t, err)
-
-						repo := sql.NewRepository(db)
-						authWithTransient := validAuth()
-						authWithTransient.TenantID = tenant.ID
-						authWithTransient.Status = status
-						err = repo.Create(ctx, authWithTransient)
-						assert.NoError(t, err)
-
-						assert.NoError(t, err)
-						defer func() {
-							err := deleteTenantFromDB(ctx, db, tenant)
-							assert.NoError(t, err)
-
-							_, err = repo.Delete(ctx, authWithTransient)
-							assert.NoError(t, err)
-						}()
-
-						// when
-						actBlockedResp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
-							Id: tenant.ID,
-						})
-
-						// then
-						assert.Error(t, err)
-						assert.Nil(t, actBlockedResp)
-
-						actListResp, err := listTenants(ctx, tSubj)
-						assert.NoError(t, err)
-						assert.Len(t, actListResp.Tenants, 1)
-						assert.Equal(t, expActiveStatus, actListResp.Tenants[0].Status)
-
-						actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
-							ExternalId: authWithTransient.ExternalID,
-						})
-						assert.NoError(t, err)
-						assert.Equal(t, status, actAuth.GetAuth().GetStatus().String())
-					})
-				}
-			})
-		})
-
-		t.Run("should succeed", func(t *testing.T) {
-			t.Run("when auth status is not transient, both tenant and auth statuses are set to BLOCKING", func(t *testing.T) {
-				// given
-				tenant := validTenant()
-				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String())
-				err := createTenantInDB(ctx, db, tenant)
-				assert.NoError(t, err)
-
-				defer func() {
-					err := deleteTenantFromDB(ctx, db, tenant)
-					assert.NoError(t, err)
-
-					err = deleteOrbitalResources(ctx, db, tenant.ID)
-					assert.NoError(t, err)
-				}()
-
-				repo := sql.NewRepository(db)
-				authStatusExtIDs := map[string]string{}
-				for _, status := range nonTransientAuthStatus() {
-					auths := validAuth()
-					auths.TenantID = tenant.ID
-					auths.Status = status
-					err = repo.Create(ctx, auths)
-					assert.NoError(t, err)
-
-					authStatusExtIDs[status] = auths.ExternalID
-
-					defer func() {
-						_, err = repo.Delete(ctx, auths)
-						assert.NoError(t, err)
-					}()
-				}
-
-				// when
-				actBlockResp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
-					Id: tenant.ID,
-				})
-
-				// then
-				assert.NoError(t, err)
-				assert.NotNil(t, actBlockResp)
-				assert.True(t, actBlockResp.Success)
-
-				actListResp, err := listTenants(ctx, tSubj)
-				assert.NoError(t, err)
-				assert.Len(t, actListResp.Tenants, 1)
-				assert.Equal(t, tenantgrpc.Status_STATUS_BLOCKING, actListResp.Tenants[0].Status)
-
-				for expStatus, externalID := range authStatusExtIDs {
-					// check auths
-					actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
-						ExternalId: externalID,
-					})
-					assert.NoError(t, err)
-
-					switch expStatus {
-					case authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String(),
-						authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String():
-						assert.Equal(t, expStatus, actAuth.Auth.Status.String())
-					default:
-						assert.Equal(t, authgrpc.AuthStatus_AUTH_STATUS_BLOCKING, actAuth.Auth.Status)
-					}
-				}
-			})
-			t.Run("if tenant is active", func(t *testing.T) {
-				// given
-				tenant := validTenant()
-				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String())
-				err := createTenantInDB(ctx, db, tenant)
-				assert.NoError(t, err)
-
-				defer func() {
-					err := deleteTenantFromDB(ctx, db, tenant)
-					assert.NoError(t, err)
-
-					err = deleteOrbitalResources(ctx, db, tenant.ID)
-					assert.NoError(t, err)
-				}()
-
-				expStatus := tenantgrpc.Status_STATUS_BLOCKING
-
-				// when
-				utResp, err := tSubj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{
-					Id: tenant.ID,
-				})
-
-				// then
-				assert.NoError(t, err)
-				assert.NotNil(t, utResp)
-				ltResp, err := listTenants(ctx, tSubj)
-				assert.NoError(t, err)
-				assert.Len(t, ltResp.Tenants, 1)
-				assert.Equal(t, expStatus, ltResp.Tenants[0].Status)
-			})
-		})
-	})
-
-	t.Run("UnblockTenant", func(t *testing.T) {
-		t.Run("should return an error if", func(t *testing.T) {
-			t.Run("tenant cannot be found", func(t *testing.T) {
-				// when
-				resp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
-					Id: validRandID(),
-				})
-
-				// then
-				assert.Nil(t, resp)
-				assert.Error(t, err)
-				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
-			})
-
-			t.Run("tenant is in a state that prevents unblocking", func(t *testing.T) {
-				// given
-				state := model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATED.String())
-				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
-				assert.NoError(t, err)
-				defer func() {
-					err = deleteTenantFromDB(ctx, db, tenant)
-					assert.NoError(t, err)
-				}()
-
-				// when
-				resp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
-					Id: tenant.ID,
-				})
-
-				// then
-				assert.Nil(t, resp)
-				assert.Error(t, err)
-				assert.Equal(t, codes.FailedPrecondition, status.Code(err), err.Error())
-			})
-			t.Run("tenant has an auth with transient state, also should not update both tenant and auth", func(t *testing.T) {
-				for status := range service.AuthTransientStates {
-					t.Run(status, func(t *testing.T) {
-						// given
-						expBlockedStatus := tenantgrpc.Status_STATUS_BLOCKED
-						tenant, err := persistTenant(ctx, db, validRandID(), model.TenantStatus(expBlockedStatus.String()), time.Now())
-						assert.NoError(t, err)
-
-						repo := sql.NewRepository(db)
-						authWithTransientState := validAuth()
-						authWithTransientState.TenantID = tenant.ID
-						authWithTransientState.Status = status
-						err = repo.Create(ctx, authWithTransientState)
-						assert.NoError(t, err)
-
-						assert.NoError(t, err)
-						defer func() {
-							err := deleteTenantFromDB(ctx, db, tenant)
-							assert.NoError(t, err)
-
-							_, err = repo.Delete(ctx, authWithTransientState)
-							assert.NoError(t, err)
-						}()
-
-						// when
-						actUnblockedResp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
-							Id: tenant.ID,
-						})
-
-						// then
-						assert.Error(t, err)
-						assert.Nil(t, actUnblockedResp)
-
-						actListResp, err := listTenants(ctx, tSubj)
-						assert.NoError(t, err)
-						assert.Len(t, actListResp.Tenants, 1)
-						assert.Equal(t, expBlockedStatus, actListResp.Tenants[0].Status)
-
-						actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
-							ExternalId: authWithTransientState.ExternalID,
-						})
-						assert.NoError(t, err)
-						assert.Equal(t, status, actAuth.GetAuth().GetStatus().String())
-					})
-				}
-			})
-		})
-		t.Run("should succeed", func(t *testing.T) {
-			t.Run("if tenant is blocked", func(t *testing.T) {
-				// given
-				tenant := validTenant()
-				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-				err := createTenantInDB(ctx, db, tenant)
-				assert.NoError(t, err)
-
-				defer func() {
-					err := deleteTenantFromDB(ctx, db, tenant)
-					assert.NoError(t, err)
-
-					err = deleteOrbitalResources(ctx, db, tenant.ID)
-					assert.NoError(t, err)
-				}()
-
-				expStatus := tenantgrpc.Status_STATUS_UNBLOCKING
-
-				// when
-				utResp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
-					Id: tenant.ID,
-				})
-
-				// then
-				assert.NoError(t, err)
-				assert.NotNil(t, utResp)
-				ltResp, err := listTenants(ctx, tSubj)
-				assert.NoError(t, err)
-				assert.Len(t, ltResp.Tenants, 1)
-				assert.Equal(t, expStatus, ltResp.Tenants[0].Status)
-			})
-
-			t.Run("when auth status is not transient, both tenant and auth statuses are set to UNBLOCKING", func(t *testing.T) {
-				// given
-				tenant := validTenant()
-				tenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-				err := createTenantInDB(ctx, db, tenant)
-				assert.NoError(t, err)
-
-				defer func() {
-					err := deleteTenantFromDB(ctx, db, tenant)
-					assert.NoError(t, err)
-
-					err = deleteOrbitalResources(ctx, db, tenant.ID)
-					assert.NoError(t, err)
-				}()
-
-				repo := sql.NewRepository(db)
-				authStatusExtIDs := map[string]string{}
-				for _, status := range nonTransientAuthStatus() {
-					auth := validAuth()
-					auth.TenantID = tenant.ID
-					auth.Status = status
-					err = repo.Create(ctx, auth)
-					assert.NoError(t, err)
-
-					authStatusExtIDs[status] = auth.ExternalID
-
-					defer func() {
-						_, err = repo.Delete(ctx, auth)
-						assert.NoError(t, err)
-					}()
-				}
-
-				// when
-				actUnblockedResp, err := tSubj.UnblockTenant(ctx, &tenantgrpc.UnblockTenantRequest{
-					Id: tenant.ID,
-				})
-
-				// then
-				assert.NoError(t, err)
-				assert.NotNil(t, actUnblockedResp)
-				assert.True(t, actUnblockedResp.Success)
-
-				actListResp, err := listTenants(ctx, tSubj)
-				assert.NoError(t, err)
-				assert.Len(t, actListResp.Tenants, 1)
-				assert.Equal(t, tenantgrpc.Status_STATUS_UNBLOCKING, actListResp.Tenants[0].Status)
-
-				for expStatus, externalID := range authStatusExtIDs {
-					// check auths
-					actAuth, err := authClient.GetAuth(ctx, &authgrpc.GetAuthRequest{
-						ExternalId: externalID,
-					})
-					assert.NoError(t, err)
-
-					switch expStatus {
-					case authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String(),
-						authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String():
-						assert.Equal(t, expStatus, actAuth.Auth.Status.String())
-					default:
-						assert.Equal(t, authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING, actAuth.Auth.Status)
-					}
-				}
-			})
-		})
-	})
-
-	t.Run("TerminateTenant", func(t *testing.T) {
-		t.Run("should return an error if", func(t *testing.T) {
-			t.Run("tenant cannot be found", func(t *testing.T) {
-				// when
-				resp, err := tSubj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
-					Id: validRandID(),
-				})
-
-				// then
-				assert.Nil(t, resp)
-				assert.Error(t, err)
-				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
-			})
-
-			t.Run("tenant is in a state that prevents terminating", func(t *testing.T) {
-				// given
-				state := model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATING.String())
-				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
-				assert.NoError(t, err)
-				defer func() {
-					err = deleteTenantFromDB(ctx, db, tenant)
-					assert.NoError(t, err)
-				}()
-
-				// when
-				resp, err := tSubj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
-					Id: tenant.ID,
-				})
-
-				// then
-				assert.Nil(t, resp)
-				assert.Error(t, err)
-				assert.Equal(t, codes.FailedPrecondition, status.Code(err), err.Error())
-			})
-		})
-
-		t.Run("should succeed if tenant is blocked", func(t *testing.T) {
-			// given
-			state := model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-			tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
-			assert.NoError(t, err)
-
-			defer func() {
-				err = deleteTenantFromDB(ctx, db, tenant)
-				assert.NoError(t, err)
-			}()
-
-			expStatus := tenantgrpc.Status_STATUS_TERMINATING
-
-			// when
-			utResp, err := tSubj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
-				Id: tenant.ID,
-			})
-
-			// then
-			assert.NoError(t, err)
-			assert.NotNil(t, utResp)
-			ltResp, err := listTenants(ctx, tSubj)
-			assert.NoError(t, err)
-			assert.Len(t, ltResp.Tenants, 1)
-			assert.Equal(t, expStatus, ltResp.Tenants[0].Status)
-		})
-	})
-
 	t.Run("SetTenantLabels", func(t *testing.T) {
 		t.Run("should succeed if", func(t *testing.T) {
 			t.Run("request is valid", func(t *testing.T) {
@@ -1201,10 +523,10 @@ func TestTenantValidation(t *testing.T) {
 					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
 				assert.NoError(t, err)
 
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
-				}()
+				})
 
 				// when
 				res, err := tSubj.SetTenantLabels(ctx, &tenantgrpc.SetTenantLabelsRequest{
@@ -1310,10 +632,10 @@ func TestTenantValidation(t *testing.T) {
 					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
 				assert.NoError(t, err)
 
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
-				}()
+				})
 
 				// when
 				res, err := tSubj.RemoveTenantLabels(ctx, &tenantgrpc.RemoveTenantLabelsRequest{
@@ -1340,10 +662,10 @@ func TestTenantValidation(t *testing.T) {
 					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
 				assert.NoError(t, err)
 
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
-				}()
+				})
 
 				// when
 				res, err := tSubj.RemoveTenantLabels(ctx, &tenantgrpc.RemoveTenantLabelsRequest{
@@ -1429,10 +751,10 @@ func TestTenantValidation(t *testing.T) {
 			req := validRegisterTenantReq()
 			_, err := tSubj.RegisterTenant(ctx, req)
 			assert.NoError(t, err)
-			defer func() {
+			t.Cleanup(func() {
 				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 				assert.NoError(t, err)
-			}()
+			})
 
 			resp, err := tSubj.GetTenant(ctx, &tenantgrpc.GetTenantRequest{
 				Id: req.GetId(),
@@ -1456,15 +778,9 @@ func TestTenantValidation(t *testing.T) {
 }
 
 func TestSetTenantUserGroups(t *testing.T) {
-	conn, err := newGRPCClientConn()
-	require.NoError(t, err)
-	defer conn.Close()
-
-	tSubj := tenantgrpc.NewServiceClient(conn)
-
-	db, err := startDB()
-	require.NoError(t, err)
-
+	testCtx := newTenantTestContext(t)
+	tSubj := testCtx.tenantClient
+	db := testCtx.db
 	ctx := t.Context()
 
 	t.Run("SetTenantUserGroups", func(t *testing.T) {
@@ -1473,10 +789,10 @@ func TestSetTenantUserGroups(t *testing.T) {
 				model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
 			assert.NoError(t, err)
 
-			defer func() {
+			t.Cleanup(func() {
 				err = deleteTenantFromDB(ctx, db, tenant)
 				assert.NoError(t, err)
-			}()
+			})
 
 			tts := []struct {
 				name       string
@@ -1546,10 +862,10 @@ func TestSetTenantUserGroups(t *testing.T) {
 					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
 				assert.NoError(t, err)
 
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
-				}()
+				})
 
 				// when
 				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
@@ -1577,10 +893,10 @@ func TestSetTenantUserGroups(t *testing.T) {
 					model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()), time.Now())
 				assert.NoError(t, err)
 
-				defer func() {
+				t.Cleanup(func() {
 					err = deleteTenantFromDB(ctx, db, tenant)
 					assert.NoError(t, err)
-				}()
+				})
 
 				// when
 				res, err := tSubj.SetTenantUserGroups(ctx, &tenantgrpc.SetTenantUserGroupsRequest{
@@ -1622,17 +938,10 @@ func TestSetTenantUserGroups(t *testing.T) {
 }
 
 func TestListTenantsPagination(t *testing.T) {
-	conn, err := newGRPCClientConn()
-	require.NoError(t, err)
-	defer func(conn *grpc.ClientConn) {
-		err := conn.Close()
-		assert.NoError(t, err)
-	}(conn)
-	subj := tenantgrpc.NewServiceClient(conn)
-
+	testCtx := newTenantTestContext(t)
+	subj := testCtx.tenantClient
+	db := testCtx.db
 	ctx := t.Context()
-	db, err := startDB()
-	require.NoError(t, err)
 
 	t.Run("ListTenantsPagination", func(t *testing.T) {
 		t.Run("given tenants with different creation timestamps", func(t *testing.T) {
@@ -1641,18 +950,18 @@ func TestListTenantsPagination(t *testing.T) {
 			tenantRequest1.Name = "t1"
 			_, err := subj.RegisterTenant(ctx, tenantRequest1)
 			assert.NoError(t, err)
-			defer func() {
+			t.Cleanup(func() {
 				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: tenantRequest1.GetId()})
 				assert.NoError(t, err)
-			}()
+			})
 			tenantRequest2 := validRegisterTenantReq()
 			tenantRequest2.Name = "t2"
 			_, err = subj.RegisterTenant(ctx, tenantRequest2)
 			assert.NoError(t, err)
-			defer func() {
+			t.Cleanup(func() {
 				err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: tenantRequest2.GetId()})
 				assert.NoError(t, err)
-			}()
+			})
 
 			t.Run("should return next page token with applied limit", func(t *testing.T) {
 				req := &tenantgrpc.ListTenantsRequest{
@@ -1700,7 +1009,6 @@ func TestListTenantsPagination(t *testing.T) {
 		t.Run("given tenants with same creation timestamp", func(t *testing.T) {
 			// for reliably creating tenants with the same created_at timestamp
 			// direct database access is needed
-			require.NoError(t, err)
 			tenants := make([]model.Tenant, 3)
 			now := time.Now()
 			for i := range tenants {
@@ -1709,12 +1017,12 @@ func TestListTenantsPagination(t *testing.T) {
 				assert.NoError(t, err)
 				tenants[i] = *tenant
 			}
-			defer func() {
+			t.Cleanup(func() {
 				for _, tenant := range tenants {
-					err = deleteTenantFromDB(ctx, db, &tenant)
+					err := deleteTenantFromDB(ctx, db, &tenant)
 					assert.NoError(t, err)
 				}
-			}()
+			})
 
 			// mirrors the order in which the tenants are queried by ID besides the created_at timestamp
 			sort.Slice(tenants, func(i, j int) bool {

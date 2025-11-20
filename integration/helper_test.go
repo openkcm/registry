@@ -12,7 +12,6 @@ import (
 	"github.com/openkcm/orbital"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/proto"
 	"gorm.io/gorm"
 
 	_ "google.golang.org/grpc/health"
@@ -203,7 +202,7 @@ func deleteOrbitalResources(ctx context.Context, db *gorm.DB, externalID string)
 }
 
 func deleteTenantFromDB(ctx context.Context, db *gorm.DB, tenant *model.Tenant) error {
-	err := deleteTenantJobFromDB(db, tenant.ID)
+	err := deleteOrbitalResources(ctx, db, tenant.ID)
 	if err != nil {
 		return err
 	}
@@ -233,32 +232,4 @@ func deleteSystem(ctx context.Context, s systemgrpc.ServiceClient, externalID, r
 		Region:     region,
 	})
 	return err
-}
-
-// deleteTenantJobFromDB deletes all orbital jobs related to the tenant with the given tenantId.
-func deleteTenantJobFromDB(db *gorm.DB, tenantId string) error {
-	type Job struct {
-		ID   string
-		Data []byte
-	}
-
-	var jobs []Job
-	if err := db.Table("jobs").Select("id, data").Find(&jobs).Error; err != nil {
-		return err
-	}
-	for _, job := range jobs {
-		var tenant tenantgrpc.Tenant
-		if err := proto.Unmarshal(job.Data, &tenant); err != nil {
-			continue // ignore jobs that cannot be unmarshalled
-		}
-		if tenant.Id == tenantId {
-			if err := db.Table("tasks").Where("job_id = ?", job.ID).Delete(nil).Error; err != nil {
-				return err
-			}
-			if err := db.Table("jobs").Where("id = ?", job.ID).Delete(nil).Error; err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
