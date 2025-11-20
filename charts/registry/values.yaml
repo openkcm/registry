@@ -315,16 +315,202 @@ config:
     profiling: true
 
   logger:
-    level: info # one of: debug, info, warn, error
+    level: debug # one of: trace, debug, info, warn, error
+    # Format of the logs
     format: json # one of: json, text
+    formatter:
+      time:
+        type: pattern # one of: pattern, unix
+        # Used only when the property type: pattern
+        # Should follow golang time pattern
+        # Default value time.RFC3339.
+        pattern: "Mon Jan 02 15:04:05 -0700 2006"
+        # Used only when the property type: unix
+        # Time units are "1ns", "1us" (or "1µs"), "1ms", "1s"
+        # Default value 1s.
+        precision: 1s
+      # fields:
+      #   # Field names (this way the field name can be changed) to be used on log records; These are their defaults.
+      #   error: "error"
+      #   message: "msg"
+      #   level: "level"
+      #   time: "time"
+      #   # Fields names used by OTEL to track the Trace and Span ID
+      #   otel:
+      #     traceID: "TraceID" # Default is TraceID
+      #     spanID: "SpanID" # Default is SpanID
+      #   masking:
+      #     # All fields under PII, the formatters will mask the value and keeping first 4 original characters
+      #     pii:
+      #       - email
+      #       - ip-address
+      #     # All fields under other, the formatters will mask the value, using given mask.
+      #     other:
+      #       jwt-token: "*****"
 
   telemetry:
-    traces:
-      enabled: false
-    metrics:
-      enabled: false
     logs:
       enabled: false
+      protocol: http # one of: http, grpc; Default is http
+      # Host configures the target endpoint for logs export
+      # Host configuration example set as a value:
+      # host:
+      #   source: embedded
+      #   value: http://localhost:4318
+      # Host configuration example load value from an environment variable:
+      host:
+        source: env
+        env: OTEL_HOST
+      # Host configuration example load value from a JSON file:
+      # host:
+      #   source: file
+      #   file:
+      #     path: /etc/credentials/config.json
+      #     format: json # one of: json
+      #     jsonPath: "$.credentials.ingest-otlp-endpoint" # Syntax JSONPath Query Expression
+      # URL configures the path for http; default is /v1/logs
+      # url: /v1/logs
+      # OpenTelemetry secret connections; Applicable in the same way for logs, traces and metrics
+      # Insecure configuration example:
+      secretRef:
+        type: insecure # one of: insecure, mtls, api-token
+      # APIToken configuration example loading directly from embedded value
+      #   secretRef:
+      #     type: api-token # one of: insecure, mtls, api-token
+      #     apiToken:
+      #       source: embedded
+      #       value: "unknown"
+      # APIToken configuration example loading value from environment variable:
+      #   secretRef:
+      #     type: api-token # one of: insecure, mtls, api-token
+      #     apiToken:
+      #       source: env
+      #       env: OTEL_API_TOKEN
+      # APIToken configuration example loading value from binary file as is:
+      #   secretRef:
+      #     type: api-token # one of: insecure, mtls, api-token
+      #     apiToken:
+      #       source: file
+      #       path: /etc/credentials/api-token
+      #       format: binary # one of: json, binary
+      # APIToken configuration example loading value from JSON file, extracting a specific field:
+      #   secretRef:
+      #     type: api-token # one of: insecure, mtls, api-token
+      #     apiToken:
+      #       source: file
+      #       path: /etc/credentials/api-token.json
+      #       format: json # one of: json, binary
+      #       jsonPath: "$.credentials.api-token" # Syntax JSONPath Query Expression
+      # mTLS configuration example loading value from environment variables:
+      #   secretRef:
+      #     type: mtls # one of: insecure, mtls, api-token
+      #     mtls:
+      #       cert:
+      #         source: env
+      #         env: OTEL_X509_CERT
+      #       certKey:
+      #         source: env
+      #         env: OTEL_X509_CERT_KEY
+      #       serverCA:
+      #         source: env
+      #         env: OTEL_X509_SERVER_CA
+      # mTLS configuration example loading value from binary file as is:
+      #   secretRef:
+      #     type: mtls # one of: insecure, mtls, api-token
+      #     mtls:
+      #       cert:
+      #         source: file
+      #         file:
+      #           path: /etc/credentials/cert.pem
+      #           format: binary # one of: json, binary
+      #       certKey:
+      #         source: file
+      #         file:
+      #           path: /etc/credentials/cert-key.pem
+      #           format: binary # one of: json, binary
+      #       serverCA:
+      #         source: file
+      #         file:
+      #           path: /etc/credentials/server-ca.pem
+      #           format: binary # one of: json, binary
+      # mTLS configuration example loading value from JSON file, extracting a specific field:
+      #   secretRef:
+      #     type: mtls # one of: insecure, mtls, api-token
+      #     mtls:
+      #       cert:
+      #         source: file
+      #         file:
+      #           path: /etc/credentials/config.json
+      #           format: json # one of: json, binary
+      #           jsonPath: "$.credentials.ingest-otlp-cert" # Syntax JSONPath Query Expression
+      #       certKey:
+      #         source: file
+      #         file:
+      #           path: /etc/credentials/config.json
+      #           format: json # one of: json, binary
+      #           jsonPath: "$.credentials.ingest-otlp-key" # Syntax JSONPath Query Expression
+      #       serverCA:
+      #         source: file
+      #         file:
+      #           path: /etc/credentials/config.json
+      #           format: json # one of: json, binary
+      #           jsonPath: "$.credentials.server-ca" # Syntax JSONPath Query Expression
+
+    traces:
+      enabled: false
+      protocol: http # one of: http, grpc; Default is http
+      # Host configures the target endpoint for traces export
+      # Host configuration example set as a value:
+      # host:
+      #   source: embedded
+      #   value: http://localhost:4318
+      # Host configuration example load value from an environment variable:
+      host:
+        source: env
+        env: OTEL_HOST
+      # Host configuration example load value from a JSON file:
+      # host:
+      #   source: file
+      #   file:
+      #     path: /etc/credentials/config.json
+      #     format: json # one of: json
+      #     jsonPath: "$.credentials.ingest-otlp-endpoint" # Syntax JSONPath Query Expression
+      # URL configures the path for http; default is /v1/traces
+      # url: /v1/traces
+      # OpenTelemetry traces secret; See examples from logs.
+      # Insecure configuration example:
+      secretRef:
+        type: insecure # one of: insecure, mtls, api-token
+
+    metrics:
+      enabled: false
+      protocol: http # one of: http, grpc; Default is http
+      # Host configures the target endpoint for metrics export
+      # Host configuration example set as a value:
+      # host:
+      #   source: embedded
+      #   value: http://localhost:4318
+      # Host configuration example load value from an environment variable:
+      host:
+        source: env
+        env: OTEL_HOST
+      # Host configuration example load value from a JSON file:
+      # host:
+      #   source: file
+      #   file:
+      #     path: /etc/credentials/config.json
+      #     format: json # one of: json
+      #     jsonPath: "$.credentials.ingest-otlp-endpoint" # Syntax JSONPath Query Expression
+      # URL configures the path for http; default is /v1/metrics
+      # url: /v1/metrics
+      # OpenTelemetry metrics secret; See examples from logs.
+      # Insecure configuration example:
+      secretRef:
+        type: insecure # one of: insecure, mtls, api-token
+
+      # Metrics exposed through /metrics endpoint for prometheus
+      prometheus:
+        enabled: false
 
   # Validation configurations.
   validations:
