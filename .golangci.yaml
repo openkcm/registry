@@ -55,7 +55,7 @@ formatters:
       sections:
         - standard
         - default
-        - prefix(github.tools.sap/kms/registry)
+        - prefix(github.com/openkcm/registry)
         - blank
         - dot
         - alias

@@ -91,6 +91,16 @@ install_registry() {
                 certFile: /etc/registry/certs/client.crt
                 keyFile: /etc/registry/certs/client.key
                 caFile: /etc/registry/certs/ca.crt
+    telemetry:
+      metrics:
+        enabled: true
+        protocol: grpc
+      traces:
+        enabled: true
+        protocol: grpc
+      logs:
+        enabled: true
+        protocol: grpc
 EOF
 
   echo "Deploying Registry Helm chart..."
