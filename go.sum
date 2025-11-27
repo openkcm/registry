@@ -122,8 +122,8 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/openkcm/api-sdk v0.12.0 h1:MRbanocNPoqdd8XVO4BGonQPg+OTJNY1j9boA427+A4=
 github.com/openkcm/api-sdk v0.12.0/go.mod h1:I15YnS0cB7PiZwPFg3a/j+MuAngxeJSLZu+axE4Qf1I=
-github.com/openkcm/common-sdk v1.6.0 h1:ummrcM9btFBgc25o/SuEIcFVvgSSdtN1GBUFwftL+B0=
-github.com/openkcm/common-sdk v1.6.0/go.mod h1:WD5vq3//B/LqnB7xtzfLVrwszMKvYAIPzar2H+gw4v0=
+github.com/openkcm/common-sdk v1.6.2 h1:RQeWGXWKQXNv6/popujjwco9tCEwqmqwuqi9Obq5pQ4=
+github.com/openkcm/common-sdk v1.6.2/go.mod h1:U4AbaqwRwcx8wwq1ucDi9Yb3+ejQu8kcTepGfybo5hE=
 github.com/openkcm/orbital v0.3.0 h1:nVv4tvRmvirC8oL8sELI7dQoWEE1M1SHlldUHDSwQf8=
 github.com/openkcm/orbital v0.3.0/go.mod h1:K0jNTaN8BjBRLfuXjceP77ZZKbV5hTWCUFWXfpbyz60=
 github.com/pborman/getopt v0.0.0-20170112200414-7148bc3a4c30/go.mod h1:85jBQOZwpVEaDAr341tbn15RS4fCAsIst0qp7i8ex1o=
@@ -157,8 +157,8 @@ github.com/samber/slog-common v0.19.0 h1:fNcZb8B2uOLooeYwFpAlKjkQTUafdjfqKcwcC89
 github.com/samber/slog-common v0.19.0/go.mod h1:dTz+YOU76aH007YUU0DffsXNsGFQRQllPQh9XyNoA3M=
 github.com/samber/slog-formatter v1.2.0 h1:gTSHm4CxyySyhcxRkzk21CSKbGCdZVipbRMhINkNtQU=
 github.com/samber/slog-formatter v1.2.0/go.mod h1:hgjhSd5Vf69XCOnVp0UW0QHCxJ8iDEm/qASjji6FNoI=
-github.com/samber/slog-multi v1.5.0 h1:UDRJdsdb0R5vFQFy3l26rpX3rL3FEPJTJ2yKVjoiT1I=
-github.com/samber/slog-multi v1.5.0/go.mod h1:im2Zi3mH/ivSY5XDj6LFcKToRIWPw1OcjSVSdXt+2d0=
+github.com/samber/slog-multi v1.6.0 h1:i1uBY+aaln6ljwdf7Nrt4Sys8Kk6htuYuXDHWJsHtZg=
+github.com/samber/slog-multi v1.6.0/go.mod h1:qTqzmKdPpT0h4PFsTN5rYRgLwom1v+fNGuIrl1Xnnts=
 github.com/shirou/gopsutil/v4 v4.25.6 h1:kLysI2JsKorfaFPcYmcJqbzROzsBWEOAtw6A7dIfqXs=
 github.com/shirou/gopsutil/v4 v4.25.6/go.mod h1:PfybzyydfZcN+JMMjkF6Zb8Mq1A/VcogFFg7hj50W9c=
 github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=
