@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.6.0](https://github.com/openkcm/registry/compare/v1.5.0...v1.6.0) (2025-12-10)
+
+
+### Features
+
+* add auth validation & updation for termination  ([4eb498c](https://github.com/openkcm/registry/commit/4eb498c2119efc29aeb21a0d82b9394670e99931))
+* add paginated ListAuths endpoint ([85abd4b](https://github.com/openkcm/registry/commit/85abd4b26e42dd0a9781b67ea7badc790740217e))
+* add regex validation for UserGroups ([#86](https://github.com/openkcm/registry/issues/86)) ([60488c2](https://github.com/openkcm/registry/commit/60488c2d7e3ce1877472d97bfaaf43cf452e264e))
+
+
+### Bug Fixes
+
+* Change Github URL ([#89](https://github.com/openkcm/registry/issues/89)) ([d0013a8](https://github.com/openkcm/registry/commit/d0013a8804dce2a18361d81e4a58bbb9346ca0c2))
+
 ## [1.5.0](https://github.com/openkcm/registry/compare/v1.4.0...v1.5.0) (2025-11-10)
 
 
