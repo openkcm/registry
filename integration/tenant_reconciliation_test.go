@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
-	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
+	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 
 	"github.com/openkcm/registry/integration/operatortest"
 	"github.com/openkcm/registry/internal/model"

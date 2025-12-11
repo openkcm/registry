@@ -150,6 +150,7 @@ func initValidation(fields []validationpkg.ConfigField) *validationpkg.Validatio
 		Models: []validationpkg.Model{
 			&model.Tenant{},
 			&model.Auth{},
+			&model.RegionalSystem{},
 			&model.System{},
 		},
 	})

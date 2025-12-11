@@ -28,18 +28,13 @@ func TestExecuteTransactionError(t *testing.T) {
 	subj := sql.NewRepository(db)
 	ctx := t.Context()
 
-	expSys1 := model.System{
-		ExternalID: validRandID(),
-		Region:     "EU",
-	}
+	expSys1 := model.NewSystem(validRandID(), allowedSystemType)
+
 	err = db.Create(&expSys1).Error
 	assert.NoError(t, err)
 	defer db.Delete(expSys1)
 
-	expSys2 := model.System{
-		ExternalID: validRandID(),
-		Region:     "US",
-	}
+	expSys2 := model.NewSystem(validRandID(), allowedSystemType)
 	err = db.Create(&expSys2).Error
 	assert.NoError(t, err)
 	defer db.Delete(expSys2)
@@ -78,7 +73,7 @@ func TestExecuteTransactionError(t *testing.T) {
 		err := subj.Transaction(ctx,
 			func(ctx context.Context, r repository.Repository) error {
 				// Find by Id
-				_, err := r.Find(ctx, &model.System{ExternalID: expSys1.ExternalID})
+				_, err := r.Find(ctx, &model.System{ID: expSys1.ID})
 				if err != nil {
 					return err
 				}
@@ -95,14 +90,14 @@ func TestExecuteTransactionError(t *testing.T) {
 		err = subj.Transaction(ctx,
 			func(ctx context.Context, r repository.Repository) error {
 				// Find by Id
-				_, err := r.Find(ctx, &model.System{ExternalID: expSys1.ExternalID})
+				_, err := r.Find(ctx, &model.System{ID: expSys1.ID})
 				if err != nil {
 					return err
 				}
 				// Patching the model
 				_, err = r.Patch(ctx, &model.System{
-					ExternalID: expSys1.ExternalID,
-					TenantID:   &newTenantID,
+					ID:       expSys1.ID,
+					TenantID: &newTenantID,
 				})
 				return err
 			})
@@ -111,7 +106,7 @@ func TestExecuteTransactionError(t *testing.T) {
 		assert.NoError(t, err)
 
 		actSys := model.System{
-			ExternalID: expSys1.ExternalID,
+			ID: expSys1.ID,
 		}
 		_, err = subj.Find(ctx, &actSys)
 		assert.NoError(t, err)
@@ -126,18 +121,14 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 	subj := sql.NewRepository(db)
 	ctx := t.Context()
 
-	expSys1 := model.System{
-		Region:     "EU",
-		ExternalID: validRandID(),
-	}
+	expSys1 := model.NewSystem(validRandID(), allowedSystemType)
+
 	err = db.Create(&expSys1).Error
 	assert.NoError(t, err)
 	defer db.Delete(expSys1)
 
-	expSys2 := model.System{
-		Region:     "US",
-		ExternalID: validRandID(),
-	}
+	expSys2 := model.NewSystem(validRandID(), allowedSystemType)
+
 	err = db.Create(&expSys2).Error
 	assert.NoError(t, err)
 	defer db.Delete(expSys2)
@@ -160,7 +151,7 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 			err := subj.Transaction(ctx,
 				func(ctx context.Context, r repository.Repository) error {
 					// Find by Id
-					_, err := r.Find(ctx, &model.System{ExternalID: expSys1.ExternalID})
+					_, err := r.Find(ctx, &model.System{ID: expSys1.ID})
 					if err != nil {
 						return err
 					}
@@ -170,8 +161,8 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 					assert.Equal(t, "1st transaction continue patch", <-transactor1)
 					// Patching the model
 					_, err = r.Patch(ctx, &model.System{
-						ExternalID: expSys1.ExternalID,
-						TenantID:   &newTenantID,
+						ID:       expSys1.ID,
+						TenantID: &newTenantID,
 					})
 					return err
 				})
@@ -202,7 +193,7 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 		// then
 		wg.Wait()
 		actSys := model.System{
-			ExternalID: expSys1.ExternalID,
+			ID: expSys1.ID,
 		}
 		_, err = subj.Find(ctx, &actSys)
 		assert.NoError(t, err)
@@ -228,7 +219,7 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 			err := subj.Transaction(ctx,
 				func(ctx context.Context, r repository.Repository) error {
 					// Find by Id
-					_, err := r.Find(ctx, &model.System{ExternalID: expSys1.ExternalID})
+					_, err := r.Find(ctx, &model.System{ID: expSys1.ID})
 					if err != nil {
 						return err
 					}
@@ -238,8 +229,8 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 					assert.Equal(t, "1st transaction continue patch", <-transactor1)
 					// Patching the model
 					_, err = r.Patch(ctx, &model.System{
-						ExternalID: expSys1.ExternalID,
-						TenantID:   &newTenantID1,
+						ID:       expSys1.ID,
+						TenantID: &newTenantID1,
 					})
 					transactor1 <- "1st transaction finish"
 					return err
@@ -255,7 +246,7 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 				func(ctx context.Context, r repository.Repository) error {
 					transactor2 <- "2nd transaction before lock"
 					// Find by Id
-					actSys := model.System{ExternalID: expSys1.ExternalID}
+					actSys := model.System{ID: expSys1.ID}
 					_, err := r.Find(ctx, &actSys)
 					if err != nil {
 						return err
@@ -266,8 +257,8 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 
 					// Patching the model
 					_, err = r.Patch(ctx, &model.System{
-						ExternalID: expSys1.ExternalID,
-						TenantID:   &newTenantID2,
+						ID:       expSys1.ID,
+						TenantID: &newTenantID2,
 					})
 					return err
 				})
@@ -288,7 +279,7 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 		// then
 		wg.Wait()
 		actSys := model.System{
-			ExternalID: expSys1.ExternalID,
+			ID: expSys1.ID,
 		}
 		_, err = subj.Find(ctx, &actSys)
 		assert.NoError(t, err)
@@ -303,18 +294,14 @@ func TestExecuteTransactionWithoutRaceConditions(t *testing.T) {
 	subj := sql.NewRepository(db)
 	ctx := t.Context()
 
-	expSys1 := model.System{
-		ExternalID: validRandID(),
-		Region:     "EU",
-	}
+	expSys1 := model.NewSystem(validRandID(), allowedSystemType)
+
 	err = db.Create(&expSys1).Error
 	assert.NoError(t, err)
 	defer db.Delete(expSys1)
 
-	expSys2 := model.System{
-		ExternalID: validRandID(),
-		Region:     "US",
-	}
+	expSys2 := model.NewSystem(validRandID(), allowedSystemType)
+
 	err = db.Create(&expSys2).Error
 	assert.NoError(t, err)
 	defer db.Delete(expSys2)
@@ -338,7 +325,7 @@ func TestExecuteTransactionWithoutRaceConditions(t *testing.T) {
 			err := subj.Transaction(ctx,
 				func(ctx context.Context, r repository.Repository) error {
 					// Find by Id
-					actSys := model.System{ExternalID: expSys1.ExternalID}
+					actSys := model.System{ID: expSys1.ID}
 					_, err := r.Find(ctx, &actSys)
 					if err != nil {
 						return err
@@ -348,8 +335,8 @@ func TestExecuteTransactionWithoutRaceConditions(t *testing.T) {
 					assert.Equal(t, "1st transaction continue patch", <-transactor1)
 					// Patching the model
 					_, err = r.Patch(ctx, &model.System{
-						ExternalID: expSys1.ExternalID,
-						TenantID:   &newTenantID1,
+						ID:       expSys1.ID,
+						TenantID: &newTenantID1,
 					})
 					return err
 				})
@@ -365,7 +352,7 @@ func TestExecuteTransactionWithoutRaceConditions(t *testing.T) {
 				func(ctx context.Context, r repository.Repository) error {
 					// Find by Id
 					actSys := model.System{
-						ExternalID: expSys2.ExternalID,
+						ID: expSys2.ID,
 					}
 					_, err := r.Find(ctx, &actSys)
 					if err != nil {
@@ -376,8 +363,8 @@ func TestExecuteTransactionWithoutRaceConditions(t *testing.T) {
 					assert.Equal(t, "2nd transaction continue patch", <-transactor2)
 					// Patching the model
 					_, err = r.Patch(ctx, &model.System{
-						ExternalID: expSys2.ExternalID,
-						TenantID:   &newTenantID2,
+						ID:       expSys2.ID,
+						TenantID: &newTenantID2,
 					})
 					return err
 				})
@@ -399,14 +386,14 @@ func TestExecuteTransactionWithoutRaceConditions(t *testing.T) {
 		// then
 		wg.Wait()
 		actSys1 := model.System{
-			ExternalID: expSys1.ExternalID,
+			ID: expSys1.ID,
 		}
 		_, err = subj.Find(ctx, &actSys1)
 		assert.NoError(t, err)
 		assert.Equal(t, newTenantID1, *actSys1.TenantID)
 
 		actSys2 := model.System{
-			ExternalID: expSys2.ExternalID,
+			ID: expSys2.ID,
 		}
 		_, err = subj.Find(ctx, &actSys2)
 		assert.NoError(t, err)
