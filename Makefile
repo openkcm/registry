@@ -70,11 +70,11 @@ int-test-up-and-run-cover:
 all-tests-run-cover:
 	mkdir -p cover/integration
 	mkdir -p cover/unit
-	$(MAKE) go-build-and-run cover_flag=-cover cover_dir_env=GOCOVERDIR=cover/integration
+	$(MAKE) go-build-and-run cover_flag=-cover cover_dir_env=GOCOVERDIR=${CURDIR}/cover/integration
 	-$(MAKE) int-test-run
 	$(MAKE) go-stop-and-remove
 	echo "Running unit tests"
-	go test -cover ./internal/... -args -test.gocoverdir="${PWD}/cover/unit"
+	go test -cover ./internal/... -args -test.gocoverdir="${CURDIR}/cover/unit"
 	echo "Creating coverage report"
 	go tool covdata textfmt -i=./cover/unit,./cover/integration -o cover.out
 	go tool cover --html=cover.out -o cover.html
