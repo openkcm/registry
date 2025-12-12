@@ -26,7 +26,7 @@ type System struct {
 	validation *validation.Validation
 }
 
-type SystemUpdateFunc func(system *model.System) error
+type SystemUpdateFunc func(system *model.RegionalSystem) error
 
 // NewSystem creates and return a new instance of System.
 func NewSystem(repo repository.Repository, meters *Meters, validation *validation.Validation) *System {
@@ -38,39 +38,73 @@ func NewSystem(repo repository.Repository, meters *Meters, validation *validatio
 }
 
 // RegisterSystem handles the creation of a new System. The response contains the created System's ID.
+//
+//nolint:cyclop
 func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSystemRequest) (*systemgrpc.RegisterSystemResponse, error) {
 	slogctx.Debug(ctx, "RegisterSystem called", "external_id", in.GetExternalId(), "region", in.GetRegion(), "tenant_id", in.GetTenantId(), "system_type", in.GetType(), "status", in.GetStatus().String())
 
-	tenantID := in.GetTenantId()
-	if tenantID != "" {
-		err := assertTenantExist(ctx, s.repo, tenantID)
+	system := model.NewSystem(in.GetExternalId(), in.GetType())
+	found, err := s.repo.Find(ctx, system)
+	if err != nil {
+		return nil, ErrSystemSelect
+	}
+
+	regionalSystem := &model.RegionalSystem{
+		SystemID:      system.ID,
+		L2KeyID:       in.GetL2KeyId(),
+		HasL1KeyClaim: &in.HasL1KeyClaim,
+		Status:        in.GetStatus().String(),
+		Region:        in.GetRegion(),
+		Labels:        in.GetLabels(),
+	}
+
+	if found && system.TenantID != nil && in.GetTenantId() != *system.TenantID {
+		return nil, ErrRegisterSystemNotAllowedWithTenantID
+	}
+
+	if !found {
+		if in.GetTenantId() != "" {
+			err = assertTenantExist(ctx, s.repo, in.GetTenantId())
+			if err != nil {
+				return nil, err
+			}
+
+			system.LinkTenant(in.GetTenantId())
+		}
+
+		err = s.validateSystem(system)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	system := &model.System{
-		ExternalID:    in.GetExternalId(),
-		TenantID:      &tenantID,
-		L2KeyID:       in.GetL2KeyId(),
-		HasL1KeyClaim: &in.HasL1KeyClaim,
-		Status:        in.GetStatus().String(),
-		Region:        in.GetRegion(),
-		Type:          in.GetType(),
-		Labels:        in.GetLabels(),
-	}
-
-	err := s.validateSystem(system)
+	err = s.validateRegionalSystem(regionalSystem)
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.repo.Create(ctx, system)
-	if err != nil {
+	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
+	defer cancel()
+
+	if err = s.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
+		if !found {
+			err = r.Create(ctx, system)
+			if err != nil {
+				return err
+			}
+		}
+
+		err = r.Create(ctx, regionalSystem)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 
-	s.meters.handleSystemRegistration(ctx, system.Region)
+	s.meters.handleSystemRegistration(ctx, regionalSystem.Region)
 
 	return &systemgrpc.RegisterSystemResponse{
 		Success: true,
@@ -88,7 +122,7 @@ func (s *System) ListSystems(ctx context.Context, in *systemgrpc.ListSystemsRequ
 		return nil, ErrSystemListNotAllowed
 	}
 
-	query := repository.NewQuery(&model.System{})
+	query := repository.NewQuery(&model.RegionalSystem{})
 
 	err := query.ApplyPagination(in.GetLimit(), in.GetPageToken())
 	if err != nil {
@@ -96,32 +130,58 @@ func (s *System) ListSystems(ctx context.Context, in *systemgrpc.ListSystemsRequ
 	}
 
 	cond := repository.NewCompositeKey()
+
+	system := &model.System{}
+	regionalSystem := &model.RegionalSystem{}
+
+	query.Joins = []repository.Join{
+		{
+			Resource: system,
+			OnColumn: repository.IDField,
+			Column:   repository.SystemIDField,
+		},
+	}
+
 	if in.GetExternalId() != "" {
-		cond.Where(repository.ExternalIDField, in.GetExternalId())
+		fieldAfterJoin := fmt.Sprintf("%s.%s", system.TableName(), repository.ExternalIDField)
+		cond.Where(fieldAfterJoin, in.GetExternalId())
 	}
 
 	if in.GetTenantId() != "" {
-		cond.Where(repository.TenantIDField, in.GetTenantId())
+		fieldAfterJoin := fmt.Sprintf("%s.%s", system.TableName(), repository.TenantIDField)
+		cond.Where(fieldAfterJoin, in.GetTenantId())
 	}
 
 	if in.GetRegion() != "" {
-		cond.Where(repository.RegionField, in.GetRegion())
+		fieldAfterJoin := fmt.Sprintf("%s.%s", regionalSystem.TableName(), repository.RegionField)
+		cond.Where(fieldAfterJoin, in.GetRegion())
 	}
 
 	if in.GetType() != "" {
-		cond.Where(repository.TypeField, in.GetType())
+		fieldAfterJoin := fmt.Sprintf("%s.%s", system.TableName(), repository.TypeField)
+		cond.Where(fieldAfterJoin, in.GetType())
 	}
 
 	query.Where(cond)
+	query.Populate(repository.System)
 
-	var systems []model.System
-	if err := s.repo.List(ctx, &systems, *query); err != nil {
+	var systems []model.RegionalSystem
+	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
+	defer cancel()
+
+	if err = s.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
+		return s.repo.List(ctx, &systems, *query)
+	}); err != nil {
 		return nil, err
 	}
 
 	pbSystems := make([]*systemgrpc.System, 0, len(systems))
 	for _, system := range systems {
-		pbSystems = append(pbSystems, system.ToProto())
+		systemProto, err := system.ToProto()
+		if err != nil {
+			return nil, ErrSystemProtoConversion
+		}
+		pbSystems = append(pbSystems, systemProto)
 	}
 
 	if len(pbSystems) == 0 {
@@ -152,33 +212,51 @@ func (s *System) ListSystems(ctx context.Context, in *systemgrpc.ListSystemsRequ
 
 // DeleteSystem handles the deletion of a new System. The response contains deletion status and error if failed.
 func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRequest) (*systemgrpc.DeleteSystemResponse, error) {
-	slogctx.Debug(ctx, "DeleteSystem called", "external_id", in.GetExternalId(), "region", in.GetRegion())
+	slogctx.Debug(ctx, "DeleteSystem called", "system_identifier", in.GetSystemIdentifier(), "region", in.GetRegion())
 
-	err := s.validateIdentifier(in.GetExternalId(), in.GetRegion())
+	err := s.validateIdentifier(in.GetSystemIdentifier())
 	if err != nil {
 		return nil, err
 	}
-	system := &model.System{
-		ExternalID: in.GetExternalId(),
-		Region:     in.GetRegion(),
+
+	system := model.NewSystem(in.SystemIdentifier.GetExternalId(), in.SystemIdentifier.GetType())
+	regionalSystem := &model.RegionalSystem{
+		SystemID: system.GetID(),
+		Region:   in.GetRegion(),
 	}
+
+	query := repository.NewQuery(&model.RegionalSystem{})
+	cond := repository.NewCompositeKey()
+	cond.Where(repository.SystemIDField, system.GetID())
+	query.Where(cond)
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
 	defer cancel()
 
 	var systemFound bool
 	err = s.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
-		err := validateDeleteSystem(ctx, r, system)
+		err = validateDeleteSystem(ctx, r, regionalSystem)
 		if err != nil {
 			slog.Error(DeleteSystemErrMsg, "err", err.Error())
 			return err
 		}
 
-		if systemFound, err = r.Delete(ctx, system); err != nil {
+		if systemFound, err = r.Delete(ctx, regionalSystem); err != nil {
 			return ErrSystemDelete
 		}
 
-		return nil
+		var regionalSystems []model.RegionalSystem
+		if err = r.List(ctx, &regionalSystems, *query); err != nil {
+			return err
+		}
+
+		if len(regionalSystems) > 0 {
+			return nil
+		}
+
+		_, err = r.Delete(ctx, system)
+
+		return err
 	})
 
 	err = mapError(err)
@@ -187,7 +265,7 @@ func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRe
 	}
 
 	if systemFound {
-		s.meters.handleSystemDeletion(ctx, system.Region)
+		s.meters.handleSystemDeletion(ctx, regionalSystem.Region)
 	}
 
 	return &systemgrpc.DeleteSystemResponse{Success: true}, nil
@@ -195,15 +273,17 @@ func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRe
 
 // UpdateSystemL1KeyClaim updates the l1_key_claim parameter of the System identified by its system_id.
 func (s *System) UpdateSystemL1KeyClaim(ctx context.Context, in *systemgrpc.UpdateSystemL1KeyClaimRequest) (*systemgrpc.UpdateSystemL1KeyClaimResponse, error) {
-	slogctx.Debug(ctx, "UpdateSystemL1KeyClaim called", "external_id", in.GetExternalId(), "region", in.GetRegion(), "key_claim", in.GetL1KeyClaim(), "tenant_id", in.GetTenantId())
+	slogctx.Debug(ctx, "UpdateSystemL1KeyClaim called", "system_identifier", in.GetSystemIdentifier(), "region", in.GetRegion(), "key_claim", in.GetL1KeyClaim(), "tenant_id", in.GetTenantId())
 
-	err := s.validateIdentifier(in.GetExternalId(), in.GetRegion())
+	err := s.validateIdentifier(in.GetSystemIdentifier())
 	if err != nil {
 		return nil, err
 	}
-	system := &model.System{
-		ExternalID: in.GetExternalId(),
-		Region:     in.GetRegion(),
+
+	system := model.NewSystem(in.GetSystemIdentifier().GetExternalId(), in.SystemIdentifier.GetType())
+	regionalSystem := &model.RegionalSystem{
+		SystemID: system.GetID(),
+		Region:   in.GetRegion(),
 	}
 
 	desiredClaim := in.GetL1KeyClaim()
@@ -212,17 +292,17 @@ func (s *System) UpdateSystemL1KeyClaim(ctx context.Context, in *systemgrpc.Upda
 	defer cancel()
 
 	err = s.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
-		found, err := r.Find(ctx, system)
-		if err != nil || !found {
-			return ErrSystemNotFound
-		}
-
-		if err = s.isUpdateKeyClaimAllowed(system, desiredClaim, in.GetTenantId()); err != nil {
+		err := getRegionalSystem(ctx, r, regionalSystem, true)
+		if err != nil {
 			return err
 		}
 
-		system.HasL1KeyClaim = &desiredClaim
-		isPatched, err := r.Patch(ctx, system)
+		if err = s.isUpdateKeyClaimAllowed(regionalSystem, desiredClaim, in.GetTenantId()); err != nil {
+			return err
+		}
+
+		regionalSystem.HasL1KeyClaim = &desiredClaim
+		isPatched, err := r.Patch(ctx, regionalSystem)
 		if err != nil || !isPatched {
 			return ErrSystemUpdate
 		}
@@ -256,11 +336,11 @@ func (s *System) UnlinkSystemsFromTenant(ctx context.Context, in *systemgrpc.Unl
 
 	updatedSystems := make([]model.System, 0, len(systems))
 	err = s.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
-		if err := isSystemTenantUnlinkAllowed(ctx, r, uniqMap, query); err != nil {
+		if err = isSystemTenantUnlinkAllowed(ctx, r, uniqMap, query); err != nil {
 			return err
 		}
 
-		_, err := r.PatchAll(ctx, &model.System{
+		_, err = r.PatchAll(ctx, &model.System{
 			TenantID: &emptyTenantID,
 		}, &updatedSystems, *query)
 		if err != nil {
@@ -295,13 +375,11 @@ func (s *System) LinkSystemsToTenant(ctx context.Context, in *systemgrpc.LinkSys
 
 	updatedSystems := make([]model.System, 0, len(systems))
 	err = s.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
-		err := assertTenantExist(ctx, r, tenantID)
-		if err != nil {
+		if err = assertTenantExist(ctx, r, tenantID); err != nil {
 			return err
 		}
 
-		err = isSystemTenantLinkAllowed(ctx, r, tenantID, uniqMap, query)
-		if err != nil {
+		if err = isSystemTenantLinkAllowed(ctx, r, tenantID, uniqMap, query); err != nil {
 			return err
 		}
 
@@ -312,7 +390,15 @@ func (s *System) LinkSystemsToTenant(ctx context.Context, in *systemgrpc.LinkSys
 			return ErrSystemUpdate
 		}
 
-		return checkForMissingSystems(uniqMap, updatedSystems)
+		missingSystems := getMissingSystems(uniqMap, updatedSystems)
+		for _, sys := range missingSystems {
+			sys.TenantID = &tenantID
+			if err = r.Create(ctx, sys); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	})
 
 	err = mapError(err)
@@ -327,9 +413,9 @@ func (s *System) LinkSystemsToTenant(ctx context.Context, in *systemgrpc.LinkSys
 // The status can be one of a predefined set of values.
 // If the update is successful, a success message will be returned, otherwise an error will be returned.
 func (s *System) UpdateSystemStatus(ctx context.Context, in *systemgrpc.UpdateSystemStatusRequest) (*systemgrpc.UpdateSystemStatusResponse, error) {
-	slogctx.Debug(ctx, "UpdateSystemStatus called", "external_id", in.GetExternalId(), "region", in.GetRegion(), "status", in.GetStatus())
+	slogctx.Debug(ctx, "UpdateSystemStatus called", "system_identifier", in.GetSystemIdentifier(), "region", in.GetRegion(), "status", in.GetStatus())
 
-	err := s.validateIdentifier(in.GetExternalId(), in.GetRegion())
+	err := s.validateIdentifier(in.GetSystemIdentifier())
 	if err != nil {
 		return nil, err
 	}
@@ -338,10 +424,11 @@ func (s *System) UpdateSystemStatus(ctx context.Context, in *systemgrpc.UpdateSy
 		return nil, ErrorWithParams(ErrValidationFailed, "err", err.Error())
 	}
 
-	isPatched, err := s.repo.Patch(ctx, &model.System{
-		ExternalID: in.GetExternalId(),
-		Region:     in.GetRegion(),
-		Status:     in.GetStatus().String(),
+	system := model.NewSystem(in.SystemIdentifier.GetExternalId(), in.SystemIdentifier.GetType())
+	isPatched, err := s.repo.Patch(ctx, &model.RegionalSystem{
+		SystemID: system.GetID(),
+		Region:   in.GetRegion(),
+		Status:   in.GetStatus().String(),
 	})
 	if err != nil {
 		return nil, ErrSystemUpdate
@@ -358,18 +445,19 @@ func (s *System) UpdateSystemStatus(ctx context.Context, in *systemgrpc.UpdateSy
 // Existing labels with the same keys will be overwritten.
 // If the update is successful, a success message will be returned, otherwise an error will be returned.
 func (s *System) SetSystemLabels(ctx context.Context, in *systemgrpc.SetSystemLabelsRequest) (*systemgrpc.SetSystemLabelsResponse, error) {
-	slogctx.Debug(ctx, "SetSystemLabels called", "external_id", in.GetExternalId(), "region", in.GetRegion())
+	slogctx.Debug(ctx, "SetSystemLabels called", "system_identifier", in.GetSystemIdentifier(), "region", in.GetRegion())
 
 	if err := s.validateSetSystemLabelsRequest(in); err != nil {
 		return nil, err
 	}
 
-	err := s.patchSystem(ctx, in.GetExternalId(), in.GetRegion(), func(system *model.System) error {
-		if system.Labels == nil {
-			system.Labels = make(model.Labels)
+	system := model.NewSystem(in.SystemIdentifier.GetExternalId(), in.SystemIdentifier.GetType())
+	err := s.patchSystem(ctx, system.GetID(), in.GetRegion(), func(regionalSystem *model.RegionalSystem) error {
+		if regionalSystem.Labels == nil {
+			regionalSystem.Labels = make(model.Labels)
 		}
 
-		maps.Copy(system.Labels, in.GetLabels())
+		maps.Copy(regionalSystem.Labels, in.GetLabels())
 
 		return nil
 	})
@@ -386,15 +474,16 @@ func (s *System) SetSystemLabels(ctx context.Context, in *systemgrpc.SetSystemLa
 // If one or more label keys are not found, they will be ignored.
 // If the update is successful, a success message will be returned, otherwise an error will be returned.
 func (s *System) RemoveSystemLabels(ctx context.Context, in *systemgrpc.RemoveSystemLabelsRequest) (*systemgrpc.RemoveSystemLabelsResponse, error) {
-	slogctx.Debug(ctx, "RemoveSystemLabels called", "external_id", in.GetExternalId(), "region", in.GetRegion())
+	slogctx.Debug(ctx, "RemoveSystemLabels called", "system_identifier", in.GetSystemIdentifier(), "region", in.GetRegion())
 
 	if err := s.validateRemoveSystemLabelsRequest(in); err != nil {
 		return nil, err
 	}
 
-	err := s.patchSystem(ctx, in.GetExternalId(), in.GetRegion(), func(system *model.System) error {
+	system := model.NewSystem(in.SystemIdentifier.GetExternalId(), in.SystemIdentifier.GetType())
+	err := s.patchSystem(ctx, system.GetID(), in.GetRegion(), func(regionalSystem *model.RegionalSystem) error {
 		for _, k := range in.GetLabelKeys() {
-			delete(system.Labels, k)
+			delete(regionalSystem.Labels, k)
 		}
 
 		return nil
@@ -406,6 +495,20 @@ func (s *System) RemoveSystemLabels(ctx context.Context, in *systemgrpc.RemoveSy
 	return &systemgrpc.RemoveSystemLabelsResponse{
 		Success: true,
 	}, nil
+}
+
+func (s *System) validateRegionalSystem(system *model.RegionalSystem) error {
+	values, err := validation.GetValues(system)
+	if err != nil {
+		return ErrorWithParams(ErrValidationConversion, "err", err.Error())
+	}
+
+	err = s.validation.ValidateAll(values)
+	if err != nil {
+		return ErrorWithParams(ErrValidationFailed, "err", err.Error())
+	}
+
+	return nil
 }
 
 func (s *System) validateSystem(system *model.System) error {
@@ -422,23 +525,35 @@ func (s *System) validateSystem(system *model.System) error {
 	return nil
 }
 
-func (s *System) validateIdentifier(externalID string, region string) error {
+func (s *System) validateIdentifier(identifier *systemgrpc.SystemIdentifier) error {
+	if identifier == nil {
+		return ErrNoSystemIdentifiers
+	}
+
 	err := s.validation.ValidateAll(map[validation.ID]any{
-		model.SystemExternalIDValidationID: externalID,
-		model.SystemRegionValidationID:     region,
+		model.SystemExternalIDValidationID: identifier.GetExternalId(),
+		model.SystemTypeValidationID:       identifier.GetType(),
 	})
 	if err != nil {
 		return ErrorWithParams(ErrValidationFailed, "err", err.Error())
 	}
+
 	return nil
 }
 
 // validateSetSystemLabelsRequest validates the SetSystemLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (s *System) validateSetSystemLabelsRequest(in *systemgrpc.SetSystemLabelsRequest) error {
-	err := s.validateIdentifier(in.GetExternalId(), in.GetRegion())
+	err := s.validateIdentifier(in.GetSystemIdentifier())
 	if err != nil {
 		return err
+	}
+
+	err = s.validation.ValidateAll(map[validation.ID]any{
+		model.RegionalSystemRegionValidationID: in.GetRegion(),
+	})
+	if err != nil {
+		return ErrorWithParams(ErrValidationFailed, "err", err.Error())
 	}
 
 	if len(in.GetLabels()) == 0 {
@@ -457,9 +572,15 @@ func (s *System) validateSetSystemLabelsRequest(in *systemgrpc.SetSystemLabelsRe
 // validateRemoveSystemLabelsRequest validates the RemoveSystemLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (s *System) validateRemoveSystemLabelsRequest(in *systemgrpc.RemoveSystemLabelsRequest) error {
-	err := s.validateIdentifier(in.GetExternalId(), in.GetRegion())
+	err := s.validateIdentifier(in.GetSystemIdentifier())
 	if err != nil {
 		return err
+	}
+
+	if err = s.validation.ValidateAll(map[validation.ID]any{
+		model.RegionalSystemRegionValidationID: in.GetRegion(),
+	}); err != nil {
+		return ErrorWithParams(ErrValidationFailed, "err", err.Error())
 	}
 
 	if len(in.GetLabelKeys()) == 0 {
@@ -476,22 +597,22 @@ func (s *System) validateRemoveSystemLabelsRequest(in *systemgrpc.RemoveSystemLa
 // patchSystem retrieves the System by its external ID and region, applies the update function to it,
 // and then updates the System in the repository.
 // It returns an error if the System is not found, if it is unavailable, or if the update fails.
-func (s *System) patchSystem(ctx context.Context, externalID, region string, updateFunc SystemUpdateFunc) error {
+func (s *System) patchSystem(ctx context.Context, id, region string, updateFunc SystemUpdateFunc) error {
 	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
 	defer cancel()
 
 	err := s.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
-		system := &model.System{
-			ExternalID: externalID,
-			Region:     region,
+		system := &model.RegionalSystem{
+			SystemID: id,
+			Region:   region,
 		}
 
-		system, err := getSystem(ctx, r, system)
+		err := getRegionalSystem(ctx, r, system, false)
 		if err != nil {
 			return err
 		}
 
-		if err = checkSystemAvailable(system); err != nil {
+		if err = checkRegionalSystemAvailable(system); err != nil {
 			return err
 		}
 
@@ -522,8 +643,8 @@ func (s *System) patchSystem(ctx context.Context, externalID, region string, upd
 // validateDeleteSystem makes sure that the System is allowed to be deleted.
 // Here repository r is passed as a variable to address the scenarios where we will
 // create a new repository from the existing repository for e.g. in the case of transaction.
-func validateDeleteSystem(ctx context.Context, r repository.Repository, system *model.System) error {
-	system, err := getSystem(ctx, r, system)
+func validateDeleteSystem(ctx context.Context, r repository.Repository, system *model.RegionalSystem) error {
+	err := getRegionalSystem(ctx, r, system, true)
 	if errors.Is(err, ErrSystemNotFound) {
 		slog.Info(fmt.Sprintf("%s:%s", DeleteSystemErrMsg, SystemNotFoundMsg))
 		return nil
@@ -531,12 +652,12 @@ func validateDeleteSystem(ctx context.Context, r repository.Repository, system *
 		return err
 	}
 
-	err = checkSystemAvailable(system)
+	err = checkRegionalSystemAvailable(system)
 	if err != nil {
 		return err
 	}
 
-	if system.IsLinkedToTenant() {
+	if system.System.IsLinkedToTenant() {
 		return ErrSystemIsLinkedToTenant
 	}
 
@@ -562,16 +683,12 @@ func isSystemTenantUnlinkAllowed(ctx context.Context, r repository.Repository, u
 
 	// For unlinking, every system must be linked and must not have an active L1 key claim.
 	for _, system := range systems {
-		if err := checkSystemAvailable(&system); err != nil {
-			return err
-		}
-
 		if !system.IsLinkedToTenant() {
-			return ErrorWithParams(ErrSystemIsNotLinkedToTenant, "externalID", system.ExternalID, "region", system.Region)
+			return ErrorWithParams(ErrSystemIsNotLinkedToTenant, "externalID", system.ExternalID, "type", system.Type)
 		}
 
-		if system.HasActiveL1KeyClaim() {
-			return ErrorWithParams(ErrSystemHasL1KeyClaim, "externalID", system.ExternalID, "region", system.Region)
+		if err := validateRegionalSystemsForUnlink(ctx, r, &system); err != nil {
+			return err
 		}
 
 		tenant, err := getTenant(ctx, r, *system.TenantID)
@@ -582,6 +699,25 @@ func isSystemTenantUnlinkAllowed(ctx context.Context, r repository.Repository, u
 		err = checkTenantActive(tenant)
 		if err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+func validateRegionalSystemsForUnlink(ctx context.Context, r repository.Repository, system *model.System) error {
+	regionalSystems, err := getRegionalSystemsForSystem(ctx, r, system.GetID())
+	if err != nil {
+		return err
+	}
+
+	for _, s := range regionalSystems {
+		if err := checkRegionalSystemAvailable(&s); err != nil {
+			return err
+		}
+
+		if s.HasActiveL1KeyClaim() {
+			return ErrorWithParams(ErrSystemHasL1KeyClaim, "systemID", s.SystemID, "region", s.Region)
 		}
 	}
 
@@ -608,33 +744,56 @@ func isSystemTenantLinkAllowed(ctx context.Context, r repository.Repository, ten
 		return ErrSystemSelect
 	}
 
-	// since we are searching based on primary key the number of returned elements should be equal to the number of ids used
-	if err := checkForMissingSystems(uniqMap, systems); err != nil {
-		return err
-	}
-
 	// For linking, each system must not be already linked and must not have an active L1 key claim.
 	for _, system := range systems {
-		err := checkSystemAvailable(&system)
-		if err != nil {
-			return err
-		}
-
 		if system.IsLinkedToTenant() {
-			return ErrorWithParams(ErrSystemIsLinkedToTenant, "externalID", system.ExternalID, "region", system.Region)
+			return ErrorWithParams(ErrSystemIsLinkedToTenant, "externalID", system.ExternalID, "type", system.Type)
 		}
 
-		if system.HasL1KeyClaim != nil && *system.HasL1KeyClaim {
-			return ErrorWithParams(ErrSystemHasL1KeyClaim, "externalID", system.ExternalID, "region", system.Region)
+		if err := validateRegionalSystemsForLink(ctx, r, &system); err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
+func validateRegionalSystemsForLink(ctx context.Context, r repository.Repository, system *model.System) error {
+	regionalSystems, err := getRegionalSystemsForSystem(ctx, r, system.GetID())
+	if err != nil {
+		return err
+	}
+
+	for _, s := range regionalSystems {
+		err := checkRegionalSystemAvailable(&s)
+		if err != nil {
+			return err
+		}
+
+		if s.HasL1KeyClaim != nil && *s.HasL1KeyClaim {
+			return ErrorWithParams(ErrSystemHasL1KeyClaim, "system_id", s.SystemID, "region", s.Region)
+		}
+	}
+
+	return nil
+}
+
+func getRegionalSystemsForSystem(ctx context.Context, r repository.Repository, systemID string) ([]model.RegionalSystem, error) {
+	query := repository.NewQuery(&model.RegionalSystem{})
+	query.Where(repository.NewCompositeKey().Where(repository.SystemIDField, systemID))
+
+	var regionalSystems []model.RegionalSystem
+
+	if err := r.List(ctx, &regionalSystems, *query); err != nil {
+		return nil, ErrSystemSelect
+	}
+
+	return regionalSystems, nil
+}
+
 // isUpdateKeyClaimAllowed checks whether all conditions are met to update the KeyClaim.
-func (s *System) isUpdateKeyClaimAllowed(system *model.System, desiredClaim bool, tenantID string) error {
-	err := checkSystemAvailable(system)
+func (s *System) isUpdateKeyClaimAllowed(system *model.RegionalSystem, desiredClaim bool, tenantID string) error {
+	err := checkRegionalSystemAvailable(system)
 	if err != nil {
 		return err
 	}
@@ -647,29 +806,48 @@ func (s *System) isUpdateKeyClaimAllowed(system *model.System, desiredClaim bool
 		return ErrKeyClaimAlreadyInactive
 	}
 
-	if !system.IsLinkedToTenant() || *system.TenantID != tenantID {
+	if !system.System.IsLinkedToTenant() || *system.System.TenantID != tenantID {
 		return ErrSystemIsNotLinkedToTenant
 	}
 
 	return nil
 }
 
-// getSystem queries the System by its ID.
-func getSystem(ctx context.Context, r repository.Repository, system *model.System) (*model.System, error) {
-	found, err := r.Find(ctx, system)
+// getRegionalSystem queries the System by its ID.
+func getRegionalSystem(ctx context.Context, r repository.Repository, regionalSystem *model.RegionalSystem, withSystem bool) error {
+	found, err := r.Find(ctx, regionalSystem)
 	if err != nil {
-		return nil, ErrSystemSelect
+		return ErrSystemSelect
 	}
 
 	if !found {
-		return nil, ErrSystemNotFound
+		return ErrSystemNotFound
 	}
 
-	return system, nil
+	if !withSystem {
+		return nil
+	}
+
+	system := &model.System{
+		ID: regionalSystem.SystemID,
+	}
+
+	found, err = r.Find(ctx, system)
+	if err != nil {
+		return ErrSystemSelect
+	}
+
+	if !found {
+		return ErrSystemNotFound
+	}
+
+	regionalSystem.System = system
+
+	return nil
 }
 
-// checkSystemAvailable returns nil if System has status Available.
-func checkSystemAvailable(system *model.System) error {
+// checkRegionalSystemAvailable returns nil if System has status Available.
+func checkRegionalSystemAvailable(system *model.RegionalSystem) error {
 	if !system.IsAvailable() {
 		return ErrSystemUnavailable
 	}
@@ -686,18 +864,15 @@ func (s *System) validateAndGetSystems(in []*systemgrpc.SystemIdentifier) ([]*mo
 	systems := make([]*model.System, 0, len(in))
 
 	for _, system := range in {
-		err := s.validateIdentifier(system.GetExternalId(), system.GetRegion())
+		err := s.validateIdentifier(system)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		if _, ok := uniqMap[fmt.Sprintf("%s.%s", system.GetExternalId(), system.GetRegion())]; !ok {
-			sys := &model.System{
-				ExternalID: system.GetExternalId(),
-				Region:     system.GetRegion(),
-			}
+		if _, ok := uniqMap[fmt.Sprintf("%s-%s", system.GetExternalId(), system.GetType())]; !ok {
+			sys := model.NewSystem(system.GetExternalId(), system.GetType())
 			systems = append(systems, sys)
-			uniqMap[fmt.Sprintf("%s.%s", system.GetExternalId(), system.GetRegion())] = sys
+			uniqMap[sys.GetID()] = sys
 		}
 	}
 
@@ -711,7 +886,7 @@ func generateQuery(systems ...*model.System) *repository.Query {
 	for _, s := range systems {
 		query.Where(repository.NewCompositeKey().
 			Where(repository.ExternalIDField, s.ExternalID).
-			Where(repository.RegionField, s.Region),
+			Where(repository.TypeField, s.Type),
 		)
 	}
 
@@ -720,20 +895,31 @@ func generateQuery(systems ...*model.System) *repository.Query {
 
 // checkForMissingSystems checks if all systems in the uniqMap are present in the systems slice returned from the DB.
 func checkForMissingSystems(uniqMap map[string]*model.System, systems []model.System) error {
+	missingSystems := getMissingSystems(uniqMap, systems)
+	for _, s := range missingSystems {
+		return ErrorWithParams(ErrSystemNotFound, "externalID", s.ExternalID, "type", s.Type)
+	}
+
+	return nil
+}
+
+func getMissingSystems(uniqMap map[string]*model.System, systems []model.System) []*model.System {
 	if len(systems) == len(uniqMap) {
 		return nil
 	}
 
+	missingSystems := make([]*model.System, 0, len(uniqMap))
+
 	systemsMap := make(map[string]model.System)
 	for _, system := range systems {
-		systemsMap[fmt.Sprintf("%s.%s", system.ExternalID, system.Region)] = system
+		systemsMap[system.GetID()] = system
 	}
 
-	for key, val := range uniqMap {
+	for key, sys := range uniqMap {
 		if _, ok := systemsMap[key]; !ok {
-			return ErrorWithParams(ErrSystemNotFound, "externalID", val.ExternalID, "region", val.Region)
+			missingSystems = append(missingSystems, sys)
 		}
 	}
 
-	return nil
+	return missingSystems
 }

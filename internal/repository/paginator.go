@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 )
 
@@ -31,7 +32,7 @@ type PageInfo struct {
 
 // Encode encodes the PageInfo as a page token.
 func (p PageInfo) Encode() (string, error) {
-	if err := p.LastKey.Validate(); err != nil {
+	if err := p.validate(); err != nil {
 		return "", err
 	}
 
@@ -41,6 +42,21 @@ func (p PageInfo) Encode() (string, error) {
 	}
 
 	return base64.StdEncoding.EncodeToString(jsonPaginator), nil
+}
+
+func (p PageInfo) validate() error {
+	if len(p.LastKey) == 0 {
+		return ErrInvalidFieldName
+	}
+
+	allowList := []string{ExternalIDField, RegionField, IDField, CreatedAtField, SystemIDField}
+	for column := range p.LastKey {
+		if !slices.Contains(allowList, column) {
+			return ErrInvalidFieldName
+		}
+	}
+
+	return nil
 }
 
 // DecodePageToken decodes the token back to a PageInfo struct.
@@ -57,7 +73,7 @@ func DecodePageToken(encodedToken string) (*PageInfo, error) {
 		return nil, ErrInvalidPaginationToken
 	}
 
-	if err := decoded.LastKey.Validate(); err != nil {
+	if err := decoded.validate(); err != nil {
 		return nil, err
 	}
 

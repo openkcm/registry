@@ -14,6 +14,7 @@ type Repository interface {
 	Delete(ctx context.Context, resource Resource) (bool, error)
 	Find(ctx context.Context, resource Resource) (bool, error)
 	Patch(ctx context.Context, resource Resource) (bool, error)
+	// Count(ctx context.Context, resource Resource, query Query) (int64, error)
 	PatchAll(ctx context.Context, resource Resource, result any, query Query) (int64, error)
 	Transaction(ctx context.Context, txFunc TransactionFunc) error
 }

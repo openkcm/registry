@@ -126,14 +126,13 @@ func measureTenants(ctx context.Context, observer metric.Int64Observer, db *gorm
 func measureSystems(ctx context.Context, observer metric.Int64Observer, db *gorm.DB) error {
 	var systemLinkStatus []struct {
 		Linked string
-		Region string
 		Count  int64
 	}
 
 	err := db.WithContext(ctx).
 		Model(&model.System{}).
-		Select("region, count(*) as count, case when tenant_id = '' then 'false' else 'true' end as linked").
-		Group("region, case when tenant_id = '' then 'false' else 'true' end").
+		Select("count(*) as count, case when tenant_id IS NULL OR tenant_id = '' then 'false' else 'true' end as linked").
+		Group("case when tenant_id IS NULL OR tenant_id = '' then 'false' else 'true' end").
 		Scan(&systemLinkStatus).Error
 	if err != nil {
 		return err
@@ -141,7 +140,6 @@ func measureSystems(ctx context.Context, observer metric.Int64Observer, db *gorm
 
 	for _, status := range systemLinkStatus {
 		observer.Observe(status.Count, metric.WithAttributes(
-			attribute.String(AttrRegion, status.Region),
 			attribute.String(AttrTenantLinked, status.Linked)))
 	}
 

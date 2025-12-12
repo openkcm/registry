@@ -533,12 +533,17 @@ config:
       - type: list # defines the allowed values for the Region field
         spec:
           allowlist: ["region1","region2"] # restricts Region to either "region1" or "region2"
+    - id: Tenant.UserGroups
+      constraints:
+      - type: regex
+        spec:
+          pattern: "^KMS_(TenantAdministrator|TenantAuditor)_[A-Za-z0-9-]+$"
     - id: System.Type # configures validation constraints for the Type field of a System
       constraints:
       - type: list # defines the allowed values for the Type field
         spec:
           allowlist: ["system", "application"] # restricts Type to either "system" or "application"
-    - id: System.Region # configures validation constraints for the Region field of a System
+    - id: RegionalSystem.Region # configures validation constraints for the Region field of a System
       constraints:
       - type: list # defines the allowed values for the Region field
         spec:
