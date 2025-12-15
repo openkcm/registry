@@ -123,6 +123,6 @@ func (q *Query) ApplyPagination(limit int32, token string) error {
 }
 
 // Populate fills the Preloads slice with field names that are needed to fetched with the main resource.
-func (q *Query) Populate(fieldNames ...string) {
+func (q *Query) Populate(fieldNames ...FieldName) {
 	q.Preloads = fieldNames
 }

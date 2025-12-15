@@ -2,8 +2,9 @@ package model
 
 import (
 	"errors"
-	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/openkcm/registry/internal/repository"
 	"github.com/openkcm/registry/internal/validation"
@@ -13,12 +14,11 @@ var ErrSystemNotLoaded = errors.New("system for regional system is not loaded")
 
 const (
 	SystemExternalIDValidationID validation.ID = "System.ExternalID"
-	SystemIDValidationID         validation.ID = "System.ID"
 	SystemTypeValidationID       validation.ID = "System.Type"
 )
 
 type System struct {
-	ID         string    `gorm:"column:id;primaryKey" validationID:"System.ID"`
+	ID         uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
 	ExternalID string    `gorm:"column:external_id;uniqueIndex:ext_type" validationID:"System.ExternalID"`
 	TenantID   *string   `gorm:"column:tenant_id"` // related tenant id; optional
 	Type       string    `gorm:"column:type;uniqueIndex:ext_type" validationID:"System.Type"`
@@ -31,13 +31,8 @@ func NewSystem(externalID, systemType string) *System {
 		ExternalID: externalID,
 		Type:       systemType,
 	}
-	s.ID = s.GetID()
 
 	return s
-}
-
-func (s *System) GetID() string {
-	return fmt.Sprintf("%s-%s", s.ExternalID, s.Type)
 }
 
 func (s *System) LinkTenant(tenantID string) {
@@ -73,13 +68,6 @@ func (s *System) Validations() []validation.Field {
 
 	fields = append(fields, validation.Field{
 		ID: SystemTypeValidationID,
-		Validators: []validation.Validator{
-			validation.NonEmptyConstraint{},
-		},
-	})
-
-	fields = append(fields, validation.Field{
-		ID: SystemIDValidationID,
 		Validators: []validation.Validator{
 			validation.NonEmptyConstraint{},
 		},

@@ -1,7 +1,6 @@
 package model_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -19,11 +18,8 @@ func TestNewSystem(t *testing.T) {
 
 	sys := model.NewSystem(externalID, sysType)
 
-	expectedID := fmt.Sprintf("%s-%s", externalID, sysType)
 	assert.Equal(t, externalID, sys.ExternalID)
 	assert.Equal(t, sysType, sys.Type)
-	assert.Equal(t, expectedID, sys.ID)
-	assert.Equal(t, expectedID, sys.GetID())
 	assert.Nil(t, sys.TenantID)
 	assert.Equal(t, "systems", sys.TableName())
 }
@@ -75,7 +71,6 @@ func TestSystemValidations(t *testing.T) {
 			mutate: func(s model.System) model.System {
 				s.ExternalID = ""
 				s.Type = "type"
-				s.ID = "-type"
 				return s
 			},
 			expErr: validation.ErrValueEmpty,
@@ -85,15 +80,6 @@ func TestSystemValidations(t *testing.T) {
 			mutate: func(s model.System) model.System {
 				s.Type = ""
 				s.ExternalID = "externalID"
-				s.ID = "externalID-"
-				return s
-			},
-			expErr: validation.ErrValueEmpty,
-		},
-		{
-			name: "should return error when ID is empty",
-			mutate: func(s model.System) model.System {
-				s.ID = ""
 				return s
 			},
 			expErr: validation.ErrValueEmpty,

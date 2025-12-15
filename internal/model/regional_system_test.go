@@ -1,7 +1,6 @@
 package model_test
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -19,8 +18,9 @@ func TestSystemToProto(t *testing.T) {
 	tenantID := uuid.NewString()
 	labelKey := "key1"
 	externalID := uuid.NewString()
+	systemID := uuid.New()
 	system := model.RegionalSystem{
-		SystemID: fmt.Sprintf("%s-%s", externalID, "SYSTEM"),
+		SystemID: systemID,
 		Region:   "REGION_EU",
 		L2KeyID:  uuid.NewString(),
 		Status:   typespb.Status_STATUS_AVAILABLE.String(),
@@ -30,7 +30,7 @@ func TestSystemToProto(t *testing.T) {
 		UpdatedAt: time.Date(2025, 8, 5, 12, 0, 0, 0, time.UTC),
 		CreatedAt: time.Date(2025, 8, 5, 12, 0, 0, 0, time.UTC),
 		System: &model.System{
-			ID:         fmt.Sprintf("%s-%s", externalID, "SYSTEM"),
+			ID:         systemID,
 			ExternalID: externalID,
 			TenantID:   &tenantID,
 			Type:       "SYSTEM",
@@ -68,7 +68,7 @@ func TestRegionalSystemValidations(t *testing.T) {
 	assert.NoError(t, err)
 
 	validSystem := model.RegionalSystem{
-		SystemID: uuid.NewString(),
+		SystemID: uuid.New(),
 		Region:   "REGION_US",
 		Status:   typespb.Status_STATUS_AVAILABLE.String(),
 		L2KeyID:  uuid.NewString(),
@@ -84,14 +84,6 @@ func TestRegionalSystemValidations(t *testing.T) {
 		mutate mutateSystem
 		expErr error
 	}{
-		{
-			name: "should return error for empty ExternalID",
-			mutate: func(s model.RegionalSystem) model.RegionalSystem {
-				s.SystemID = ""
-				return s
-			},
-			expErr: validation.ErrValueEmpty,
-		},
 		{
 			name: "should return error for empty Region",
 			mutate: func(s model.RegionalSystem) model.RegionalSystem {

@@ -5,7 +5,6 @@ package integration_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -228,7 +227,8 @@ func createTenantInDB(ctx context.Context, db *gorm.DB, tenant *model.Tenant) er
 func getSystemFromDB(ctx context.Context, db *gorm.DB, externalID, systemType string) (*model.System, error) {
 	repo := sql.NewRepository(db)
 	sys := &model.System{
-		ID: fmt.Sprintf("%s-%s", externalID, systemType),
+		ExternalID: externalID,
+		Type:       systemType,
 	}
 
 	found, err := repo.Find(ctx, sys)
@@ -245,10 +245,12 @@ func getSystemFromDB(ctx context.Context, db *gorm.DB, externalID, systemType st
 // deleteSystemInDB deletes a system from the database by its ID.
 func deleteSystemInDB(ctx context.Context, db *gorm.DB, externalID, systemType string) error {
 	repo := sql.NewRepository(db)
-	sys := &model.System{
-		ID: fmt.Sprintf("%s-%s", externalID, systemType),
+	sys, err := getSystemFromDB(ctx, db, externalID, systemType)
+	if err != nil {
+		return err
 	}
-	_, err := repo.Delete(ctx, sys)
+
+	_, err = repo.Delete(ctx, sys)
 	return err
 }
 

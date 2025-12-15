@@ -3,6 +3,8 @@ package model
 import (
 	"time"
 
+	"github.com/google/uuid"
+
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	typespb "github.com/openkcm/api-sdk/proto/kms/api/cmk/types/v1"
 
@@ -12,14 +14,13 @@ import (
 
 // Validation IDs for the System model fields that are validated individually.
 const (
-	RegionalSystemSystemIDValidationID validation.ID = "RegionalSystem.SystemID"
-	RegionalSystemRegionValidationID   validation.ID = "RegionalSystem.Region"
-	SystemStatusValidationID           validation.ID = "RegionalSystem.Status"
+	RegionalSystemRegionValidationID validation.ID = "RegionalSystem.Region"
+	SystemStatusValidationID         validation.ID = "RegionalSystem.Status"
 )
 
 // RegionalSystem represents a customer-exposed "tenant" of any kind.
 type RegionalSystem struct {
-	SystemID      string    `gorm:"column:system_id;primaryKey" validationID:"RegionalSystem.SystemID"`
+	SystemID      uuid.UUID `gorm:"type:uuid;column:system_id;primaryKey"`
 	Region        string    `gorm:"column:region;primaryKey" validationID:"RegionalSystem.Region"`
 	Status        string    `gorm:"column:status" validationID:"RegionalSystem.Status"`
 	L2KeyID       string    `gorm:"column:l2key_id" validationID:"RegionalSystem.L2KeyID"`
@@ -89,13 +90,6 @@ func (s *RegionalSystem) IsAvailable() bool {
 // Validations returns the validation fields for the System model.
 func (s *RegionalSystem) Validations() []validation.Field {
 	fields := make([]validation.Field, 0, 4)
-
-	fields = append(fields, validation.Field{
-		ID: RegionalSystemSystemIDValidationID,
-		Validators: []validation.Validator{
-			validation.NonEmptyConstraint{},
-		},
-	})
 
 	fields = append(fields, validation.Field{
 		ID: RegionalSystemRegionValidationID,

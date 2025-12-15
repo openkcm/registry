@@ -5,7 +5,6 @@ package integration_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -793,7 +792,7 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				expErr := service.ErrorWithParams(service.ErrSystemHasL1KeyClaim, "systemID", fmt.Sprintf("%s-%s", sys2ExternalID, sys2Type), "region", sys2Region).Error()
+				expErr := service.ErrorWithParams(service.ErrSystemHasL1KeyClaim, "externalID", sys2ExternalID, "type", sys2Type, "region", sys2Region).Error()
 				assert.Error(t, err)
 				assert.Equal(t, expErr, err.Error())
 				assert.Nil(t, res)
@@ -935,7 +934,7 @@ func TestSystemService(t *testing.T) {
 				})
 
 				// then
-				expErr := service.ErrorWithParams(service.ErrSystemHasL1KeyClaim, "system_id", fmt.Sprintf("%s-%s", externalID, systemType), "region", region).Error()
+				expErr := service.ErrorWithParams(service.ErrSystemHasL1KeyClaim, "externalID", externalID, "type", systemType, "region", region).Error()
 				assert.Error(t, err)
 				assert.Equal(t, expErr, err.Error())
 				assert.Nil(t, res)

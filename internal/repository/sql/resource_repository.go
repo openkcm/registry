@@ -70,26 +70,6 @@ func (r ResourceRepository) List(ctx context.Context, result any, query reposito
 	return nil
 }
 
-// Count retrieves the total number of records that match the query.
-func (r ResourceRepository) Count(ctx context.Context, resource repository.Resource, query repository.Query) (int64, error) {
-	var count int64
-	db := r.db.WithContext(ctx).Model(resource)
-
-	db, err := applyFilters(db, query)
-	if err != nil {
-		slog.Error("error applying query for counting resources", slog.Any("err", err))
-		return 0, err
-	}
-
-	err = db.Count(&count).Error
-	if err != nil {
-		slog.Error("error counting resources", slog.Any("err", err))
-		return 0, err
-	}
-
-	return count, nil
-}
-
 // Delete removes the Resource.
 //
 // It returns true if a record was deleted successfully,
@@ -107,7 +87,7 @@ func (r ResourceRepository) Delete(ctx context.Context, resource repository.Reso
 
 // Find fill given Resource with data, if found. Given Resource is used as query data.
 func (r ResourceRepository) Find(ctx context.Context, resource repository.Resource) (bool, error) {
-	result := r.db.WithContext(ctx).Limit(1).Find(resource)
+	result := r.db.WithContext(ctx).Where(resource).Limit(1).Find(resource)
 	if result.Error != nil {
 		slog.Error("error finding a resource", slog.Any("err", result.Error))
 		return false, result.Error
