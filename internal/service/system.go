@@ -184,6 +184,8 @@ func (s *System) ListSystems(ctx context.Context, in *systemgrpc.ListSystemsRequ
 }
 
 // DeleteSystem handles the deletion of a new System. The response contains deletion status and error if failed.
+//
+//nolint:cyclop
 func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRequest) (*systemgrpc.DeleteSystemResponse, error) {
 	slogctx.Debug(ctx, "DeleteSystem called", "system_identifier", in.GetSystemIdentifier(), "region", in.GetRegion())
 
@@ -192,40 +194,41 @@ func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRe
 		return nil, err
 	}
 
-	system, found, err := getSystemByIdentifier(ctx, s.repo, in.SystemIdentifier.GetExternalId(), in.SystemIdentifier.GetType())
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		return &systemgrpc.DeleteSystemResponse{
-			Success: true,
-		}, nil
-	}
-
 	regionalSystem := &model.RegionalSystem{
-		SystemID: system.ID,
-		Region:   in.GetRegion(),
+		Region: in.GetRegion(),
 	}
 
 	query := repository.NewQuery(&model.RegionalSystem{})
 	cond := repository.NewCompositeKey()
-	cond.Where(repository.SystemIDField, system.ID.String())
-	query.Where(cond)
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
 	defer cancel()
 
 	var systemFound bool
 	err = s.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
-		err = validateDeleteSystem(ctx, r, regionalSystem)
+		system, found, err := getSystemByIdentifier(ctx, s.repo, in.SystemIdentifier.GetExternalId(), in.SystemIdentifier.GetType())
+		if err != nil {
+			return err
+		}
+		if !found {
+			return nil
+		}
+
+		regionalSystem.SystemID = system.ID
+		systemFound, err = validateDeleteSystem(ctx, r, regionalSystem, system)
 		if err != nil {
 			slog.Error(DeleteSystemErrMsg, "err", err.Error())
 			return err
 		}
 
-		if systemFound, err = r.Delete(ctx, regionalSystem); err != nil {
-			return ErrSystemDelete
+		if systemFound {
+			if systemFound, err = r.Delete(ctx, regionalSystem); err != nil {
+				return ErrSystemDelete
+			}
 		}
+
+		cond.Where(repository.SystemIDField, system.ID.String())
+		query.Where(cond)
 
 		var regionalSystems []model.RegionalSystem
 		if err = r.List(ctx, &regionalSystems, *query); err != nil {
@@ -651,25 +654,25 @@ func (s *System) patchSystem(ctx context.Context, id uuid.UUID, region string, u
 // validateDeleteSystem makes sure that the System is allowed to be deleted.
 // Here repository r is passed as a variable to address the scenarios where we will
 // create a new repository from the existing repository for e.g. in the case of transaction.
-func validateDeleteSystem(ctx context.Context, r repository.Repository, system *model.RegionalSystem) error {
-	err := getRegionalSystem(ctx, r, system, true)
+func validateDeleteSystem(ctx context.Context, r repository.Repository, regionalSystem *model.RegionalSystem, system *model.System) (bool, error) {
+	err := getRegionalSystem(ctx, r, regionalSystem, false)
 	if errors.Is(err, ErrSystemNotFound) {
 		slog.Info(fmt.Sprintf("%s:%s", DeleteSystemErrMsg, SystemNotFoundMsg))
-		return nil
+		return false, nil
 	} else if err != nil {
-		return err
+		return false, err
 	}
 
-	err = checkRegionalSystemAvailable(system)
+	err = checkRegionalSystemAvailable(regionalSystem)
 	if err != nil {
-		return err
+		return true, err
 	}
 
-	if system.System.IsLinkedToTenant() {
-		return ErrSystemIsLinkedToTenant
+	if system.IsLinkedToTenant() {
+		return true, ErrSystemIsLinkedToTenant
 	}
 
-	return nil
+	return true, nil
 }
 
 // isSystemTenantUnlinkAllowed checks whether all conditions are met to unlink the Tenant from the System.
