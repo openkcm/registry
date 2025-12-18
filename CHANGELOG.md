@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/openkcm/registry/compare/v1.6.0...v1.7.0) (2025-12-18)
+
+
+### Features
+
+* refactor system into system and regional system ([#107](https://github.com/openkcm/registry/issues/107)) ([9f31e10](https://github.com/openkcm/registry/commit/9f31e1036444677ec0a049d0cc7e07a258907e70))
+
 ## [1.6.0](https://github.com/openkcm/registry/compare/v1.5.0...v1.6.0) (2025-12-10)
 
 
