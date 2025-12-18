@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
+	mappinggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/mapping/v1"
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 
@@ -197,6 +198,7 @@ func TestSystemMetrics(t *testing.T) {
 	defer conn.Close()
 
 	sSubj := systemgrpc.NewServiceClient(conn)
+	mSub := mappinggrpc.NewServiceClient(conn)
 
 	scraper, err := newMetricScraper()
 	require.NoError(t, err)
@@ -225,10 +227,7 @@ func TestSystemMetrics(t *testing.T) {
 				assert.NotNil(t, resp)
 				assert.True(t, resp.Success)
 
-				defer func() {
-					err = deleteSystem(ctx, sSubj, req.ExternalId, req.Region)
-					assert.NoError(t, err)
-				}()
+				defer cleanupSystem(t, ctx, sSubj, mSub, req.ExternalId, req.TenantId, req.Type, req.Region, req.HasL1KeyClaim)
 
 				// Then
 				assertCounterInc(t, scraper, ctx, metricSystems, systemsBefore)
@@ -269,6 +268,7 @@ func TestSystemMetrics(t *testing.T) {
 				// When
 				_, err = sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
 					ExternalId: req.ExternalId,
+					Type:       req.Type,
 					Region:     req.Region,
 				})
 				assert.NoError(t, err)
@@ -297,14 +297,12 @@ func TestSystemMetrics(t *testing.T) {
 		metricLinked := createMetric(
 			t,
 			"systems_count",
-			"region", systemMetricsRegion,
 			service.AttrTenantLinked, "true",
 		)
 
 		metricUnlinked := createMetric(
 			t,
 			"systems_count",
-			"region", systemMetricsRegion,
 			service.AttrTenantLinked, "false",
 		)
 
@@ -328,10 +326,7 @@ func TestSystemMetrics(t *testing.T) {
 					// When
 					_, err := sSubj.RegisterSystem(ctx, req)
 					assert.NoError(t, err)
-					defer func() {
-						err = deleteSystem(ctx, sSubj, req.ExternalId, req.Region)
-						assert.NoError(t, err)
-					}()
+					defer cleanupSystem(t, ctx, sSubj, mSub, req.ExternalId, req.TenantId, req.Type, req.Region, req.HasL1KeyClaim)
 
 					// Then
 					agg, err := getSafeMetric(ctx, scraper, metricUnlinked)
@@ -348,12 +343,7 @@ func TestSystemMetrics(t *testing.T) {
 					// When
 					_, err := sSubj.RegisterSystem(ctx, req)
 					assert.NoError(t, err)
-					defer func() {
-						err = unlinkSystemFromTenant(ctx, sSubj, req.ExternalId, req.Region)
-						assert.NoError(t, err)
-						err = deleteSystem(ctx, sSubj, req.ExternalId, req.Region)
-						assert.NoError(t, err)
-					}()
+					defer cleanupSystem(t, ctx, sSubj, mSub, req.ExternalId, req.TenantId, req.Type, req.Region, req.HasL1KeyClaim)
 
 					// Then
 					agg, err := getSafeMetric(ctx, scraper, metricLinked)
@@ -399,28 +389,25 @@ func TestSystemMetrics(t *testing.T) {
 		t.Run("update", func(t *testing.T) {
 			t.Run("should happen", func(t *testing.T) {
 				t.Run("for linking", func(t *testing.T) {
-					// Given
-					req := validRegisterSystemReq()
-					req.Region = systemMetricsRegion
-					_, err := sSubj.RegisterSystem(ctx, req)
-					assert.NoError(t, err)
-
 					// When
-					_, err = sSubj.LinkSystemsToTenant(ctx, &systemgrpc.LinkSystemsToTenantRequest{
-						SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-							{
-								ExternalId: req.ExternalId,
-								Region:     req.Region,
-							},
-						},
-						TenantId: tenant.ID,
+					externalID := validRandID()
+					_, err = mSub.MapSystemToTenant(ctx, &mappinggrpc.MapSystemToTenantRequest{
+						ExternalId: externalID,
+						Type:       allowedSystemType,
+						TenantId:   tenant.ID,
 					})
+
 					assert.NoError(t, err)
 					defer func() {
-						err = unlinkSystemFromTenant(ctx, sSubj, req.ExternalId, req.Region)
+						res, err := mSub.UnmapSystemFromTenant(ctx, &mappinggrpc.UnmapSystemFromTenantRequest{
+							ExternalId: externalID,
+							Type:       allowedSystemType,
+							TenantId:   tenant.ID,
+						})
 						assert.NoError(t, err)
-						err = deleteSystem(ctx, sSubj, req.ExternalId, req.Region)
-						assert.NoError(t, err)
+						assert.True(t, res.Success)
+
+						assert.NoError(t, deleteSystemInDB(ctx, db, externalID, allowedSystemType))
 					}()
 
 					// Then
@@ -441,19 +428,14 @@ func TestSystemMetrics(t *testing.T) {
 					assert.NoError(t, err)
 
 					// When
-					_, err = sSubj.UnlinkSystemsFromTenant(ctx, &systemgrpc.UnlinkSystemsFromTenantRequest{
-						SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-							{
-								ExternalId: req.ExternalId,
-								Region:     req.Region,
-							},
-						},
+					_, err = mSub.UnmapSystemFromTenant(ctx, &mappinggrpc.UnmapSystemFromTenantRequest{
+						ExternalId: req.ExternalId,
+						Type:       req.Type,
+						TenantId:   req.TenantId,
 					})
+
 					assert.NoError(t, err)
-					defer func() {
-						err = deleteSystem(ctx, sSubj, req.ExternalId, req.Region)
-						assert.NoError(t, err)
-					}()
+					defer cleanupSystem(t, ctx, sSubj, mSub, req.ExternalId, "", req.Type, req.Region, req.HasL1KeyClaim)
 
 					// Then
 					linked, err := getSafeMetric(ctx, scraper, metricLinked)
@@ -472,15 +454,12 @@ func TestSystemMetrics(t *testing.T) {
 					req.Region = systemMetricsRegion
 					_, err := sSubj.RegisterSystem(ctx, req)
 					assert.NoError(t, err)
-					defer func() {
-						err = deleteSystem(ctx, sSubj, req.ExternalId, req.Region)
-						assert.NoError(t, err)
-					}()
+					defer cleanupSystem(t, ctx, sSubj, mSub, req.ExternalId, "", req.Type, req.Region, req.HasL1KeyClaim)
 
 					// When
-					_, err = sSubj.LinkSystemsToTenant(ctx, &systemgrpc.LinkSystemsToTenantRequest{
-						SystemIdentifiers: []*systemgrpc.SystemIdentifier{},
-						TenantId:          tenant.ID,
+					_, err = mSub.MapSystemToTenant(ctx, &mappinggrpc.MapSystemToTenantRequest{
+						Type:     req.Type,
+						TenantId: tenant.ID,
 					})
 					assert.Error(t, err)
 
@@ -501,17 +480,10 @@ func TestSystemMetrics(t *testing.T) {
 
 					_, err := sSubj.RegisterSystem(ctx, req)
 					assert.NoError(t, err)
-					defer func() {
-						err = unlinkSystemFromTenant(ctx, sSubj, req.ExternalId, req.Region)
-						assert.NoError(t, err)
-						err = deleteSystem(ctx, sSubj, req.ExternalId, req.Region)
-						assert.NoError(t, err)
-					}()
+					defer cleanupSystem(t, ctx, sSubj, mSub, req.ExternalId, req.TenantId, req.Type, req.Region, req.HasL1KeyClaim)
 
 					// When
-					_, err = sSubj.UnlinkSystemsFromTenant(ctx, &systemgrpc.UnlinkSystemsFromTenantRequest{
-						SystemIdentifiers: []*systemgrpc.SystemIdentifier{},
-					})
+					_, err = mSub.UnmapSystemFromTenant(ctx, &mappinggrpc.UnmapSystemFromTenantRequest{})
 					assert.Error(t, err)
 
 					// Then
@@ -536,9 +508,9 @@ func TestSystemMetrics(t *testing.T) {
 				// When
 				_, err = sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
 					ExternalId: req.ExternalId,
+					Type:       req.Type,
 					Region:     req.Region,
 				})
-				assert.NoError(t, err)
 
 				// Then
 				unlinked, err := getSafeMetric(ctx, scraper, metricUnlinked)
@@ -596,6 +568,7 @@ func initSystemMetrics(
 
 	_, err = subj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
 		ExternalId: req.ExternalId,
+		Type:       allowedSystemType,
 		Region:     req.Region,
 	})
 	if err != nil {

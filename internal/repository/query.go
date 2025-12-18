@@ -12,6 +12,7 @@ const (
 	RegionField     QueryField = "region"
 	TenantIDField   QueryField = "tenant_id"
 	ExternalIDField QueryField = "external_id"
+	SystemIDField   QueryField = "system_id"
 	OwnerIDField    QueryField = "owner_id"
 	OwnerTypeField  QueryField = "owner_type"
 	CreatedAtField  QueryField = "created_at"
@@ -20,6 +21,8 @@ const (
 
 	NotEmpty QueryFieldValue = "not_empty"
 	Empty    QueryFieldValue = "empty"
+
+	System FieldName = "System"
 )
 
 // CompositeKey is a collection of QueryField and matching value that are collectively used to find a record.
@@ -36,24 +39,15 @@ func (c CompositeKey) Where(q QueryField, v any) CompositeKey {
 	return c
 }
 
-func (c CompositeKey) Validate() error {
-	if len(c) == 0 {
-		return ErrInvalidFieldName
-	}
-
-	whitelist := []string{ExternalIDField, RegionField, IDField, CreatedAtField}
-	for column := range c {
-		if !slices.Contains(whitelist, column) {
-			return ErrInvalidFieldName
-		}
-	}
-
-	return nil
+type Join struct {
+	Resource Resource
+	OnColumn QueryField
+	Column   QueryField
 }
 
 type Query struct {
-	// the resource type the query is for
-	resource Resource
+	// the Resource type the query is for
+	Resource Resource
 
 	// Limit is a max size of returned elements.
 	Limit int
@@ -66,16 +60,24 @@ type Query struct {
 
 	// CompositeKeys  form the where part of the Query
 	CompositeKeys []CompositeKey
+
+	// Joins are the resources to be joined with the main resource
+	Joins []Join
+
+	// Preloads are the field names to be preloaded with the main resource
+	Preloads []FieldName
 }
 
 type QueryField = string
 
 type QueryFieldValue = string
 
+type FieldName = string
+
 // NewQuery creates and returns a new empty query.
 func NewQuery(resource Resource) *Query {
 	return &Query{
-		resource:      resource,
+		Resource:      resource,
 		CompositeKeys: make([]CompositeKey, 0),
 	}
 }
@@ -102,7 +104,7 @@ func (q *Query) ApplyPagination(limit int32, token string) error {
 	q.Limit = queryLimit
 
 	q.Paginator = Paginator{
-		OrderFields: slices.Sorted(maps.Keys(q.resource.PaginationKey())),
+		OrderFields: slices.Sorted(maps.Keys(q.Resource.PaginationKey())),
 	}
 
 	if token == "" {
@@ -118,4 +120,9 @@ func (q *Query) ApplyPagination(limit int32, token string) error {
 	q.Paginator.PageInfo = pageInfo
 
 	return nil
+}
+
+// Populate fills the Preloads slice with field names that are needed to fetched with the main resource.
+func (q *Query) Populate(fieldNames ...FieldName) {
+	q.Preloads = fieldNames
 }

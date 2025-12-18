@@ -70,5 +70,5 @@ func GetDataSourceName(conf config.DB) (string, error) {
 
 // Migrate runs DB migrations.
 func Migrate(db *gorm.DB) error {
-	return db.AutoMigrate(&model.System{}, &model.Tenant{}, &model.Auth{})
+	return db.AutoMigrate(&model.System{}, &model.RegionalSystem{}, &model.Tenant{}, &model.Auth{})
 }
