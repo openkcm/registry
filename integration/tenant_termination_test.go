@@ -7,11 +7,12 @@ import (
 	"testing"
 	"time"
 
-	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
-	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
+	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 
 	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/service"

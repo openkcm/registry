@@ -158,7 +158,7 @@ validations:
     - type: list
       spec:
         allowlist: ["system", "application"]
-  - id: System.Region
+  - id: RegionalSystem.Region
     constraints:
     - type: list
       spec:
