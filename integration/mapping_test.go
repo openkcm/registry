@@ -6,12 +6,14 @@ package integration_test
 import (
 	"testing"
 
-	mappinggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/mapping/v1"
-	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
-	"github.com/openkcm/registry/internal/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/status"
+
+	mappinggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/mapping/v1"
+	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
+
+	"github.com/openkcm/registry/internal/service"
 )
 
 func TestMappingService(t *testing.T) {
@@ -339,7 +341,7 @@ func TestMappingService(t *testing.T) {
 				})
 				assert.NoError(t, err)
 				assert.NotNil(t, res)
-				assert.Equal(t, "", res.TenantId)
+				assert.Empty(t, res.TenantId)
 			})
 		})
 	})

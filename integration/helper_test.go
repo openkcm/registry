@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	mappinggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/mapping/v1"
 	"github.com/openkcm/common-sdk/pkg/commoncfg"
 	"github.com/openkcm/orbital"
 	"github.com/stretchr/testify/assert"
@@ -20,6 +19,7 @@ import (
 	_ "google.golang.org/grpc/health"
 
 	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
+	mappinggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/mapping/v1"
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 	typespb "github.com/openkcm/api-sdk/proto/kms/api/cmk/types/v1"

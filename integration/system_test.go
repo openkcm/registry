@@ -8,16 +8,18 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	mappinggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/mapping/v1"
-	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
-	typespb "github.com/openkcm/api-sdk/proto/kms/api/cmk/types/v1"
-	"github.com/openkcm/registry/internal/model"
-	"github.com/openkcm/registry/internal/service"
-	"github.com/openkcm/registry/internal/validation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	mappinggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/mapping/v1"
+	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
+	typespb "github.com/openkcm/api-sdk/proto/kms/api/cmk/types/v1"
+
+	"github.com/openkcm/registry/internal/model"
+	"github.com/openkcm/registry/internal/service"
+	"github.com/openkcm/registry/internal/validation"
 )
 
 func TestSystemService(t *testing.T) {
@@ -1037,7 +1039,6 @@ func TestSystemService(t *testing.T) {
 				})
 			})
 			t.Run("should not error out when no system is found", func(t *testing.T) {
-
 				res, err := sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
 					ExternalId: validRandID(),
 					Region:     allowedSystemRegion,
@@ -1061,7 +1062,6 @@ func TestSystemService(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, delRes)
 				assert.True(t, res.GetSuccess())
-
 			})
 			t.Run("should not error out when no regional system is found", func(t *testing.T) {
 				system := &model.System{
@@ -1172,7 +1172,6 @@ func TestSystemService(t *testing.T) {
 				assert.Error(t, err)
 				assert.Nil(t, res)
 				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
-
 			})
 			t.Run("should error out when no regional system is found", func(t *testing.T) {
 				system := &model.System{
@@ -1304,7 +1303,6 @@ func TestSystemService(t *testing.T) {
 				assert.Error(t, err)
 				assert.Nil(t, res)
 				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
-
 			})
 			t.Run("should error out when no regional system is found", func(t *testing.T) {
 				system := &model.System{
@@ -1431,7 +1429,6 @@ func TestSystemService(t *testing.T) {
 				assert.Error(t, err)
 				assert.Nil(t, res)
 				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
-
 			})
 			t.Run("should error out when no regional system is found", func(t *testing.T) {
 				system := &model.System{
@@ -1558,7 +1555,6 @@ func TestSystemService(t *testing.T) {
 				assert.Error(t, err)
 				assert.Nil(t, res)
 				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
-
 			})
 			t.Run("should error out when no regional system is found", func(t *testing.T) {
 				system := &model.System{
