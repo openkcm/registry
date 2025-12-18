@@ -65,12 +65,14 @@ var (
 	ErrSystemNotFound                       = status.Error(codes.NotFound, SystemNotFoundMsg)
 	ErrSystemIsLinkedToTenant               = status.Error(codes.FailedPrecondition, "system is linked to the tenant")
 	ErrSystemIsNotLinkedToTenant            = status.Error(codes.FailedPrecondition, "system is not linked to the tenant")
+	ErrSystemLinkedToDifferentTenant        = status.Error(codes.FailedPrecondition, "system is linked to a different tenant")
 	ErrSystemHasL1KeyClaim                  = status.Error(codes.FailedPrecondition, "system has active l1 key claim")
 	ErrSystemUnavailable                    = status.Error(codes.FailedPrecondition, SystemUnavailableErrMsg)
-	ErrNoSystemIdentifiers                  = status.Error(codes.InvalidArgument, "no system identifiers provided")
+	ErrNoTenantID                           = status.Error(codes.InvalidArgument, "no tenantID provided")
 	ErrSystemListNotAllowed                 = status.Error(codes.InvalidArgument, "need either externalID and region or tenantID to list systems")
 	ErrRegisterSystemNotAllowedWithTenantID = status.Error(codes.InvalidArgument, "system cannot be registered because other system(s) with same external ID and type are already linked to a different tenant")
 	ErrSystemProtoConversion                = status.Error(codes.Internal, "failed to convert system to proto message struct")
+	ErrTooManyTypes                         = status.Error(codes.FailedPrecondition, "cannot determine type")
 )
 
 var (

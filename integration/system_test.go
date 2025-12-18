@@ -8,17 +8,16 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	mappinggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/mapping/v1"
+	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
+	typespb "github.com/openkcm/api-sdk/proto/kms/api/cmk/types/v1"
+	"github.com/openkcm/registry/internal/model"
+	"github.com/openkcm/registry/internal/service"
+	"github.com/openkcm/registry/internal/validation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
-	typespb "github.com/openkcm/api-sdk/proto/kms/api/cmk/types/v1"
-
-	"github.com/openkcm/registry/internal/model"
-	"github.com/openkcm/registry/internal/service"
-	"github.com/openkcm/registry/internal/validation"
 )
 
 func TestSystemService(t *testing.T) {
@@ -30,6 +29,8 @@ func TestSystemService(t *testing.T) {
 	}()
 
 	sSubj := systemgrpc.NewServiceClient(conn)
+	mSubj := mappinggrpc.NewServiceClient(conn)
+
 	ctx := t.Context()
 	db, err := startDB()
 	require.NoError(t, err)
@@ -115,7 +116,7 @@ func TestSystemService(t *testing.T) {
 				assert.NoError(t, err)
 				assert.True(t, res.Success)
 
-				defer cleanupSystem(t, ctx, sSubj, externalID, req.TenantId, req.Type, req.Region, req.HasL1KeyClaim)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, req.TenantId, req.Type, req.Region, req.HasL1KeyClaim)
 
 				req = validRegisterSystemReq()
 				req.ExternalId = externalID
@@ -137,7 +138,7 @@ func TestSystemService(t *testing.T) {
 
 			// cleanup
 			defer func() {
-				err := deleteSystem(ctx, sSubj, req.GetExternalId(), req.GetRegion())
+				err := deleteSystem(ctx, sSubj, req.GetExternalId(), req.GetType(), req.GetRegion())
 				assert.NoError(t, err)
 			}()
 
@@ -172,8 +173,8 @@ func TestSystemService(t *testing.T) {
 			assert.True(t, res.Success)
 
 			defer func() {
-				assert.NoError(t, deleteSystem(ctx, sSubj, externalID, req1.Region))
-				assert.NoError(t, deleteSystem(ctx, sSubj, externalID, req2.Region))
+				assert.NoError(t, deleteSystem(ctx, sSubj, externalID, req1.GetType(), req1.Region))
+				assert.NoError(t, deleteSystem(ctx, sSubj, externalID, req2.GetType(), req2.Region))
 			}()
 
 			sys1, err := getRegionalSystem(t, ctx, sSubj, externalID, req1.Region, req1.Type)
@@ -191,8 +192,7 @@ func TestSystemService(t *testing.T) {
 		t.Run("should return error if", func(t *testing.T) {
 			t.Run("system identifier is nil", func(t *testing.T) {
 				res, err := sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
-					SystemIdentifier: nil,
-					Region:           allowedSystemRegion,
+					Region: allowedSystemRegion,
 				})
 
 				// then
@@ -206,15 +206,13 @@ func TestSystemService(t *testing.T) {
 
 				// when
 				result, err := sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						ExternalId: externalID,
-						Type:       systemType,
-					},
-					Region: systemRegion,
+					ExternalId: externalID,
+					Type:       systemType,
+					Region:     systemRegion,
 				})
 
 				// clean up
-				defer cleanupSystem(t, ctx, sSubj, externalID, existingTenantID, systemType, systemRegion, false)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, existingTenantID, systemType, systemRegion, false)
 
 				// then
 				assert.Error(t, err)
@@ -236,16 +234,14 @@ func TestSystemService(t *testing.T) {
 
 				// when
 				result, err := sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						ExternalId: req.GetExternalId(),
-						Type:       req.GetType(),
-					},
-					Region: req.GetRegion(),
+					ExternalId: req.GetExternalId(),
+					Type:       req.GetType(),
+					Region:     req.GetRegion(),
 				})
 
 				// clean up
 				defer func() {
-					err = deleteSystem(ctx, sSubj, req.GetExternalId(), req.GetRegion())
+					err = deleteSystem(ctx, sSubj, req.GetExternalId(), req.GetType(), req.GetRegion())
 					assert.NoError(t, err)
 				}()
 
@@ -266,11 +262,9 @@ func TestSystemService(t *testing.T) {
 
 				// when
 				result, err := sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						ExternalId: externalID,
-						Type:       systemType,
-					},
-					Region: systemRegion,
+					ExternalId: externalID,
+					Type:       systemType,
+					Region:     systemRegion,
 				})
 
 				// then
@@ -281,11 +275,9 @@ func TestSystemService(t *testing.T) {
 			t.Run("system cannot be found", func(t *testing.T) {
 				// when
 				res, err := sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						ExternalId: uuid.NewString(),
-						Type:       allowedSystemType,
-					},
-					Region: allowedSystemRegion,
+					ExternalId: uuid.NewString(),
+					Type:       allowedSystemType,
+					Region:     allowedSystemRegion,
 				})
 
 				// then
@@ -302,11 +294,9 @@ func TestSystemService(t *testing.T) {
 				_, _, systemRegion2 := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, &region, &externalID)
 
 				result, err := sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						ExternalId: externalID,
-						Type:       systemType,
-					},
-					Region: systemRegion,
+					ExternalId: externalID,
+					Type:       systemType,
+					Region:     systemRegion,
 				})
 
 				// then
@@ -315,11 +305,9 @@ func TestSystemService(t *testing.T) {
 
 				defer func() {
 					result, err = sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
-						SystemIdentifier: &systemgrpc.SystemIdentifier{
-							ExternalId: externalID,
-							Type:       systemType,
-						},
-						Region: systemRegion2,
+						ExternalId: externalID,
+						Type:       systemType,
+						Region:     systemRegion2,
 					})
 
 					assert.NoError(t, err)
@@ -340,10 +328,9 @@ func TestSystemService(t *testing.T) {
 		t.Run("should return error if", func(t *testing.T) {
 			t.Run("system identifier is nil", func(t *testing.T) {
 				res, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
-					SystemIdentifier: nil,
-					Region:           allowedSystemRegion,
-					TenantId:         existingTenantID,
-					L1KeyClaim:       true,
+					Region:     allowedSystemRegion,
+					TenantId:   existingTenantID,
+					L1KeyClaim: true,
 				})
 
 				// then
@@ -354,10 +341,8 @@ func TestSystemService(t *testing.T) {
 			t.Run("system is not present", func(t *testing.T) {
 				// when
 				res, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						Type:       allowedSystemType,
-						ExternalId: uuid.NewString(),
-					},
+					Type:       allowedSystemType,
+					ExternalId: uuid.NewString(),
 					Region:     allowedSystemRegion,
 					TenantId:   existingTenantID,
 					L1KeyClaim: true,
@@ -377,15 +362,13 @@ func TestSystemService(t *testing.T) {
 				assert.True(t, res.Success)
 
 				defer func() {
-					err = deleteSystem(ctx, sSubj, req.GetExternalId(), req.GetRegion())
+					err = deleteSystem(ctx, sSubj, req.GetExternalId(), req.GetType(), req.GetRegion())
 					assert.NoError(t, err)
 				}()
 				// when
 				result, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						ExternalId: req.GetExternalId(),
-						Type:       req.GetType(),
-					},
+					ExternalId: req.GetExternalId(),
+					Type:       req.GetType(),
 					Region:     req.GetRegion(),
 					TenantId:   existingTenantID,
 					L1KeyClaim: true,
@@ -407,17 +390,16 @@ func TestSystemService(t *testing.T) {
 				assert.True(t, res.Success)
 
 				defer func() {
-					err = unlinkSystemFromTenant(ctx, sSubj, req.GetExternalId(), req.GetRegion())
+					err = unlinkSystemFromTenant(ctx, sSubj, mSubj, req.GetExternalId(), req.GetRegion(), req.TenantId)
 					assert.NoError(t, err)
-					err = deleteSystem(ctx, sSubj, req.GetExternalId(), req.GetRegion())
+					err = deleteSystem(ctx, sSubj, req.GetExternalId(), req.GetType(), req.GetRegion())
 					assert.NoError(t, err)
 				}()
 				// when
 				result, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						ExternalId: req.GetExternalId(),
-						Type:       req.GetType(),
-					},
+
+					ExternalId: req.GetExternalId(),
+					Type:       req.GetType(),
 					Region:     req.GetRegion(),
 					TenantId:   existingTenantID,
 					L1KeyClaim: true,
@@ -431,14 +413,12 @@ func TestSystemService(t *testing.T) {
 			t.Run("tenant_id is not provided in request", func(t *testing.T) {
 				// given
 				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, existingTenantID, false, allowedSystemType, nil, nil)
-				defer cleanupSystem(t, ctx, sSubj, externalID, existingTenantID, systemType, region, false)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, existingTenantID, systemType, region, false)
 
 				// when
 				res, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						ExternalId: externalID,
-						Type:       systemType,
-					},
+					ExternalId: externalID,
+					Type:       systemType,
 					Region:     region,
 					L1KeyClaim: true,
 				})
@@ -457,14 +437,12 @@ func TestSystemService(t *testing.T) {
 				for name, l1KeyClaim := range tts {
 					t.Run(name, func(t *testing.T) {
 						externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, existingTenantID, l1KeyClaim, allowedSystemType, nil, nil)
-						defer cleanupSystem(t, ctx, sSubj, externalID, existingTenantID, systemType, region, l1KeyClaim)
+						defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, existingTenantID, systemType, region, l1KeyClaim)
 
 						// when
 						res, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
-							SystemIdentifier: &systemgrpc.SystemIdentifier{
-								ExternalId: externalID,
-								Type:       systemType,
-							},
+							ExternalId: externalID,
+							Type:       systemType,
 							Region:     region,
 							TenantId:   existingTenantID,
 							L1KeyClaim: l1KeyClaim,
@@ -481,15 +459,13 @@ func TestSystemService(t *testing.T) {
 		t.Run("should successfully update L1KeyClaim to", func(t *testing.T) {
 			// given
 			externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, existingTenantID, false, allowedSystemType, nil, nil)
-			defer cleanupSystem(t, ctx, sSubj, externalID, existingTenantID, systemType, region, false)
+			defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, existingTenantID, systemType, region, false)
 
 			t.Run("true then to false", func(t *testing.T) {
 				// when
 				result, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						ExternalId: externalID,
-						Type:       systemType,
-					},
+					ExternalId: externalID,
+					Type:       systemType,
 					Region:     region,
 					TenantId:   existingTenantID,
 					L1KeyClaim: true,
@@ -503,10 +479,8 @@ func TestSystemService(t *testing.T) {
 
 				// when updating to false
 				result, err = sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						ExternalId: externalID,
-						Type:       systemType,
-					},
+					ExternalId: externalID,
+					Type:       systemType,
 					Region:     region,
 					TenantId:   existingTenantID,
 					L1KeyClaim: false,
@@ -541,8 +515,8 @@ func TestSystemService(t *testing.T) {
 
 			// clean up
 			defer func() {
-				cleanupSystem(t, ctx, sSubj, externalID1, existingTenantID, type1, region1, false)
-				cleanupSystem(t, ctx, sSubj, externalID2, "", type2, region2, false)
+				cleanupSystem(t, ctx, sSubj, mSubj, externalID1, existingTenantID, type1, region1, false)
+				cleanupSystem(t, ctx, sSubj, mSubj, externalID2, "", type2, region2, false)
 			}()
 
 			t.Run("should return an error when no filter is applied", func(t *testing.T) {
@@ -657,7 +631,7 @@ func TestSystemService(t *testing.T) {
 		assert.NotNil(t, res1)
 		assert.True(t, res1.Success)
 
-		defer cleanupSystem(t, ctx, sSubj, req1.GetExternalId(), req1.GetTenantId(), req1.GetType(), req1.GetRegion(), req1.GetHasL1KeyClaim())
+		defer cleanupSystem(t, ctx, sSubj, mSubj, req1.GetExternalId(), req1.GetTenantId(), req1.GetType(), req1.GetRegion(), req1.GetHasL1KeyClaim())
 
 		req2 := validRegisterSystemReq()
 		req2.L2KeyId = "l2"
@@ -668,7 +642,7 @@ func TestSystemService(t *testing.T) {
 		assert.True(t, res2.Success)
 		assert.NoError(t, err)
 
-		defer cleanupSystem(t, ctx, sSubj, req2.GetExternalId(), req2.GetTenantId(), req2.GetType(), req2.GetRegion(), req2.GetHasL1KeyClaim())
+		defer cleanupSystem(t, ctx, sSubj, mSubj, req2.GetExternalId(), req2.GetTenantId(), req2.GetType(), req2.GetRegion(), req2.GetHasL1KeyClaim())
 
 		t.Run("should return next page token with applied limit", func(t *testing.T) {
 			req := &systemgrpc.ListSystemsRequest{
@@ -718,401 +692,20 @@ func TestSystemService(t *testing.T) {
 		})
 	})
 
-	t.Run("UnlinkSystemsFromTenant", func(t *testing.T) {
-		t.Run("should return error if", func(t *testing.T) {
-			t.Run("system Identifier is empty", func(t *testing.T) {
-				// when
-				res, err := sSubj.UnlinkSystemsFromTenant(ctx, &systemgrpc.UnlinkSystemsFromTenantRequest{
-					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-						{},
-					},
-				})
-
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
-				assert.Nil(t, res)
-			})
-			t.Run("type in system Identifier is not valid", func(t *testing.T) {
-				// when
-				res, err := sSubj.UnlinkSystemsFromTenant(ctx, &systemgrpc.UnlinkSystemsFromTenantRequest{
-					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-						{
-							ExternalId: "externalID",
-						},
-					},
-				})
-
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
-				assert.Contains(t, err.Error(), model.SystemTypeValidationID)
-				assert.Nil(t, res)
-			})
-			t.Run("system to update is not present in the database", func(t *testing.T) {
-				// when
-				id := uuid.NewString()
-				systemType := allowedSystemType
-				res, err := sSubj.UnlinkSystemsFromTenant(ctx, &systemgrpc.UnlinkSystemsFromTenantRequest{
-					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-						{
-							ExternalId: id,
-							Type:       systemType,
-						},
-					},
-				})
-
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
-				assert.Nil(t, res)
-			})
-
-			t.Run("one of the systems has active L1 key claim and rollback transaction", func(t *testing.T) {
-				// given
-				// system2 has active L1 key claim
-				system2Region := "region-system"
-				sys1ExternalID, sys1Type, sys1Region := registerRegionalSystem(t, ctx, sSubj, existingTenantID, false, allowedSystemType, nil, nil)
-				sys2ExternalID, sys2Type, sys2Region := registerRegionalSystem(t, ctx, sSubj, existingTenantID, true, allowedSystemType, &system2Region, &sys1ExternalID)
-
-				// clean up
-				defer func() {
-					cleanupSystem(t, ctx, sSubj, sys2ExternalID, existingTenantID, sys2Type, sys2Region, true)
-					cleanupSystem(t, ctx, sSubj, sys1ExternalID, "", sys1Type, sys1Region, false)
-				}()
-
-				// when
-				res, err := sSubj.UnlinkSystemsFromTenant(ctx, &systemgrpc.UnlinkSystemsFromTenantRequest{
-					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-						{
-							ExternalId: sys1ExternalID,
-							Type:       sys1Type,
-						},
-					},
-				})
-
-				// then
-				expErr := service.ErrorWithParams(service.ErrSystemHasL1KeyClaim, "externalID", sys2ExternalID, "type", sys2Type, "region", sys2Region).Error()
-				assert.Error(t, err)
-				assert.Equal(t, expErr, err.Error())
-				assert.Nil(t, res)
-				actSys, err := listSystems(ctx, sSubj, existingTenantID)
-				assert.NoError(t, err)
-				assert.Len(t, actSys.GetSystems(), 2)
-			})
-
-			t.Run("one of the systems is not linked to the tenant and rollback transaction", func(t *testing.T) {
-				// given: system2 is not linked to the tenant
-				systemID1, systemType1, region1 := registerRegionalSystem(t, ctx, sSubj, existingTenantID, false, allowedSystemType, nil, nil)
-				defer cleanupSystem(t, ctx, sSubj, systemID1, existingTenantID, systemType1, region1, false)
-
-				systemID2, type2, region2 := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
-				defer cleanupSystem(t, ctx, sSubj, systemID2, "", type2, region2, false)
-
-				// when
-				res, err := sSubj.UnlinkSystemsFromTenant(ctx, &systemgrpc.UnlinkSystemsFromTenantRequest{
-					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-						{
-							ExternalId: systemID1,
-							Type:       systemType1,
-						}, {
-							ExternalId: systemID2,
-							Type:       type2,
-						},
-					},
-				})
-				// then
-				expErr := service.ErrorWithParams(service.ErrSystemIsNotLinkedToTenant, "externalID", systemID2, "type", type2).Error()
-				assert.Error(t, err)
-				assert.Equal(t, expErr, err.Error())
-				assert.Nil(t, res)
-				actSys, err := listSystems(ctx, sSubj, existingTenantID)
-				assert.NoError(t, err)
-				assert.Len(t, actSys.GetSystems(), 1)
-				assert.Equal(t, systemID1, actSys.GetSystems()[0].GetExternalId())
-			})
-		})
-
-		t.Run("should succeed if l1KeyClaim is false", func(t *testing.T) {
-			// given
-			sys1ExternalID, type1, sys1Region := registerRegionalSystem(t, ctx, sSubj, existingTenantID, false, allowedSystemType, nil, nil)
-			sys2ExternalID, type2, sys2Region := registerRegionalSystem(t, ctx, sSubj, existingTenantID, false, allowedSystemType, nil, nil)
-
-			// clean up
-			defer func() {
-				cleanupSystem(t, ctx, sSubj, sys1ExternalID, "", type1, sys1Region, false)
-				cleanupSystem(t, ctx, sSubj, sys2ExternalID, "", type2, sys2Region, false)
-			}()
-
-			// when
-			res, err := sSubj.UnlinkSystemsFromTenant(ctx, &systemgrpc.UnlinkSystemsFromTenantRequest{
-				SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-					{
-						ExternalId: sys1ExternalID,
-						Type:       type1,
-					},
-					{
-						ExternalId: sys2ExternalID,
-						Type:       type2,
-					},
-				},
-			})
-
-			// then
-			assert.NoError(t, err)
-			assert.True(t, res.GetSuccess())
-
-			actSys1, err := getRegionalSystem(t, ctx, sSubj, sys1ExternalID, sys1Region, type1)
-			assert.NoError(t, err)
-			assert.NotNil(t, actSys1)
-
-			actSys2, err := getRegionalSystem(t, ctx, sSubj, sys2ExternalID, sys2Region, type2)
-			assert.NoError(t, err)
-			assert.NotNil(t, actSys2)
-
-			assert.Empty(t, actSys1.GetTenantId())
-			assert.Empty(t, actSys2.GetTenantId())
-		})
-	})
-
-	t.Run("LinkSystemsToTenant", func(t *testing.T) {
-		t.Run("should return error if", func(t *testing.T) {
-			t.Run("external id is empty", func(t *testing.T) {
-				// when
-				res, err := sSubj.LinkSystemsToTenant(ctx, &systemgrpc.LinkSystemsToTenantRequest{
-					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-						{ExternalId: uuid.NewString(), Type: allowedSystemType},
-						{ExternalId: "", Type: allowedSystemType},
-						{ExternalId: uuid.NewString(), Type: allowedSystemType},
-					},
-				})
-
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
-				assert.Contains(t, err.Error(), model.SystemExternalIDValidationID)
-				assert.Contains(t, err.Error(), validation.ErrValueEmpty.Error())
-				assert.Nil(t, res)
-			})
-
-			t.Run("Tenant does not exist", func(t *testing.T) {
-				// given
-				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
-				defer cleanupSystem(t, ctx, sSubj, externalID, "", systemType, region, false)
-				tenantID := validRandID()
-
-				// when
-				res, err := sSubj.LinkSystemsToTenant(ctx, &systemgrpc.LinkSystemsToTenantRequest{
-					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-						{ExternalId: externalID, Type: systemType},
-					},
-					TenantId: tenantID,
-				})
-
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
-				assert.Nil(t, res)
-			})
-
-			t.Run("system has active L1KeyClaim", func(t *testing.T) {
-				// given
-				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", true, allowedSystemType, nil, nil)
-
-				// clean up
-				defer func() {
-					assert.NoError(t, deleteSystem(ctx, sSubj, externalID, region))
-					assert.NoError(t, deleteSystem(ctx, sSubj, externalID, region))
-				}()
-
-				// when
-				res, err := sSubj.LinkSystemsToTenant(ctx, &systemgrpc.LinkSystemsToTenantRequest{
-					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-						{ExternalId: externalID, Type: systemType},
-					},
-					TenantId: existingTenantID,
-				})
-
-				// then
-				expErr := service.ErrorWithParams(service.ErrSystemHasL1KeyClaim, "externalID", externalID, "type", systemType, "region", region).Error()
-				assert.Error(t, err)
-				assert.Equal(t, expErr, err.Error())
-				assert.Nil(t, res)
-			})
-
-			t.Run("system already has linked tenant", func(t *testing.T) {
-				// given
-				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, existingTenantID, false, allowedSystemType, nil, nil)
-
-				tenant := validTenant()
-				err := createTenantInDB(ctx, db, tenant)
-				assert.NoError(t, err)
-
-				// clean up
-				defer func() {
-					cleanupSystem(t, ctx, sSubj, externalID, existingTenantID, systemType, region, false)
-					err = deleteTenantFromDB(ctx, db, tenant)
-					assert.NoError(t, err)
-				}()
-
-				// when
-				res, err := sSubj.LinkSystemsToTenant(ctx, &systemgrpc.LinkSystemsToTenantRequest{
-					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-						{ExternalId: externalID, Type: systemType},
-					},
-					TenantId: tenant.ID,
-				})
-
-				// then
-				expErr := service.ErrorWithParams(service.ErrSystemIsLinkedToTenant, "externalID", externalID, "type", systemType).Error()
-				assert.Error(t, err)
-				assert.Equal(t, expErr, err.Error())
-				assert.Nil(t, res)
-			})
-
-			t.Run("should rollback transaction if any system fails to link", func(t *testing.T) {
-				// given
-				// system1 is already linked to the tenant
-				sys1ExternalID, systemType1, sys1Region := registerRegionalSystem(t, ctx, sSubj, existingTenantID, false, allowedSystemType, nil, nil)
-
-				sys2ExternalID, systemType2, sys2Region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
-
-				defer func() {
-					cleanupSystem(t, ctx, sSubj, sys1ExternalID, existingTenantID, systemType1, sys1Region, false)
-					cleanupSystem(t, ctx, sSubj, sys2ExternalID, "", systemType2, sys2Region, false)
-				}()
-
-				// when
-				tenantID := existingTenantID
-				res, err := sSubj.LinkSystemsToTenant(ctx, &systemgrpc.LinkSystemsToTenantRequest{
-					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-						{ExternalId: sys1ExternalID, Type: systemType1},
-						{ExternalId: sys2ExternalID, Type: systemType2},
-					},
-					TenantId: tenantID,
-				})
-
-				// then
-				expErr := service.ErrorWithParams(service.ErrSystemIsLinkedToTenant, "externalID", sys1ExternalID, "type", systemType1).Error()
-				assert.Error(t, err)
-				assert.Equal(t, expErr, err.Error())
-				assert.Nil(t, res)
-				actSys, err := listSystems(ctx, sSubj, tenantID)
-				assert.NoError(t, err)
-				assert.Len(t, actSys.GetSystems(), 1)
-				assert.Equal(t, tenantID, actSys.GetSystems()[0].GetTenantId())
-			})
-		})
-
-		t.Run("should succeed when", func(t *testing.T) {
-			t.Run("L1KeyClaim is false and Tenant is not linked", func(t *testing.T) {
-				// given
-				externalID, systemType, systemRegion := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
-				// when
-				tenantID := existingTenantID
-
-				// clean up
-				defer cleanupSystem(t, ctx, sSubj, externalID, tenantID, systemType, systemRegion, false)
-
-				res, err := sSubj.LinkSystemsToTenant(ctx, &systemgrpc.LinkSystemsToTenantRequest{
-					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-						{ExternalId: externalID, Type: systemType},
-					},
-					TenantId: tenantID,
-				})
-
-				// then
-				assert.NoError(t, err)
-				assert.True(t, res.GetSuccess())
-				actSys, err := listSystems(ctx, sSubj, tenantID)
-				assert.NoError(t, err)
-				assert.Len(t, actSys.GetSystems(), 1)
-				assert.Equal(t, tenantID, actSys.GetSystems()[0].GetTenantId())
-			})
-
-			t.Run("system to link is not in the database so new system is created and then linked", func(t *testing.T) {
-				// given
-				systemID := uuid.NewString()
-				systemType := allowedSystemType
-
-				//clean up
-				defer func() {
-					res, err := sSubj.UnlinkSystemsFromTenant(ctx, &systemgrpc.UnlinkSystemsFromTenantRequest{
-						SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-							{ExternalId: systemID, Type: systemType},
-						},
-					})
-					assert.NoError(t, err)
-					assert.True(t, res.GetSuccess())
-					assert.NoError(t, deleteSystemInDB(ctx, db, systemID, systemType))
-				}()
-
-				// when
-				res, err := sSubj.LinkSystemsToTenant(ctx, &systemgrpc.LinkSystemsToTenantRequest{
-					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-						{ExternalId: systemID, Type: systemType},
-					},
-					TenantId: existingTenantID,
-				})
-
-				assert.NoError(t, err)
-				assert.True(t, res.GetSuccess())
-
-				system, err := getSystemFromDB(ctx, db, systemID, systemType)
-				assert.NoError(t, err)
-				assert.NotNil(t, system)
-
-				assert.Equal(t, existingTenantID, *system.TenantID)
-				assert.Equal(t, allowedSystemType, system.Type)
-				assert.Equal(t, systemID, system.ExternalID)
-			})
-
-			t.Run("linking multiple systems in one transaction", func(t *testing.T) {
-				// given
-				sys1ExternalID, sys1Type, sys1Region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
-				sys2ExternalID, sys2Type, sys2Region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
-				tenantID := existingTenantID
-				defer func() {
-					cleanupSystem(t, ctx, sSubj, sys1ExternalID, tenantID, sys1Type, sys1Region, false)
-					cleanupSystem(t, ctx, sSubj, sys2ExternalID, tenantID, sys2Type, sys2Region, false)
-				}()
-
-				res, err := sSubj.LinkSystemsToTenant(ctx, &systemgrpc.LinkSystemsToTenantRequest{
-					SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-						{ExternalId: sys1ExternalID, Type: sys1Type},
-						{ExternalId: sys2ExternalID, Type: sys2Type},
-					},
-					TenantId: tenantID,
-				})
-
-				// then
-				assert.NoError(t, err)
-				assert.True(t, res.GetSuccess())
-				actSys, err := listSystems(ctx, sSubj, tenantID)
-				assert.NoError(t, err)
-				assert.Len(t, actSys.GetSystems(), 2)
-				assert.Equal(t, tenantID, actSys.GetSystems()[0].GetTenantId())
-				assert.Equal(t, tenantID, actSys.GetSystems()[1].GetTenantId())
-			})
-		})
-	})
-
 	t.Run("UpdateSystemStatus", func(t *testing.T) {
 		t.Run("should succeed if", func(t *testing.T) {
 			t.Run("request is valid", func(t *testing.T) {
 				// given
 				externalID, systemType, systemRegion := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
 
-				defer cleanupSystem(t, ctx, sSubj, externalID, "", systemType, systemRegion, false)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, systemRegion, false)
 
 				// when
 				res, err := sSubj.UpdateSystemStatus(ctx, &systemgrpc.UpdateSystemStatusRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						ExternalId: externalID,
-						Type:       systemType,
-					},
-					Region: systemRegion,
-					Status: typespb.Status_STATUS_PROCESSING,
+					ExternalId: externalID,
+					Type:       systemType,
+					Region:     systemRegion,
+					Status:     typespb.Status_STATUS_PROCESSING,
 				})
 
 				// then
@@ -1139,12 +732,10 @@ func TestSystemService(t *testing.T) {
 			t.Run("system to update is not present in the database", func(t *testing.T) {
 				// when
 				res, err := sSubj.UpdateSystemStatus(ctx, &systemgrpc.UpdateSystemStatusRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						ExternalId: uuid.NewString(),
-						Type:       allowedSystemType,
-					},
-					Region: allowedSystemRegion,
-					Status: typespb.Status_STATUS_AVAILABLE,
+					ExternalId: uuid.NewString(),
+					Type:       allowedSystemType,
+					Region:     allowedSystemRegion,
+					Status:     typespb.Status_STATUS_AVAILABLE,
 				})
 
 				// then
@@ -1161,15 +752,13 @@ func TestSystemService(t *testing.T) {
 				// given
 				externalID, systemType, systemRegion := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
 
-				defer cleanupSystem(t, ctx, sSubj, externalID, "", systemType, systemRegion, false)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, systemRegion, false)
 
 				// when
 				res, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						Type:       systemType,
-						ExternalId: externalID,
-					},
-					Region: systemRegion,
+					Type:       systemType,
+					ExternalId: externalID,
+					Region:     systemRegion,
 					Labels: map[string]string{
 						"key1": "value12",
 						"key3": "value3",
@@ -1208,11 +797,9 @@ func TestSystemService(t *testing.T) {
 			t.Run("region is not valid", func(t *testing.T) {
 				// when
 				res, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						ExternalId: "externalID1",
-						Type:       allowedSystemType,
-					},
-					Region: "",
+					ExternalId: "externalID1",
+					Type:       allowedSystemType,
+					Region:     "",
 					Labels: map[string]string{
 						"key1": "value1",
 					},
@@ -1227,11 +814,9 @@ func TestSystemService(t *testing.T) {
 			t.Run("labels are empty", func(t *testing.T) {
 				// when
 				res, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						Type:       allowedSystemType,
-						ExternalId: "externalID1",
-					},
-					Region: allowedSystemRegion,
+					Type:       allowedSystemType,
+					ExternalId: "externalID1",
+					Region:     allowedSystemRegion,
 				})
 
 				// then
@@ -1242,11 +827,9 @@ func TestSystemService(t *testing.T) {
 			t.Run("labels keys are empty", func(t *testing.T) {
 				// when
 				res, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						Type:       allowedSystemType,
-						ExternalId: "externalID1",
-					},
-					Region: allowedSystemRegion,
+					Type:       allowedSystemType,
+					ExternalId: "externalID1",
+					Region:     allowedSystemRegion,
 					Labels: map[string]string{
 						"": "value1",
 					},
@@ -1260,11 +843,9 @@ func TestSystemService(t *testing.T) {
 			t.Run("system to update is not present in the database", func(t *testing.T) {
 				// when
 				res, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						Type:       allowedSystemType,
-						ExternalId: "externalID1",
-					},
-					Region: allowedSystemRegion,
+					Type:       allowedSystemType,
+					ExternalId: "externalID1",
+					Region:     allowedSystemRegion,
 					Labels: map[string]string{
 						"key1": "value1",
 					},
@@ -1284,16 +865,14 @@ func TestSystemService(t *testing.T) {
 				// given
 				externalID, systemType, systemRegion := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
 
-				defer cleanupSystem(t, ctx, sSubj, externalID, "", systemType, systemRegion, false)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, systemRegion, false)
 
 				// when
 				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						Type:       systemType,
-						ExternalId: externalID,
-					},
-					Region:    systemRegion,
-					LabelKeys: []string{"key1"},
+					Type:       systemType,
+					ExternalId: externalID,
+					Region:     systemRegion,
+					LabelKeys:  []string{"key1"},
 				})
 
 				// then
@@ -1309,16 +888,14 @@ func TestSystemService(t *testing.T) {
 			t.Run("label does not exist", func(t *testing.T) {
 				// given
 				externalID, systemType, systemRegion := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
-				defer cleanupSystem(t, ctx, sSubj, externalID, "", systemType, systemRegion, false)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, systemRegion, false)
 
 				// when
 				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						Type:       systemType,
-						ExternalId: externalID,
-					},
-					Region:    systemRegion,
-					LabelKeys: []string{"key3"},
+					Type:       systemType,
+					ExternalId: externalID,
+					Region:     systemRegion,
+					LabelKeys:  []string{"key3"},
 				})
 
 				// then
@@ -1336,9 +913,7 @@ func TestSystemService(t *testing.T) {
 			t.Run("external ID is empty", func(t *testing.T) {
 				// when
 				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						Type: allowedSystemType,
-					},
+					Type:      allowedSystemType,
 					Region:    allowedSystemRegion,
 					LabelKeys: []string{"key1"},
 				})
@@ -1353,12 +928,10 @@ func TestSystemService(t *testing.T) {
 			t.Run("region is not valid", func(t *testing.T) {
 				// when
 				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						Type:       allowedSystemType,
-						ExternalId: "externalID1",
-					},
-					Region:    "",
-					LabelKeys: []string{"key1"},
+					Type:       allowedSystemType,
+					ExternalId: "externalID1",
+					Region:     "",
+					LabelKeys:  []string{"key1"},
 				})
 
 				// then
@@ -1370,11 +943,9 @@ func TestSystemService(t *testing.T) {
 			t.Run("labels keys are empty", func(t *testing.T) {
 				// when
 				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						Type:       allowedSystemType,
-						ExternalId: "externalID1",
-					},
-					Region: allowedSystemRegion,
+					Type:       allowedSystemType,
+					ExternalId: "externalID1",
+					Region:     allowedSystemRegion,
 				})
 
 				// then
@@ -1385,12 +956,10 @@ func TestSystemService(t *testing.T) {
 			t.Run("labels keys have empty value", func(t *testing.T) {
 				// when
 				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						Type:       allowedSystemType,
-						ExternalId: "externalID1",
-					},
-					Region:    allowedSystemRegion,
-					LabelKeys: []string{""},
+					Type:       allowedSystemType,
+					ExternalId: "externalID1",
+					Region:     allowedSystemRegion,
+					LabelKeys:  []string{""},
 				})
 
 				// then
@@ -1401,18 +970,635 @@ func TestSystemService(t *testing.T) {
 			t.Run("system to update is not present in the database", func(t *testing.T) {
 				// when
 				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
-					SystemIdentifier: &systemgrpc.SystemIdentifier{
-						Type:       allowedSystemType,
-						ExternalId: "externalID1",
-					},
-					Region:    allowedSystemRegion,
-					LabelKeys: []string{"key1"},
+					Type:       allowedSystemType,
+					ExternalId: "externalID1",
+					Region:     allowedSystemRegion,
+					LabelKeys:  []string{"key1"},
 				})
 
 				// then
 				assert.Error(t, err)
 				assert.ErrorIs(t, service.ErrSystemNotFound, err)
 				assert.Nil(t, res)
+			})
+		})
+	})
+
+	t.Run("API Backwards Compatibility", func(t *testing.T) {
+		t.Run("deleteSystem without type", func(t *testing.T) {
+			t.Run("should error out when", func(t *testing.T) {
+				tt := []struct {
+					name string
+					req  *systemgrpc.DeleteSystemRequest
+				}{
+					{
+						name: "externalID is not provided",
+						req:  &systemgrpc.DeleteSystemRequest{Region: allowedSystemRegion},
+					},
+					{
+						name: "region is not provided",
+						req:  &systemgrpc.DeleteSystemRequest{ExternalId: validRandID()},
+					},
+					{
+						name: "region is invalid",
+						req: &systemgrpc.DeleteSystemRequest{
+							ExternalId: validRandID(),
+							Region:     "invalid-region",
+						},
+					},
+					{
+						name: "both are not provided",
+						req:  &systemgrpc.DeleteSystemRequest{},
+					},
+				}
+				for _, tc := range tt {
+					t.Run(tc.name, func(t *testing.T) {
+						res, err := sSubj.DeleteSystem(ctx, tc.req)
+						assert.Error(t, err)
+						assert.Nil(t, res)
+						assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+					})
+				}
+
+				t.Run("multiple systems are found", func(t *testing.T) {
+					externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+					defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+
+					anotherExternalID, anotherSystemType, anotherRegion := registerRegionalSystem(t, ctx, sSubj, "", false, "system", nil, &externalID)
+					defer cleanupSystem(t, ctx, sSubj, mSubj, anotherExternalID, "", anotherSystemType, anotherRegion, false)
+
+					deleteRes, err := sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
+						ExternalId: externalID,
+						Region:     region,
+					})
+					assert.Error(t, err)
+					assert.Nil(t, deleteRes)
+					assert.Equal(t, status.Code(service.ErrTooManyTypes), status.Code(err))
+				})
+			})
+			t.Run("should not error out when no system is found", func(t *testing.T) {
+
+				res, err := sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
+					ExternalId: validRandID(),
+					Region:     allowedSystemRegion,
+				})
+				assert.NoError(t, err)
+				assert.NotNil(t, res)
+				assert.True(t, res.GetSuccess())
+			})
+			t.Run("should not error out when regional system has different region", func(t *testing.T) {
+				req := validRegisterSystemReq()
+				res, err := sSubj.RegisterSystem(ctx, req)
+				assert.NoError(t, err)
+				assert.NotNil(t, res)
+				assert.True(t, res.Success)
+
+				defer cleanupSystem(t, ctx, sSubj, mSubj, req.GetExternalId(), req.GetTenantId(), req.GetType(), req.GetRegion(), req.GetHasL1KeyClaim())
+				delRes, err := sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
+					ExternalId: req.GetExternalId(),
+					Region:     "region-system",
+				})
+				assert.NoError(t, err)
+				assert.NotNil(t, delRes)
+				assert.True(t, res.GetSuccess())
+
+			})
+			t.Run("should not error out when no regional system is found", func(t *testing.T) {
+				system := &model.System{
+					ExternalID: validRandID(),
+					Type:       allowedSystemType,
+				}
+				assert.NoError(t, createSystemInDB(ctx, db, system))
+				defer func() {
+					assert.NoError(t, deleteSystemInDB(ctx, db, system.ExternalID, system.Type))
+				}()
+
+				res, err := sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
+					ExternalId: system.ExternalID,
+					Region:     allowedSystemRegion,
+				})
+				assert.NoError(t, err)
+				assert.NotNil(t, res)
+				assert.True(t, res.GetSuccess())
+			})
+			t.Run("should delete successfully", func(t *testing.T) {
+				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+
+				result, err := sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
+					ExternalId: externalID,
+					Region:     region,
+				})
+				assert.NoError(t, err)
+				assert.True(t, result.GetSuccess())
+
+				listRes, err := sSubj.ListSystems(ctx, &systemgrpc.ListSystemsRequest{
+					ExternalId: externalID,
+					Region:     region,
+				})
+				assert.Error(t, err)
+				assert.Nil(t, listRes)
+				assert.Equal(t, codes.NotFound, status.Code(err))
+			})
+		})
+
+		t.Run("updateSystemL1KeyClaim without type", func(t *testing.T) {
+			t.Run("should error out when", func(t *testing.T) {
+				tt := []struct {
+					name string
+					req  *systemgrpc.UpdateSystemL1KeyClaimRequest
+				}{
+					{
+						name: "externalID is not provided",
+						req:  &systemgrpc.UpdateSystemL1KeyClaimRequest{Region: allowedSystemRegion},
+					},
+					{
+						name: "region is not provided",
+						req:  &systemgrpc.UpdateSystemL1KeyClaimRequest{ExternalId: validRandID()},
+					},
+					{
+						name: "region is invalid",
+						req: &systemgrpc.UpdateSystemL1KeyClaimRequest{
+							ExternalId: validRandID(),
+							Region:     "invalid-region",
+						},
+					},
+					{
+						name: "both are not provided",
+						req:  &systemgrpc.UpdateSystemL1KeyClaimRequest{},
+					},
+				}
+				for _, tc := range tt {
+					t.Run(tc.name, func(t *testing.T) {
+						res, err := sSubj.UpdateSystemL1KeyClaim(ctx, tc.req)
+						assert.Error(t, err)
+						assert.Nil(t, res)
+						assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+					})
+				}
+
+				t.Run("multiple systems are found", func(t *testing.T) {
+					externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+					defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+
+					anotherExternalID, anotherSystemType, anotherRegion := registerRegionalSystem(t, ctx, sSubj, "", false, "system", nil, &externalID)
+					defer cleanupSystem(t, ctx, sSubj, mSubj, anotherExternalID, "", anotherSystemType, anotherRegion, false)
+
+					deleteRes, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
+						ExternalId: externalID,
+						Region:     region,
+					})
+					assert.Error(t, err)
+					assert.Nil(t, deleteRes)
+					assert.Equal(t, status.Code(service.ErrTooManyTypes), status.Code(err))
+				})
+			})
+			t.Run("should error out when no system is found", func(t *testing.T) {
+				res, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
+					ExternalId: validRandID(),
+					Region:     allowedSystemRegion,
+				})
+				assert.Error(t, err)
+				assert.Nil(t, res)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+			})
+			t.Run("should error out when regional system has different region", func(t *testing.T) {
+				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+				res, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
+					ExternalId: externalID,
+					Region:     "region-system",
+				})
+				assert.Error(t, err)
+				assert.Nil(t, res)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+
+			})
+			t.Run("should error out when no regional system is found", func(t *testing.T) {
+				system := &model.System{
+					ExternalID: validRandID(),
+					Type:       allowedSystemType,
+				}
+				assert.NoError(t, createSystemInDB(ctx, db, system))
+				defer func() {
+					assert.NoError(t, deleteSystemInDB(ctx, db, system.ExternalID, system.Type))
+				}()
+
+				res, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
+					ExternalId: system.ExternalID,
+					Region:     allowedSystemRegion,
+				})
+				assert.Error(t, err)
+				assert.Nil(t, res)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+			})
+			t.Run("should update L1KeyClaim successfully", func(t *testing.T) {
+				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, existingTenantID, false, allowedSystemType, nil, nil)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, existingTenantID, systemType, region, false)
+
+				result, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
+					ExternalId: externalID,
+					Region:     region,
+					TenantId:   existingTenantID,
+					L1KeyClaim: true,
+				})
+				// then
+				assert.NoError(t, err)
+				assert.True(t, result.GetSuccess())
+				lRes, err := sSubj.ListSystems(ctx, &systemgrpc.ListSystemsRequest{
+					TenantId: existingTenantID,
+				})
+				assert.NoError(t, err)
+				assert.True(t, lRes.Systems[0].HasL1KeyClaim)
+
+				// when updating to false
+				result, err = sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
+					ExternalId: externalID,
+					Region:     region,
+					TenantId:   existingTenantID,
+					L1KeyClaim: false,
+				})
+				// then
+				assert.NoError(t, err)
+				assert.True(t, result.GetSuccess())
+				lRes, err = sSubj.ListSystems(ctx, &systemgrpc.ListSystemsRequest{
+					TenantId: existingTenantID,
+				})
+				assert.NoError(t, err)
+				assert.False(t, lRes.Systems[0].HasL1KeyClaim)
+			})
+		})
+
+		t.Run("updateSystemStatus without type", func(t *testing.T) {
+			t.Run("should error out when", func(t *testing.T) {
+				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+				tt := []struct {
+					name string
+					req  *systemgrpc.UpdateSystemStatusRequest
+				}{
+					{
+						name: "externalID is not provided",
+						req:  &systemgrpc.UpdateSystemStatusRequest{Region: region},
+					},
+					{
+						name: "region is not provided",
+						req:  &systemgrpc.UpdateSystemStatusRequest{ExternalId: externalID},
+					},
+					{
+						name: "region is invalid",
+						req: &systemgrpc.UpdateSystemStatusRequest{
+							ExternalId: externalID,
+							Region:     "invalid-region",
+						},
+					},
+					{
+						name: "both are not provided",
+						req:  &systemgrpc.UpdateSystemStatusRequest{},
+					},
+				}
+				for _, tc := range tt {
+					t.Run(tc.name, func(t *testing.T) {
+						res, err := sSubj.UpdateSystemStatus(ctx, tc.req)
+						assert.Error(t, err)
+						assert.Nil(t, res)
+						assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+					})
+				}
+
+				t.Run("multiple systems are found", func(t *testing.T) {
+					externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+					defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+
+					anotherExternalID, anotherSystemType, anotherRegion := registerRegionalSystem(t, ctx, sSubj, "", false, "system", nil, &externalID)
+					defer cleanupSystem(t, ctx, sSubj, mSubj, anotherExternalID, "", anotherSystemType, anotherRegion, false)
+
+					deleteRes, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
+						ExternalId: externalID,
+						Region:     region,
+					})
+					assert.Error(t, err)
+					assert.Nil(t, deleteRes)
+					assert.Equal(t, status.Code(service.ErrTooManyTypes), status.Code(err))
+				})
+			})
+			t.Run("should error out when no system is found", func(t *testing.T) {
+				res, err := sSubj.UpdateSystemStatus(ctx, &systemgrpc.UpdateSystemStatusRequest{
+					ExternalId: validRandID(),
+					Region:     allowedSystemRegion,
+					Status:     typespb.Status_STATUS_PROCESSING,
+				})
+				assert.Error(t, err)
+				assert.Nil(t, res)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+			})
+			t.Run("should error out when regional system has different region", func(t *testing.T) {
+				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+
+				res, err := sSubj.UpdateSystemStatus(ctx, &systemgrpc.UpdateSystemStatusRequest{
+					ExternalId: externalID,
+					Region:     "region-system",
+					Status:     typespb.Status_STATUS_PROCESSING,
+				})
+				assert.Error(t, err)
+				assert.Nil(t, res)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+
+			})
+			t.Run("should error out when no regional system is found", func(t *testing.T) {
+				system := &model.System{
+					ExternalID: validRandID(),
+					Type:       allowedSystemType,
+				}
+				assert.NoError(t, createSystemInDB(ctx, db, system))
+				defer func() {
+					assert.NoError(t, deleteSystemInDB(ctx, db, system.ExternalID, system.Type))
+				}()
+
+				res, err := sSubj.UpdateSystemStatus(ctx, &systemgrpc.UpdateSystemStatusRequest{
+					ExternalId: system.ExternalID,
+					Region:     allowedSystemRegion,
+					Status:     typespb.Status_STATUS_PROCESSING,
+				})
+				assert.Error(t, err)
+				assert.Nil(t, res)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+			})
+			t.Run("should update status successfully", func(t *testing.T) {
+				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+
+				res, err := sSubj.UpdateSystemStatus(ctx, &systemgrpc.UpdateSystemStatusRequest{
+					ExternalId: externalID,
+					Region:     region,
+					Status:     typespb.Status_STATUS_PROCESSING,
+				})
+				// then
+				assert.NoError(t, err)
+				assert.True(t, res.GetSuccess())
+				listRes, err := sSubj.ListSystems(ctx, &systemgrpc.ListSystemsRequest{
+					ExternalId: externalID,
+					Region:     region,
+				})
+				assert.NoError(t, err)
+				assert.Len(t, listRes.Systems, 1)
+				assert.Equal(t, typespb.Status_STATUS_PROCESSING, listRes.Systems[0].GetStatus())
+			})
+		})
+
+		t.Run("setSystemLabels without type", func(t *testing.T) {
+			t.Run("should error out when", func(t *testing.T) {
+				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+				tt := []struct {
+					name string
+					req  *systemgrpc.SetSystemLabelsRequest
+				}{
+					{
+						name: "externalID is not provided",
+						req:  &systemgrpc.SetSystemLabelsRequest{Region: region},
+					},
+					{
+						name: "region is not provided",
+						req:  &systemgrpc.SetSystemLabelsRequest{ExternalId: externalID},
+					},
+					{
+						name: "region is invalid",
+						req: &systemgrpc.SetSystemLabelsRequest{
+							ExternalId: region,
+							Region:     "invalid-region",
+						},
+					},
+					{
+						name: "both are not provided",
+						req:  &systemgrpc.SetSystemLabelsRequest{},
+					},
+				}
+				for _, tc := range tt {
+					t.Run(tc.name, func(t *testing.T) {
+						res, err := sSubj.SetSystemLabels(ctx, tc.req)
+						assert.Error(t, err)
+						assert.Nil(t, res)
+						assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+					})
+				}
+
+				t.Run("multiple systems are found", func(t *testing.T) {
+					externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+					defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+
+					anotherExternalID, anotherSystemType, anotherRegion := registerRegionalSystem(t, ctx, sSubj, "", false, "system", nil, &externalID)
+					defer cleanupSystem(t, ctx, sSubj, mSubj, anotherExternalID, "", anotherSystemType, anotherRegion, false)
+
+					labelRes, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
+						ExternalId: externalID,
+						Region:     region,
+						Labels: map[string]string{
+							"key1": "value12",
+							"key3": "value3",
+						},
+					})
+					assert.Error(t, err)
+					assert.Nil(t, labelRes)
+					assert.Equal(t, status.Code(service.ErrTooManyTypes), status.Code(err))
+				})
+			})
+			t.Run("should error out when no system is found", func(t *testing.T) {
+				res, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
+					ExternalId: validRandID(),
+					Region:     allowedSystemRegion,
+					Labels: map[string]string{
+						"key1": "value12",
+						"key3": "value3",
+					},
+				})
+				assert.Error(t, err)
+				assert.Nil(t, res)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+			})
+			t.Run("should error out when regional system has different region", func(t *testing.T) {
+				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+				res, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
+					ExternalId: externalID,
+					Region:     "region-system",
+					Labels: map[string]string{
+						"key1": "value12",
+						"key3": "value3",
+					},
+				})
+				assert.Error(t, err)
+				assert.Nil(t, res)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+
+			})
+			t.Run("should error out when no regional system is found", func(t *testing.T) {
+				system := &model.System{
+					ExternalID: validRandID(),
+					Type:       allowedSystemType,
+				}
+				assert.NoError(t, createSystemInDB(ctx, db, system))
+				defer func() {
+					assert.NoError(t, deleteSystemInDB(ctx, db, system.ExternalID, system.Type))
+				}()
+
+				res, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
+					ExternalId: system.ExternalID,
+					Region:     allowedSystemRegion,
+					Labels: map[string]string{
+						"key1": "value12",
+						"key3": "value3",
+					},
+				})
+				assert.Error(t, err)
+				assert.Nil(t, res)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+			})
+			t.Run("should set labels successfully", func(t *testing.T) {
+				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+
+				res, err := sSubj.SetSystemLabels(ctx, &systemgrpc.SetSystemLabelsRequest{
+					ExternalId: externalID,
+					Region:     region,
+					Labels: map[string]string{
+						"key1": "value12",
+						"key3": "value3",
+					},
+				})
+				// then
+				assert.NoError(t, err)
+				assert.True(t, res.GetSuccess())
+				listRes, err := sSubj.ListSystems(ctx, &systemgrpc.ListSystemsRequest{
+					ExternalId: externalID,
+					Region:     region,
+				})
+				assert.NoError(t, err)
+				assert.Len(t, listRes.Systems, 1)
+				assert.Len(t, listRes.Systems[0].GetLabels(), 3)
+				assert.Equal(t, "value12", listRes.Systems[0].GetLabels()["key1"])
+				assert.Equal(t, "value2", listRes.Systems[0].GetLabels()["key2"])
+				assert.Equal(t, "value3", listRes.Systems[0].GetLabels()["key3"])
+			})
+		})
+
+		t.Run("removeSystemLabels without type", func(t *testing.T) {
+			t.Run("should error out when", func(t *testing.T) {
+				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+				tt := []struct {
+					name string
+					req  *systemgrpc.RemoveSystemLabelsRequest
+				}{
+					{
+						name: "externalID is not provided",
+						req:  &systemgrpc.RemoveSystemLabelsRequest{Region: region},
+					},
+					{
+						name: "region is not provided",
+						req:  &systemgrpc.RemoveSystemLabelsRequest{ExternalId: externalID},
+					},
+					{
+						name: "region is invalid",
+						req: &systemgrpc.RemoveSystemLabelsRequest{
+							ExternalId: externalID,
+							Region:     "invalid-region",
+						},
+					},
+					{
+						name: "both are not provided",
+						req:  &systemgrpc.RemoveSystemLabelsRequest{},
+					},
+				}
+				for _, tc := range tt {
+					t.Run(tc.name, func(t *testing.T) {
+						res, err := sSubj.RemoveSystemLabels(ctx, tc.req)
+						assert.Error(t, err)
+						assert.Nil(t, res)
+						assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
+					})
+				}
+
+				t.Run("multiple systems are found", func(t *testing.T) {
+					externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+					defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+
+					anotherExternalID, anotherSystemType, anotherRegion := registerRegionalSystem(t, ctx, sSubj, "", false, "system", nil, &externalID)
+					defer cleanupSystem(t, ctx, sSubj, mSubj, anotherExternalID, "", anotherSystemType, anotherRegion, false)
+
+					labelRes, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
+						ExternalId: externalID,
+						Region:     region,
+						LabelKeys:  []string{"key1"},
+					})
+					assert.Error(t, err)
+					assert.Nil(t, labelRes)
+					assert.Equal(t, status.Code(service.ErrTooManyTypes), status.Code(err))
+				})
+			})
+			t.Run("should error out when no system is found", func(t *testing.T) {
+				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
+					ExternalId: validRandID(),
+					Region:     allowedSystemRegion,
+					LabelKeys:  []string{"key1"},
+				})
+				assert.Error(t, err)
+				assert.Nil(t, res)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+			})
+			t.Run("should error out when regional system has different region", func(t *testing.T) {
+				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
+					ExternalId: externalID,
+					Region:     "region-system",
+					LabelKeys:  []string{"key1"},
+				})
+				assert.Error(t, err)
+				assert.Nil(t, res)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+
+			})
+			t.Run("should error out when no regional system is found", func(t *testing.T) {
+				system := &model.System{
+					ExternalID: validRandID(),
+					Type:       allowedSystemType,
+				}
+				assert.NoError(t, createSystemInDB(ctx, db, system))
+				defer func() {
+					assert.NoError(t, deleteSystemInDB(ctx, db, system.ExternalID, system.Type))
+				}()
+
+				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
+					ExternalId: system.ExternalID,
+					Region:     allowedSystemRegion,
+					LabelKeys:  []string{"key1"},
+				})
+				assert.Error(t, err)
+				assert.Nil(t, res)
+				assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
+			})
+			t.Run("should remove labels successfully", func(t *testing.T) {
+				externalID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, externalID, "", systemType, region, false)
+
+				res, err := sSubj.RemoveSystemLabels(ctx, &systemgrpc.RemoveSystemLabelsRequest{
+					ExternalId: externalID,
+					Region:     region,
+					LabelKeys:  []string{"key1"},
+				})
+				// then
+				assert.NoError(t, err)
+				assert.True(t, res.GetSuccess())
+				listRes, err := sSubj.ListSystems(ctx, &systemgrpc.ListSystemsRequest{
+					ExternalId: externalID,
+					Region:     region,
+				})
+				assert.NoError(t, err)
+				assert.Len(t, listRes.Systems, 1)
+				assert.Len(t, listRes.Systems[0].GetLabels(), 1)
+				assert.Equal(t, "value2", listRes.Systems[0].GetLabels()["key2"])
 			})
 		})
 	})
@@ -1439,24 +1625,4 @@ func getRegionalSystem(t *testing.T, ctx context.Context, subj systemgrpc.Servic
 	assert.Len(t, resp.GetSystems(), 1, "Expected exactly one system to be returned")
 
 	return resp.GetSystems()[0], nil
-}
-
-func registerRegionalSystem(t *testing.T, ctx context.Context, sSubj systemgrpc.ServiceClient, tenantID string, l1KeyClaim bool, systemType string, region, externalID *string) (string, string, string) {
-	req := validRegisterSystemReq()
-	req.TenantId = tenantID
-	req.HasL1KeyClaim = l1KeyClaim
-	req.Type = systemType
-	if region != nil {
-		req.Region = *region
-	}
-	if externalID != nil {
-		req.ExternalId = *externalID
-	}
-
-	res, err := sSubj.RegisterSystem(ctx, req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-	assert.True(t, res.Success)
-
-	return req.GetExternalId(), req.GetType(), req.GetRegion()
 }

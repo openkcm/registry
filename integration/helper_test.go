@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	mappinggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/mapping/v1"
 	"github.com/openkcm/common-sdk/pkg/commoncfg"
 	"github.com/openkcm/orbital"
 	"github.com/stretchr/testify/assert"
@@ -155,27 +156,23 @@ func validRegisterSystemReq() *systemgrpc.RegisterSystemRequest {
 	}
 }
 
-func unlinkSystemFromTenant(ctx context.Context, s systemgrpc.ServiceClient, externalID, region string) error {
+func unlinkSystemFromTenant(ctx context.Context, s systemgrpc.ServiceClient, m mappinggrpc.ServiceClient, externalID, region, tenantID string) error {
 	_, err := s.UpdateSystemStatus(ctx, &systemgrpc.UpdateSystemStatusRequest{
-		SystemIdentifier: &systemgrpc.SystemIdentifier{
-			ExternalId: externalID,
-			Type:       allowedSystemType,
-		},
-		Region: region,
-		Status: typespb.Status_STATUS_AVAILABLE,
+		ExternalId: externalID,
+		Type:       allowedSystemType,
+		Region:     region,
+		Status:     typespb.Status_STATUS_AVAILABLE,
 	})
 	if err != nil {
 		return err
 	}
 
-	_, err = s.UnlinkSystemsFromTenant(ctx, &systemgrpc.UnlinkSystemsFromTenantRequest{
-		SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-			{
-				ExternalId: externalID,
-				Type:       allowedSystemType,
-			},
-		},
+	_, err = m.UnmapSystemFromTenant(ctx, &mappinggrpc.UnmapSystemFromTenantRequest{
+		ExternalId: externalID,
+		Type:       allowedSystemType,
+		TenantId:   tenantID,
 	})
+
 	return err
 }
 
@@ -223,6 +220,11 @@ func createTenantInDB(ctx context.Context, db *gorm.DB, tenant *model.Tenant) er
 	return repo.Create(ctx, tenant)
 }
 
+func createSystemInDB(ctx context.Context, db *gorm.DB, system *model.System) error {
+	repo := sql.NewRepository(db)
+	return repo.Create(ctx, system)
+}
+
 // getSystemFromDB retrieves a system from the database by its ID.
 func getSystemFromDB(ctx context.Context, db *gorm.DB, externalID, systemType string) (*model.System, error) {
 	repo := sql.NewRepository(db)
@@ -255,35 +257,29 @@ func deleteSystemInDB(ctx context.Context, db *gorm.DB, externalID, systemType s
 }
 
 // deleteSystem deletes a regional system via the gRPC service client.
-func deleteSystem(ctx context.Context, s systemgrpc.ServiceClient, externalID, region string) error {
+func deleteSystem(ctx context.Context, s systemgrpc.ServiceClient, externalID, systemType, region string) error {
 	_, err := s.UpdateSystemStatus(ctx, &systemgrpc.UpdateSystemStatusRequest{
-		SystemIdentifier: &systemgrpc.SystemIdentifier{
-			ExternalId: externalID,
-			Type:       allowedSystemType,
-		},
-		Region: region,
-		Status: typespb.Status_STATUS_AVAILABLE,
+		ExternalId: externalID,
+		Type:       systemType,
+		Region:     region,
+		Status:     typespb.Status_STATUS_AVAILABLE,
 	})
 	if err != nil && !errors.Is(err, service.ErrSystemNotFound) {
 		return err
 	}
 	_, err = s.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
-		SystemIdentifier: &systemgrpc.SystemIdentifier{
-			ExternalId: externalID,
-			Type:       allowedSystemType,
-		},
-		Region: region,
+		ExternalId: externalID,
+		Type:       systemType,
+		Region:     region,
 	})
 	return err
 }
 
-func cleanupSystem(t *testing.T, ctx context.Context, sSubj systemgrpc.ServiceClient, externalID, tenantID, systemType, region string, l1KeyClaim bool) {
+func cleanupSystem(t *testing.T, ctx context.Context, sSubj systemgrpc.ServiceClient, mSubj mappinggrpc.ServiceClient, externalID, tenantID, systemType, region string, l1KeyClaim bool) {
 	if l1KeyClaim {
 		_, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
-			SystemIdentifier: &systemgrpc.SystemIdentifier{
-				ExternalId: externalID,
-				Type:       systemType,
-			},
+			ExternalId: externalID,
+			Type:       systemType,
 			Region:     region,
 			TenantId:   tenantID,
 			L1KeyClaim: false,
@@ -291,16 +287,34 @@ func cleanupSystem(t *testing.T, ctx context.Context, sSubj systemgrpc.ServiceCl
 		assert.NoError(t, err)
 	}
 	if tenantID != "" {
-		_, err := sSubj.UnlinkSystemsFromTenant(ctx, &systemgrpc.UnlinkSystemsFromTenantRequest{
-			SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-				{
-					ExternalId: externalID,
-					Type:       systemType,
-				},
-			},
+		_, err := mSubj.UnmapSystemFromTenant(ctx, &mappinggrpc.UnmapSystemFromTenantRequest{
+			ExternalId: externalID,
+			Type:       systemType,
+			TenantId:   tenantID,
 		})
 		assert.NoError(t, err)
 	}
-	err := deleteSystem(ctx, sSubj, externalID, region)
+
+	err := deleteSystem(ctx, sSubj, externalID, systemType, region)
 	assert.NoError(t, err)
+}
+
+func registerRegionalSystem(t *testing.T, ctx context.Context, sSubj systemgrpc.ServiceClient, tenantID string, l1KeyClaim bool, systemType string, region, externalID *string) (string, string, string) {
+	req := validRegisterSystemReq()
+	req.TenantId = tenantID
+	req.HasL1KeyClaim = l1KeyClaim
+	req.Type = systemType
+	if region != nil {
+		req.Region = *region
+	}
+	if externalID != nil {
+		req.ExternalId = *externalID
+	}
+
+	res, err := sSubj.RegisterSystem(ctx, req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+	assert.True(t, res.Success)
+
+	return req.GetExternalId(), req.GetType(), req.GetRegion()
 }
