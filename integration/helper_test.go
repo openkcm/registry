@@ -6,10 +6,12 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"testing"
 
 	"github.com/google/uuid"
 	"github.com/openkcm/common-sdk/pkg/commoncfg"
 	"github.com/openkcm/orbital"
+	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"gorm.io/gorm"
@@ -17,6 +19,7 @@ import (
 	_ "google.golang.org/grpc/health"
 
 	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
+	mappinggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/mapping/v1"
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 	typespb "github.com/openkcm/api-sdk/proto/kms/api/cmk/types/v1"
@@ -28,13 +31,13 @@ import (
 	"github.com/openkcm/registry/internal/service"
 )
 
-// Allowed system values based on the constraints defined in config.yaml
+// Allowed system values based on the constraints defined in config.yaml.
 const (
-	// Tenant.OwnerType allowed value
+	// Tenant.OwnerType allowed value.
 	allowedOwnerType = "ownerType1"
-	// System.Type allowed value
+	// System.Type allowed value.
 	allowedSystemType = "application"
-	// System.Region allowed value
+	// System.Region allowed value.
 	allowedSystemRegion = "region-application"
 )
 
@@ -63,7 +66,7 @@ func startDB() (*gorm.DB, error) {
 		return nil, err
 	}
 
-	err = db.AutoMigrate(&model.Tenant{}, &model.System{}, model.Auth{})
+	err = db.AutoMigrate(&model.Tenant{}, &model.System{}, &model.RegionalSystem{}, model.Auth{})
 	if err != nil {
 		return nil, err
 	}
@@ -153,9 +156,10 @@ func validRegisterSystemReq() *systemgrpc.RegisterSystemRequest {
 	}
 }
 
-func unlinkSystemFromTenant(ctx context.Context, s systemgrpc.ServiceClient, externalID, region string) error {
+func unlinkSystemFromTenant(ctx context.Context, s systemgrpc.ServiceClient, m mappinggrpc.ServiceClient, externalID, region, tenantID string) error {
 	_, err := s.UpdateSystemStatus(ctx, &systemgrpc.UpdateSystemStatusRequest{
 		ExternalId: externalID,
+		Type:       allowedSystemType,
 		Region:     region,
 		Status:     typespb.Status_STATUS_AVAILABLE,
 	})
@@ -163,14 +167,12 @@ func unlinkSystemFromTenant(ctx context.Context, s systemgrpc.ServiceClient, ext
 		return err
 	}
 
-	_, err = s.UnlinkSystemsFromTenant(ctx, &systemgrpc.UnlinkSystemsFromTenantRequest{
-		SystemIdentifiers: []*systemgrpc.SystemIdentifier{
-			{
-				ExternalId: externalID,
-				Region:     region,
-			},
-		},
+	_, err = m.UnmapSystemFromTenant(ctx, &mappinggrpc.UnmapSystemFromTenantRequest{
+		ExternalId: externalID,
+		Type:       allowedSystemType,
+		TenantId:   tenantID,
 	})
+
 	return err
 }
 
@@ -218,9 +220,47 @@ func createTenantInDB(ctx context.Context, db *gorm.DB, tenant *model.Tenant) er
 	return repo.Create(ctx, tenant)
 }
 
-func deleteSystem(ctx context.Context, s systemgrpc.ServiceClient, externalID, region string) error {
+func createSystemInDB(ctx context.Context, db *gorm.DB, system *model.System) error {
+	repo := sql.NewRepository(db)
+	return repo.Create(ctx, system)
+}
+
+// getSystemFromDB retrieves a system from the database by its ID.
+func getSystemFromDB(ctx context.Context, db *gorm.DB, externalID, systemType string) (*model.System, error) {
+	repo := sql.NewRepository(db)
+	sys := &model.System{
+		ExternalID: externalID,
+		Type:       systemType,
+	}
+
+	found, err := repo.Find(ctx, sys)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, nil
+	}
+
+	return sys, nil
+}
+
+// deleteSystemInDB deletes a system from the database by its ID.
+func deleteSystemInDB(ctx context.Context, db *gorm.DB, externalID, systemType string) error {
+	repo := sql.NewRepository(db)
+	sys, err := getSystemFromDB(ctx, db, externalID, systemType)
+	if err != nil {
+		return err
+	}
+
+	_, err = repo.Delete(ctx, sys)
+	return err
+}
+
+// deleteSystem deletes a regional system via the gRPC service client.
+func deleteSystem(ctx context.Context, s systemgrpc.ServiceClient, externalID, systemType, region string) error {
 	_, err := s.UpdateSystemStatus(ctx, &systemgrpc.UpdateSystemStatusRequest{
 		ExternalId: externalID,
+		Type:       systemType,
 		Region:     region,
 		Status:     typespb.Status_STATUS_AVAILABLE,
 	})
@@ -229,7 +269,52 @@ func deleteSystem(ctx context.Context, s systemgrpc.ServiceClient, externalID, r
 	}
 	_, err = s.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
 		ExternalId: externalID,
+		Type:       systemType,
 		Region:     region,
 	})
 	return err
+}
+
+func cleanupSystem(t *testing.T, ctx context.Context, sSubj systemgrpc.ServiceClient, mSubj mappinggrpc.ServiceClient, externalID, tenantID, systemType, region string, l1KeyClaim bool) {
+	if l1KeyClaim {
+		_, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
+			ExternalId: externalID,
+			Type:       systemType,
+			Region:     region,
+			TenantId:   tenantID,
+			L1KeyClaim: false,
+		})
+		assert.NoError(t, err)
+	}
+	if tenantID != "" {
+		_, err := mSubj.UnmapSystemFromTenant(ctx, &mappinggrpc.UnmapSystemFromTenantRequest{
+			ExternalId: externalID,
+			Type:       systemType,
+			TenantId:   tenantID,
+		})
+		assert.NoError(t, err)
+	}
+
+	err := deleteSystem(ctx, sSubj, externalID, systemType, region)
+	assert.NoError(t, err)
+}
+
+func registerRegionalSystem(t *testing.T, ctx context.Context, sSubj systemgrpc.ServiceClient, tenantID string, l1KeyClaim bool, systemType string, region, externalID *string) (string, string, string) {
+	req := validRegisterSystemReq()
+	req.TenantId = tenantID
+	req.HasL1KeyClaim = l1KeyClaim
+	req.Type = systemType
+	if region != nil {
+		req.Region = *region
+	}
+	if externalID != nil {
+		req.ExternalId = *externalID
+	}
+
+	res, err := sSubj.RegisterSystem(ctx, req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+	assert.True(t, res.Success)
+
+	return req.GetExternalId(), req.GetType(), req.GetRegion()
 }

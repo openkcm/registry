@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
-	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -20,9 +19,7 @@ const (
 	pqUniqueViolationErrCode = "23505" // see https://www.postgresql.org/docs/14/errcodes-appendix.html
 )
 
-var (
-	ErrUnknownTypeForJSONBField = errors.New("unknown type for jsonb field")
-)
+var ErrUnknownTypeForJSONBField = errors.New("unknown type for jsonb field")
 
 // ResourceRepository represents the repository for managing Resource data.
 type ResourceRepository struct {
@@ -90,7 +87,7 @@ func (r ResourceRepository) Delete(ctx context.Context, resource repository.Reso
 
 // Find fill given Resource with data, if found. Given Resource is used as query data.
 func (r ResourceRepository) Find(ctx context.Context, resource repository.Resource) (bool, error) {
-	result := r.db.WithContext(ctx).Limit(1).Find(resource)
+	result := r.db.WithContext(ctx).Where(resource).Limit(1).Find(resource)
 	if result.Error != nil {
 		slog.Error("error finding a resource", slog.Any("err", result.Error))
 		return false, result.Error
@@ -155,8 +152,37 @@ func (r ResourceRepository) Transaction(ctx context.Context, txFunc repository.T
 	})
 }
 
-// applyQuery applies the query to the database.
+// applyQuery applies the query to the database (including pagination and preloads).
 func applyQuery(db *gorm.DB, query repository.Query) (*gorm.DB, error) {
+	// Preloads are only relevant when fetching actual data, not counting
+	if len(query.Preloads) > 0 {
+		for _, preload := range query.Preloads {
+			db = db.Preload(preload)
+		}
+	}
+
+	// Apply the shared filtering logic
+	db, err := applyFilters(db, query)
+	if err != nil {
+		return nil, err
+	}
+
+	if query.Limit <= 0 {
+		query.Limit = repository.DefaultPaginationLimit
+	}
+
+	return handlePagination(query.Resource, query.Paginator, db).Limit(query.Limit), nil
+}
+
+// applyFilters applies Joins and CompositeKeys (WHERE clauses) to the database.
+func applyFilters(db *gorm.DB, query repository.Query) (*gorm.DB, error) {
+	if len(query.Joins) > 0 {
+		for _, join := range query.Joins {
+			joinStr := fmt.Sprintf("JOIN %s ON %s.%s = %s.%s", join.Resource.TableName(), join.Resource.TableName(), join.OnColumn, query.Resource.TableName(), join.Column)
+			db = db.Joins(joinStr)
+		}
+	}
+
 	if len(query.CompositeKeys) > 0 {
 		baseQuery := db.Session(&gorm.Session{NewDB: true})
 
@@ -176,11 +202,7 @@ func applyQuery(db *gorm.DB, query repository.Query) (*gorm.DB, error) {
 		db = db.Where(baseQuery)
 	}
 
-	if query.Limit <= 0 {
-		query.Limit = repository.DefaultPaginationLimit
-	}
-
-	return handlePagination(query.Paginator, db).Limit(query.Limit), nil
+	return db, nil
 }
 
 // handleCompositeKey applies the composite key to the query.
@@ -226,12 +248,16 @@ func handleQueryField(tx *gorm.DB, field repository.QueryField, value any) (*gor
 }
 
 // handlePagination applies pagination to the query.
-func handlePagination(paginator repository.Paginator, db *gorm.DB) *gorm.DB {
-	orderBy := []string{repository.CreatedAtField + " DESC"}
-	for _, val := range paginator.OrderFields {
-		orderBy = append(orderBy, val+" DESC")
-	}
+func handlePagination(resource repository.Resource, paginator repository.Paginator, db *gorm.DB) *gorm.DB {
+	createdAtField := fmt.Sprintf("%s.%s", resource.TableName(), repository.CreatedAtField)
 
+	orderedColumns := []string{createdAtField}
+	orderedColumns = append(orderedColumns, paginator.OrderFields...)
+
+	orderBy := make([]string, len(orderedColumns))
+	for i, col := range orderedColumns {
+		orderBy[i] = col + " DESC"
+	}
 	db = db.Order(strings.Join(orderBy, ", "))
 
 	if paginator.PageInfo == nil {
@@ -239,25 +265,19 @@ func handlePagination(paginator repository.Paginator, db *gorm.DB) *gorm.DB {
 	}
 
 	pageInfo := paginator.PageInfo
-	fields := []repository.QueryField{repository.CreatedAtField}
 
-	args := make([]any, 0, len(pageInfo.LastKey)+1)
-	for field := range pageInfo.LastKey {
+	fields := make([]string, 0, len(orderedColumns))
+	args := make([]any, 0, len(orderedColumns))
+	placeholderSlice := make([]string, 0, len(orderedColumns))
+
+	fields = append(fields, createdAtField)
+	args = append(args, pageInfo.LastCreatedAt)
+	placeholderSlice = append(placeholderSlice, "?")
+
+	for _, field := range paginator.OrderFields {
 		fields = append(fields, field)
-	}
-
-	slices.Sort(fields)
-	placeholderSlice := make([]string, len(fields))
-
-	for i, field := range fields {
-		placeholderSlice[i] = "?"
-
-		if field == repository.CreatedAtField {
-			args = append(args, pageInfo.LastCreatedAt)
-			continue
-		}
-
 		args = append(args, pageInfo.LastKey[field])
+		placeholderSlice = append(placeholderSlice, "?")
 	}
 
 	condition := fmt.Sprintf("(%s) < (%s)", strings.Join(fields, ", "), strings.Join(placeholderSlice, ", "))

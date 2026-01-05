@@ -672,7 +672,7 @@ func (t *Tenant) buildListTenantsQuery(in *tenantgrpc.ListTenantsRequest) (*repo
 	}
 
 	if in.GetOwnerType() != "" {
-		err := t.validation.Validate(model.TenantOwnerTypeValidationID, in.GetOwnerType())
+		err = t.validation.Validate(model.TenantOwnerTypeValidationID, in.GetOwnerType())
 		if err != nil {
 			return nil, err
 		}
@@ -732,7 +732,7 @@ func addLabelsCondition(cond *repository.CompositeKey, labels model.Labels) erro
 // Here repository r is passed as a variable to address the scenarios where we will
 // create a new repository from the existing repository for e.g. in the case of transaction.
 func assertNoSystemLinks(ctx context.Context, r repository.Repository, tenantID string) error {
-	query := repository.NewQuery(&model.Tenant{}).Where(
+	query := repository.NewQuery(&model.System{}).Where(
 		repository.NewCompositeKey().Where(repository.TenantIDField, tenantID),
 	)
 
