@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.7.6
+	github.com/jackc/pgx/v5 v5.8.0
 	github.com/openkcm/api-sdk v0.14.0
 	github.com/openkcm/common-sdk v1.9.0
 	github.com/openkcm/orbital v0.3.1
