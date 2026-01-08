@@ -14,35 +14,6 @@ import (
 
 const tenantOwnerType1 = "ownerType1"
 
-func TestTenantLabelsValidation(t *testing.T) {
-	tenantStatusActive := model.TenantStatus(tenantpb.Status_STATUS_ACTIVE.String())
-
-	tests := map[string]struct {
-		tenant model.Tenant
-	}{
-		"Tenant data missing label key": {
-			tenant: model.Tenant{
-				Name:      "SuccessFactor",
-				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
-				Region:    "CMK_REGION_EU",
-				Status:    tenantStatusActive,
-				OwnerType: tenantOwnerType1,
-				OwnerID:   "owner-id-123",
-				Role:      "ROLE_TRIAL",
-				Labels: map[string]string{
-					"": "value",
-				},
-			},
-		},
-	}
-	for name, test := range tests {
-		t.Run(name, func(t *testing.T) {
-			err := test.tenant.Labels.Validate()
-			assert.Error(t, err)
-		})
-	}
-}
-
 func TestTenantValidation(t *testing.T) {
 	tenantStatusActive := model.TenantStatus(tenantpb.Status_STATUS_ACTIVE.String())
 
@@ -140,6 +111,21 @@ func TestTenantValidation(t *testing.T) {
 				OwnerType: tenantOwnerType1,
 				OwnerID:   "owner-id-123",
 				Role:      "",
+			},
+			expectErr: true,
+		},
+		"Tenant label missing key": {
+			tenant: model.Tenant{
+				Name:      "SuccessFactor",
+				ID:        "1234567890-asdfghjkl~qwertyuio._zxcvbnmp",
+				Region:    "CMK_REGION_EU",
+				Status:    tenantStatusActive,
+				OwnerType: tenantOwnerType1,
+				OwnerID:   "owner-id-123",
+				Role:      "",
+				Labels: map[string]string{
+					"": "value1",
+				},
 			},
 			expectErr: true,
 		},

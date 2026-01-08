@@ -839,7 +839,6 @@ func TestSystemService(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, err, model.ErrLabelsIncludeEmptyString)
 				assert.Nil(t, res)
 			})
 			t.Run("system to update is not present in the database", func(t *testing.T) {

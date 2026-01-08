@@ -9,6 +9,7 @@ const (
 	ConstraintTypeList         = "list"
 	ConstraintTypeNonEmpty     = "non-empty"
 	ConstraintTypeNonEmptyKeys = "non-empty-keys"
+	ConstraintTypeNonEmptyVals = "non-empty-vals"
 	ConstraintTypeRegex        = "regex"
 	ConstraintTypeMapKeys      = "map-keys"
 )
@@ -74,6 +75,8 @@ func (c Constraint) getValidator() (Validator, error) {
 		return NonEmptyConstraint{}, nil
 	case ConstraintTypeNonEmptyKeys:
 		return NonEmptyKeysConstraint{}, nil
+	case ConstraintTypeNonEmptyVals:
+		return NonEmptyValConstraint{}, nil
 	case ConstraintTypeRegex:
 		if c.Spec == nil {
 			return nil, ErrConstraintSpecMissing

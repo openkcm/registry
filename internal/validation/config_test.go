@@ -135,11 +135,11 @@ func TestGetValidator(t *testing.T) {
 			expValidator: validation.NonEmptyKeysConstraint{},
 		},
 		{
-			name: "should return validator for valid non-empty-keys constraint",
+			name: "should return validator for valid non-empty-vals constraint",
 			constraint: validation.Constraint{
-				Type: validation.ConstraintTypeNonEmptyKeys,
+				Type: validation.ConstraintTypeNonEmptyVals,
 			},
-			expValidator: validation.NonEmptyKeysConstraint{},
+			expValidator: validation.NonEmptyValConstraint{},
 		},
 		{
 			name: "should return error when spec is missing for map-keys constraint",

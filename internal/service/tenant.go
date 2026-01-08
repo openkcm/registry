@@ -288,7 +288,7 @@ func (t *Tenant) SetTenantLabels(ctx context.Context, in *tenantgrpc.SetTenantLa
 		id: in.GetId(),
 		updateFunc: func(tenant *model.Tenant) {
 			if tenant.Labels == nil {
-				tenant.Labels = make(model.Labels)
+				tenant.Labels = make(model.Map)
 			}
 			maps.Copy(tenant.Labels, in.GetLabels())
 		},
@@ -543,8 +543,8 @@ func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRe
 		return ErrMissingLabels
 	}
 
-	labels := model.Labels(in.GetLabels())
-	err = labels.Validate()
+	labels := model.Map(in.GetLabels())
+	err = t.validation.Validate(model.TenantLabelsValidationID, labels)
 	if err != nil {
 		return err
 	}
@@ -680,7 +680,7 @@ func (t *Tenant) buildListTenantsQuery(in *tenantgrpc.ListTenantsRequest) (*repo
 		cond.Where(repository.OwnerTypeField, in.GetOwnerType())
 	}
 
-	err = addLabelsCondition(&cond, in.GetLabels())
+	err = addLabelsCondition(&cond, t.validation, in.GetLabels())
 	if err != nil {
 		return nil, err
 	}
@@ -709,9 +709,9 @@ func (t *Tenant) validateID(id string) error {
 	return nil
 }
 
-func addLabelsCondition(cond *repository.CompositeKey, labels model.Labels) error {
+func addLabelsCondition(cond *repository.CompositeKey, validation *validation.Validation, labels model.Map) error {
 	if len(labels) > 0 {
-		err := labels.Validate()
+		err := validation.Validate(model.TenantLabelsValidationID, labels)
 		if err != nil {
 			return err
 		}
@@ -802,10 +802,6 @@ func (t *Tenant) validateTenant(tenant *model.Tenant) error {
 		return status.Errorf(codes.InvalidArgument, "invalid tenant: %v", err)
 	}
 
-	err = tenant.Labels.Validate()
-	if err != nil {
-		return err
-	}
 	return nil
 }
 

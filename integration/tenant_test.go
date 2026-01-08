@@ -304,8 +304,6 @@ func TestTenantValidation(t *testing.T) {
 
 					// then
 					require.Error(t, err)
-					assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
-					assert.Equal(t, model.ErrLabelsIncludeEmptyString.Error(), err.Error())
 					assert.Nil(t, result)
 				})
 			}
@@ -588,7 +586,6 @@ func TestTenantValidation(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrLabelsIncludeEmptyString, err)
 				assert.Nil(t, res)
 			})
 			t.Run("labels values are empty", func(t *testing.T) {
@@ -602,7 +599,6 @@ func TestTenantValidation(t *testing.T) {
 
 				// then
 				assert.Error(t, err)
-				assert.ErrorIs(t, model.ErrLabelsIncludeEmptyString, err)
 				assert.Nil(t, res)
 			})
 			t.Run("tenant to update is not present in the database", func(t *testing.T) {

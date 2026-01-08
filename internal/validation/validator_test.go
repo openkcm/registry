@@ -143,6 +143,48 @@ func TestNonEmptyKeysConstraint(t *testing.T) {
 	}
 }
 
+func TestNonEmptyValConstraint(t *testing.T) {
+	// given
+	tests := []struct {
+		name       string
+		constraint validation.NonEmptyValConstraint
+		value      any
+		expErr     error
+	}{
+		{
+			name:       "should return error for non-map value",
+			constraint: validation.NonEmptyValConstraint{},
+			value:      "not-a-map",
+			expErr:     validation.ErrWrongType,
+		},
+		{
+			name:       "should return error for map with an empty VAL",
+			constraint: validation.NonEmptyValConstraint{},
+			value:      Map{"KEY1": "value1", "key2": ""},
+			expErr:     validation.ErrValueEmpty,
+		},
+		{
+			name:       "should return nil for map with non-empty keys",
+			constraint: validation.NonEmptyValConstraint{},
+			value:      Map{"key1": "value1", "key2": "value2"},
+			expErr:     nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// when
+			err := tt.constraint.Validate(tt.value)
+
+			// then
+			if tt.expErr != nil {
+				assert.ErrorIs(t, err, tt.expErr)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
 func TestRegExConstraint(t *testing.T) {
 	regExValidator, err := validation.NewRegexConstraint("^KMS_(TenantAdministrator|TenantAuditor)_[A-Za-z0-9-]+$")
 	assert.NotNil(t, regExValidator)
