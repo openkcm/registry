@@ -201,3 +201,321 @@ func TestRegExConstraint(t *testing.T) {
 		})
 	}
 }
+
+func TestMapKeysConstraint(t *testing.T) {
+	// given
+	tests := []struct {
+		name      string
+		keys      []validation.MapKeySpec
+		value     any
+		expErr    error
+		expErrMsg string
+	}{
+		{
+			name: "should return error for non-map value",
+			keys: []validation.MapKeySpec{
+				{Name: "issuer", Required: true},
+			},
+			value:  "not-a-map",
+			expErr: validation.ErrWrongType,
+		},
+		{
+			name: "should return error when required key is missing",
+			keys: []validation.MapKeySpec{
+				{Name: "issuer", Required: true},
+			},
+			value:  map[string]string{"other": "value"},
+			expErr: validation.ErrKeyMissing,
+		},
+		{
+			name: "should return nil when required key is present",
+			keys: []validation.MapKeySpec{
+				{Name: "issuer", Required: true},
+			},
+			value:  map[string]string{"issuer": "https://example.com"},
+			expErr: nil,
+		},
+		{
+			name: "should return nil when required key is present with empty value and no non-empty constraint",
+			keys: []validation.MapKeySpec{
+				{Name: "issuer", Required: true},
+			},
+			value:  map[string]string{"issuer": ""},
+			expErr: nil,
+		},
+		{
+			name: "should return nil when optional key is missing",
+			keys: []validation.MapKeySpec{
+				{Name: "issuer", Required: false},
+			},
+			value:  map[string]string{"other": "value"},
+			expErr: nil,
+		},
+		{
+			name: "should return nil when optional key is present with valid value",
+			keys: []validation.MapKeySpec{
+				{Name: "issuer", Required: false},
+			},
+			value:  map[string]string{"issuer": "https://example.com"},
+			expErr: nil,
+		},
+		{
+			name: "should return error when nested non-empty constraint fails",
+			keys: []validation.MapKeySpec{
+				{
+					Name:     "issuer",
+					Required: true,
+					Constraints: []validation.Constraint{
+						{Type: validation.ConstraintTypeNonEmpty},
+					},
+				},
+			},
+			value:  map[string]string{"issuer": ""},
+			expErr: validation.ErrValueEmpty,
+		},
+		{
+			name: "should return nil when nested non-empty constraint passes",
+			keys: []validation.MapKeySpec{
+				{
+					Name:     "issuer",
+					Required: true,
+					Constraints: []validation.Constraint{
+						{Type: validation.ConstraintTypeNonEmpty},
+					},
+				},
+			},
+			value:  map[string]string{"issuer": "https://example.com"},
+			expErr: nil,
+		},
+		{
+			name: "should return error when nested list constraint fails",
+			keys: []validation.MapKeySpec{
+				{
+					Name:     "type",
+					Required: true,
+					Constraints: []validation.Constraint{
+						{
+							Type: validation.ConstraintTypeList,
+							Spec: &validation.ConstraintSpec{
+								AllowList: []string{"oidc", "saml"},
+							},
+						},
+					},
+				},
+			},
+			value:  map[string]string{"type": "basic"},
+			expErr: validation.ErrValueNotAllowed,
+		},
+		{
+			name: "should return nil when nested list constraint passes",
+			keys: []validation.MapKeySpec{
+				{
+					Name:     "type",
+					Required: true,
+					Constraints: []validation.Constraint{
+						{
+							Type: validation.ConstraintTypeList,
+							Spec: &validation.ConstraintSpec{
+								AllowList: []string{"oidc", "saml"},
+							},
+						},
+					},
+				},
+			},
+			value:  map[string]string{"type": "oidc"},
+			expErr: nil,
+		},
+		{
+			name: "should return error when nested regex constraint fails",
+			keys: []validation.MapKeySpec{
+				{
+					Name:     "issuer",
+					Required: true,
+					Constraints: []validation.Constraint{
+						{
+							Type: validation.ConstraintTypeRegex,
+							Spec: &validation.ConstraintSpec{
+								Pattern: "^https://",
+							},
+						},
+					},
+				},
+			},
+			value:  map[string]string{"issuer": "http://insecure.com"},
+			expErr: validation.ErrValueNotAllowed,
+		},
+		{
+			name: "should return nil when nested regex constraint passes",
+			keys: []validation.MapKeySpec{
+				{
+					Name:     "issuer",
+					Required: true,
+					Constraints: []validation.Constraint{
+						{
+							Type: validation.ConstraintTypeRegex,
+							Spec: &validation.ConstraintSpec{
+								Pattern: "^https://",
+							},
+						},
+					},
+				},
+			},
+			value:  map[string]string{"issuer": "https://secure.com"},
+			expErr: nil,
+		},
+		{
+			name: "should validate multiple keys",
+			keys: []validation.MapKeySpec{
+				{Name: "issuer", Required: true},
+				{Name: "app_tid", Required: true},
+			},
+			value:  map[string]string{"issuer": "https://example.com", "app_tid": "tid123"},
+			expErr: nil,
+		},
+		{
+			name: "should return error when one of multiple required keys is missing",
+			keys: []validation.MapKeySpec{
+				{Name: "issuer", Required: true},
+				{Name: "app_tid", Required: true},
+			},
+			value:  map[string]string{"issuer": "https://example.com"},
+			expErr: validation.ErrKeyMissing,
+		},
+		{
+			name: "should allow extra keys not in spec",
+			keys: []validation.MapKeySpec{
+				{Name: "issuer", Required: true},
+			},
+			value:  map[string]string{"issuer": "https://example.com", "extra": "allowed"},
+			expErr: nil,
+		},
+		{
+			name: "should work with map[string]any",
+			keys: []validation.MapKeySpec{
+				{Name: "issuer", Required: true},
+			},
+			value:  map[string]any{"issuer": "https://example.com"},
+			expErr: nil,
+		},
+		{
+			name: "should work with Map interface",
+			keys: []validation.MapKeySpec{
+				{Name: "issuer", Required: true},
+			},
+			value:  Map{"issuer": "https://example.com"},
+			expErr: nil,
+		},
+		{
+			name: "should skip nested constraints when optional key is missing",
+			keys: []validation.MapKeySpec{
+				{
+					Name:     "issuer",
+					Required: false,
+					Constraints: []validation.Constraint{
+						{Type: validation.ConstraintTypeNonEmpty},
+					},
+				},
+			},
+			value:  map[string]string{"other": "value"},
+			expErr: nil,
+		},
+		{
+			name: "should run nested constraints when optional key is present",
+			keys: []validation.MapKeySpec{
+				{
+					Name:     "issuer",
+					Required: false,
+					Constraints: []validation.Constraint{
+						{Type: validation.ConstraintTypeNonEmpty},
+					},
+				},
+			},
+			value:  map[string]string{"issuer": ""},
+			expErr: validation.ErrValueEmpty,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// when
+			constraint, err := validation.NewMapKeysConstraint(tt.keys)
+			assert.NoError(t, err)
+			assert.NotNil(t, constraint)
+
+			err = constraint.Validate(tt.value)
+
+			// then
+			if tt.expErr != nil {
+				assert.ErrorIs(t, err, tt.expErr)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestNewMapKeysConstraint(t *testing.T) {
+	// given
+	tests := []struct {
+		name   string
+		keys   []validation.MapKeySpec
+		expErr error
+	}{
+		{
+			name: "should return error when key name is empty",
+			keys: []validation.MapKeySpec{
+				{Name: ""},
+			},
+			expErr: validation.ErrConstraintKeyNameMissing,
+		},
+		{
+			name: "should return error when nested constraint is invalid",
+			keys: []validation.MapKeySpec{
+				{
+					Name: "issuer",
+					Constraints: []validation.Constraint{
+						{Type: "unknown"},
+					},
+				},
+			},
+			expErr: validation.ErrUnknownConstraintType,
+		},
+		{
+			name: "should return constraint for valid keys",
+			keys: []validation.MapKeySpec{
+				{Name: "issuer", Required: true},
+				{Name: "app_tid", Required: false},
+			},
+			expErr: nil,
+		},
+		{
+			name: "should return constraint for keys with nested constraints",
+			keys: []validation.MapKeySpec{
+				{
+					Name:     "issuer",
+					Required: true,
+					Constraints: []validation.Constraint{
+						{Type: validation.ConstraintTypeNonEmpty},
+					},
+				},
+			},
+			expErr: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// when
+			constraint, err := validation.NewMapKeysConstraint(tt.keys)
+
+			// then
+			if tt.expErr != nil {
+				assert.ErrorIs(t, err, tt.expErr)
+				assert.Nil(t, constraint)
+				return
+			}
+			assert.NoError(t, err)
+			assert.NotNil(t, constraint)
+		})
+	}
+}

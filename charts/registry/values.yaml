@@ -519,10 +519,14 @@ config:
       - type: list # defines the allowed values for the Type field
         spec:
           allowlist: ["type1","type2","type3"] # restricts Type to either "type1", "type2" or "type3"
-    - id: Auth.Properties.Issuer # configures validation constraints for the Issuer key within the Properties field of Auth
-      skipIfNotExists: true # skips if this field is not present
-      constraints: 
-      - type: non-empty # defines the value of Issuer cannot be non-empty if present
+    - id: Auth.Properties # configures validation constraints for the Properties field of Auth
+      constraints:
+      - type: map-keys
+        spec:
+          keys:
+          - name: Issuer # configure validation constraint for the Issuer key in the properties map
+            constraints:
+              - type: non-empty # defines the value of Issuer cannot be non-empty if present
     - id: Tenant.OwnerType # configures validation constraints for the OwnerType field of a Tenant
       constraints:
       - type: list # defines the allowed values for the OwnerType field

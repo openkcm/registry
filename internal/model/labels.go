@@ -18,7 +18,7 @@ var (
 // Labels are key/value pairs attached to resources such as tenants.
 // Labels enable clients to map their own organizational structure onto resources
 // in a loosely coupled fashion.
-type Labels map[string]string
+type Labels map[string]string //nolint:recvcheck
 
 // Validate validates given labels data.
 func (l *Labels) Validate() error {
@@ -53,4 +53,13 @@ func (l *Labels) Scan(src any) error {
 	}
 
 	return json.Unmarshal(bytes, l)
+}
+
+// Map converts model.Labels to a map[string]any so we can run map validations.
+func (l Labels) Map() map[string]any {
+	res := make(map[string]any, len(l))
+	for k, v := range l {
+		res[k] = v
+	}
+	return res
 }

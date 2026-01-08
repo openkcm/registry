@@ -528,7 +528,7 @@ func TestAuthValidation(t *testing.T) {
 				expErrCode: codes.InvalidArgument,
 			},
 			{
-				name: "should return error for failed configured validation without pre-existing validation ID (Auth.Properties.Issuer)",
+				name: "should return error for failed configured validation without pre-existing validation ID (Auth.Properties)",
 				request: &authgrpc.ApplyAuthRequest{
 					ExternalId: "external-id",
 					TenantId:   "tenant-id",

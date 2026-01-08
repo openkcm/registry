@@ -134,10 +134,14 @@ validations:
     - type: list
       spec:
         allowlist: ["oidc"]
-  - id: Auth.Properties.Issuer
-    skipIfNotExists: true
+  - id: Auth.Properties
     constraints:
-    - type: non-empty
+    - type: map-keys
+      spec:
+        keys:
+        - name: Issuer
+          constraints:
+            - type: non-empty
   - id: Tenant.OwnerType
     constraints:
     - type: list
