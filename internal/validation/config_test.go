@@ -212,13 +212,13 @@ func TestGetValidator(t *testing.T) {
 							},
 						},
 						{
-							Name:     "app_tid",
+							Name:     "application_id",
 							Required: true,
 							Constraints: []validation.Constraint{
 								{
 									Type: validation.ConstraintTypeList,
 									Spec: &validation.ConstraintSpec{
-										AllowList: []string{"tid1", "tid2"},
+										AllowList: []string{"id1", "id2"},
 									},
 								},
 							},

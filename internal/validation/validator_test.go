@@ -185,6 +185,7 @@ func TestNonEmptyValConstraint(t *testing.T) {
 		})
 	}
 }
+
 func TestRegExConstraint(t *testing.T) {
 	regExValidator, err := validation.NewRegexConstraint("^KMS_(TenantAdministrator|TenantAuditor)_[A-Za-z0-9-]+$")
 	assert.NotNil(t, regExValidator)
@@ -409,16 +410,16 @@ func TestMapKeysConstraint(t *testing.T) {
 			name: "should validate multiple keys",
 			keys: []validation.MapKeySpec{
 				{Name: "issuer", Required: true},
-				{Name: "app_tid", Required: true},
+				{Name: "other", Required: true},
 			},
-			value:  map[string]string{"issuer": "https://example.com", "app_tid": "tid123"},
+			value:  map[string]string{"issuer": "https://example.com", "other": "other_value"},
 			expErr: nil,
 		},
 		{
 			name: "should return error when one of multiple required keys is missing",
 			keys: []validation.MapKeySpec{
 				{Name: "issuer", Required: true},
-				{Name: "app_tid", Required: true},
+				{Name: "other", Required: true},
 			},
 			value:  map[string]string{"issuer": "https://example.com"},
 			expErr: validation.ErrKeyMissing,
@@ -526,7 +527,7 @@ func TestNewMapKeysConstraint(t *testing.T) {
 			name: "should return constraint for valid keys",
 			keys: []validation.MapKeySpec{
 				{Name: "issuer", Required: true},
-				{Name: "app_tid", Required: false},
+				{Name: "other", Required: false},
 			},
 			expErr: nil,
 		},

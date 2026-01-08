@@ -59,7 +59,7 @@ func (n NonEmptyConstraint) Validate(value any) error {
 // NonEmptyKeysConstraint validates that all keys in a map are non-empty strings.
 type NonEmptyKeysConstraint struct{}
 
-// Validate checks if the provided value is a map with non-empyy key value pairs.
+// Validate checks if the provided value is a map where each key is non-empty.
 func (n NonEmptyKeysConstraint) Validate(value any) error {
 	mapValue, ok := value.(Map)
 	if !ok {
@@ -77,7 +77,7 @@ func (n NonEmptyKeysConstraint) Validate(value any) error {
 // NonEmptyValConstraint validates that all keys in a map have non-empty values.
 type NonEmptyValConstraint struct{}
 
-// Validate checks if the provided value is a map with non-empyy key value pairs.
+// Validate checks if the provided value is a map where each value corresponding to a key is non-empty.
 func (n NonEmptyValConstraint) Validate(value any) error {
 	mapValue, ok := value.(Map)
 	if !ok {

@@ -526,7 +526,7 @@ config:
           keys:
           - name: Issuer # configure validation constraint for the Issuer key in the properties map
             constraints:
-              - type: non-empty # defines the value of Issuer cannot be non-empty if present
+              - type: non-empty # defines that the value corresponding of the Issuer key cannot be empty if the key is present
     - id: Tenant.OwnerType # configures validation constraints for the OwnerType field of a Tenant
       constraints:
       - type: list # defines the allowed values for the OwnerType field
