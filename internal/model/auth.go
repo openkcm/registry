@@ -21,14 +21,14 @@ const (
 
 // Auth represents an auth method associated with a tenant.
 type Auth struct {
-	ExternalID   string    `gorm:"column:id;primaryKey" validationID:"Auth.ExternalID"`
-	TenantID     string    `gorm:"column:tenant_id;not null" validationID:"Auth.TenantID"`
-	Type         string    `gorm:"column:type;not null" validationID:"Auth.Type"`
-	Properties   Map       `gorm:"column:properties;type:jsonb" validationID:"Auth.Properties"`
-	Status       string    `gorm:"column:status;not null" validationID:"Auth.Status"`
-	ErrorMessage string    `gorm:"column:error_message"`
-	UpdatedAt    time.Time `gorm:"column:updated_at;autoUpdateTime"`
-	CreatedAt    time.Time `gorm:"column:created_at;autoCreateTime"`
+	ExternalID   string            `gorm:"column:id;primaryKey" validationID:"Auth.ExternalID"`
+	TenantID     string            `gorm:"column:tenant_id;not null" validationID:"Auth.TenantID"`
+	Type         string            `gorm:"column:type;not null" validationID:"Auth.Type"`
+	Properties   map[string]string `gorm:"column:properties;type:jsonb;serializer:json" validationID:"Auth.Properties"`
+	Status       string            `gorm:"column:status;not null" validationID:"Auth.Status"`
+	ErrorMessage string            `gorm:"column:error_message"`
+	UpdatedAt    time.Time         `gorm:"column:updated_at;autoUpdateTime"`
+	CreatedAt    time.Time         `gorm:"column:created_at;autoCreateTime"`
 }
 
 // TableName specifies the database table name for the Auth model.

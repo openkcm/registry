@@ -9,9 +9,9 @@ import (
 )
 
 type Model struct {
-	Field string     `validationID:"Model.Field"`
-	Child ChildModel `validationID:"Model.Child"`
-	Map   Map        `validationID:"Model.Map"`
+	Field string            `validationID:"Model.Field"`
+	Child ChildModel        `validationID:"Model.Child"`
+	Map   map[string]string `validationID:"Model.Map"`
 }
 
 func (m Model) Validations() []validation.Field {
@@ -20,16 +20,6 @@ func (m Model) Validations() []validation.Field {
 
 type ChildModel struct {
 	Field string `validationID:"Field"`
-}
-
-type Map map[string]string
-
-func (m Map) Map() map[string]any {
-	res := make(map[string]any)
-	for k, v := range m {
-		res[k] = v
-	}
-	return res
 }
 
 func TestGetIDs(t *testing.T) {
@@ -49,6 +39,10 @@ func TestGetIDs(t *testing.T) {
 		_, exists := ids[id]
 		assert.True(t, exists, "expected ID %s to be present", id)
 	}
+
+	// Map keys should NOT be flattened into IDs
+	_, exists := ids["Model.Map.Key"]
+	assert.False(t, exists, "Model.Map.Key should NOT be present as an ID")
 }
 
 func TestGetValuesByID(t *testing.T) {
@@ -58,7 +52,7 @@ func TestGetValuesByID(t *testing.T) {
 		Child: ChildModel{
 			Field: "childValue",
 		},
-		Map: Map{
+		Map: map[string]string{
 			"Key": "mapValue",
 		},
 	}
@@ -70,7 +64,15 @@ func TestGetValuesByID(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "value", valuesByID["Model.Field"])
 	assert.Equal(t, "childValue", valuesByID["Model.Child.Field"])
-	assert.Equal(t, "mapValue", valuesByID["Model.Map.Key"])
+
+	// Map should be returned as the whole map, not flattened
+	mapVal, ok := valuesByID["Model.Map"].(map[string]string)
+	assert.True(t, ok, "Model.Map should be a map[string]string")
+	assert.Equal(t, "mapValue", mapVal["Key"])
+
+	// Map keys should NOT be flattened
+	_, exists := valuesByID["Model.Map.Key"]
+	assert.False(t, exists, "Model.Map.Key should NOT exist as a separate value")
 }
 
 func TestGetValuesByID_NilMap(t *testing.T) {

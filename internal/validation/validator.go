@@ -61,12 +61,12 @@ type NonEmptyKeysConstraint struct{}
 
 // Validate checks if the provided value is a map where each key is non-empty.
 func (n NonEmptyKeysConstraint) Validate(value any) error {
-	mapValue, ok := value.(Map)
+	mapValue, ok := value.(map[string]string)
 	if !ok {
 		return fmt.Errorf("%w: %T", ErrWrongType, value)
 	}
 
-	for k, v := range mapValue.Map() {
+	for k, v := range mapValue {
 		if k == "" {
 			return fmt.Errorf("%w in key-value pair: '%s':'%v'", ErrKeyEmpty, k, v)
 		}
@@ -79,12 +79,12 @@ type NonEmptyValConstraint struct{}
 
 // Validate checks if the provided value is a map where each value corresponding to a key is non-empty.
 func (n NonEmptyValConstraint) Validate(value any) error {
-	mapValue, ok := value.(Map)
+	mapValue, ok := value.(map[string]string)
 	if !ok {
 		return fmt.Errorf("%w: %T", ErrWrongType, value)
 	}
 
-	for k, v := range mapValue.Map() {
+	for k, v := range mapValue {
 		if v == "" {
 			return fmt.Errorf("%w in key-value pair: '%s':'%v'", ErrValueEmpty, k, v)
 		}
@@ -195,9 +195,9 @@ func NewMapKeysConstraint(keys []MapKeySpec) (*MapKeysConstraint, error) {
 
 // Validate checks if the provided map value satisfies all key constraints.
 func (m *MapKeysConstraint) Validate(value any) error {
-	mapValue, err := m.toStringMap(value)
-	if err != nil {
-		return err
+	mapValue, ok := value.(map[string]string)
+	if !ok {
+		return fmt.Errorf("%w: map should be a map[string]string", ErrWrongType)
 	}
 
 	for _, keySpec := range m.Keys {
@@ -219,34 +219,4 @@ func (m *MapKeysConstraint) Validate(value any) error {
 	}
 
 	return nil
-}
-
-// toStringMap converts the value to a map[string]string.
-func (m *MapKeysConstraint) toStringMap(value any) (map[string]string, error) {
-	switch v := value.(type) {
-	case Map:
-		result := make(map[string]string, len(v.Map()))
-		for key, val := range v.Map() {
-			strVal, ok := val.(string)
-			if !ok {
-				return nil, fmt.Errorf("%w: map value for key %q is not a string", ErrWrongType, key)
-			}
-			result[key] = strVal
-		}
-		return result, nil
-	case map[string]string:
-		return v, nil
-	case map[string]any:
-		result := make(map[string]string, len(v))
-		for key, val := range v {
-			strVal, ok := val.(string)
-			if !ok {
-				return nil, fmt.Errorf("%w: map value for key %q is not a string", ErrWrongType, key)
-			}
-			result[key] = strVal
-		}
-		return result, nil
-	default:
-		return nil, fmt.Errorf("%w: expected map, got %T", ErrWrongType, value)
-	}
 }

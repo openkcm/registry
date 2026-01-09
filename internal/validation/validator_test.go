@@ -117,13 +117,13 @@ func TestNonEmptyKeysConstraint(t *testing.T) {
 		{
 			name:       "should return error for map with an empty key",
 			constraint: validation.NonEmptyKeysConstraint{},
-			value:      Map{"": "value1", "key2": "value2"},
+			value:      map[string]string{"": "value1", "key2": "value2"},
 			expErr:     validation.ErrKeyEmpty,
 		},
 		{
 			name:       "should return nil for map with non-empty keys",
 			constraint: validation.NonEmptyKeysConstraint{},
-			value:      Map{"key1": "value1", "key2": "value2"},
+			value:      map[string]string{"key1": "value1", "key2": "value2"},
 			expErr:     nil,
 		},
 	}
@@ -160,13 +160,13 @@ func TestNonEmptyValConstraint(t *testing.T) {
 		{
 			name:       "should return error for map with an empty VAL",
 			constraint: validation.NonEmptyValConstraint{},
-			value:      Map{"KEY1": "value1", "key2": ""},
+			value:      map[string]string{"KEY1": "value1", "key2": ""},
 			expErr:     validation.ErrValueEmpty,
 		},
 		{
 			name:       "should return nil for map with non-empty keys",
 			constraint: validation.NonEmptyValConstraint{},
-			value:      Map{"key1": "value1", "key2": "value2"},
+			value:      map[string]string{"key1": "value1", "key2": "value2"},
 			expErr:     nil,
 		},
 	}
@@ -248,11 +248,10 @@ func TestRegExConstraint(t *testing.T) {
 func TestMapKeysConstraint(t *testing.T) {
 	// given
 	tests := []struct {
-		name      string
-		keys      []validation.MapKeySpec
-		value     any
-		expErr    error
-		expErrMsg string
+		name   string
+		keys   []validation.MapKeySpec
+		value  any
+		expErr error
 	}{
 		{
 			name: "should return error for non-map value",
@@ -430,22 +429,6 @@ func TestMapKeysConstraint(t *testing.T) {
 				{Name: "issuer", Required: true},
 			},
 			value:  map[string]string{"issuer": "https://example.com", "extra": "allowed"},
-			expErr: nil,
-		},
-		{
-			name: "should work with map[string]any",
-			keys: []validation.MapKeySpec{
-				{Name: "issuer", Required: true},
-			},
-			value:  map[string]any{"issuer": "https://example.com"},
-			expErr: nil,
-		},
-		{
-			name: "should work with Map interface",
-			keys: []validation.MapKeySpec{
-				{Name: "issuer", Required: true},
-			},
-			value:  Map{"issuer": "https://example.com"},
 			expErr: nil,
 		},
 		{

@@ -366,7 +366,7 @@ func (s *System) SetSystemLabels(ctx context.Context, in *systemgrpc.SetSystemLa
 		}
 
 		if systemToPatch.Labels == nil {
-			systemToPatch.Labels = make(model.Map)
+			systemToPatch.Labels = make(map[string]string)
 		}
 
 		maps.Copy(systemToPatch.Labels, in.GetLabels())
@@ -477,7 +477,7 @@ func (s *System) validateSetSystemLabelsRequest(in *systemgrpc.SetSystemLabelsRe
 		return ErrMissingLabels
 	}
 
-	labels := model.Map(in.GetLabels())
+	labels := in.GetLabels()
 	err := s.validation.Validate(model.RegionalSystemLabelsValidationID, labels)
 	if err != nil {
 		return err

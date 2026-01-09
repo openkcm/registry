@@ -19,18 +19,18 @@ const (
 
 // Tenant represents the customer-managed key (CMK) tenant entity.
 type Tenant struct {
-	ID              string       `gorm:"column:id;primaryKey" validationID:"Tenant.ID"`
-	Name            string       `gorm:"column:name" validationID:"Tenant.Name"`
-	Region          string       `gorm:"column:region" validationID:"Tenant.Region"`
-	OwnerID         string       `gorm:"column:owner_id" validationID:"Tenant.OwnerID"`
-	OwnerType       string       `gorm:"column:owner_type" validationID:"Tenant.OwnerType"`
-	Status          TenantStatus `gorm:"column:status"`
-	StatusUpdatedAt time.Time    `gorm:"column:status_updated_at"`
-	Role            string       `gorm:"column:role" validationID:"Tenant.Role"`
-	Labels          Map          `gorm:"column:labels;type:jsonb" validationID:"Tenant.Labels"`
-	UserGroups      []string     `gorm:"column:user_groups;serializer:json" validationID:"Tenant.UserGroups"`
-	UpdatedAt       time.Time    `gorm:"column:updated_at;autoUpdateTime"`
-	CreatedAt       time.Time    `gorm:"column:created_at;autoCreateTime"`
+	ID              string            `gorm:"column:id;primaryKey" validationID:"Tenant.ID"`
+	Name            string            `gorm:"column:name" validationID:"Tenant.Name"`
+	Region          string            `gorm:"column:region" validationID:"Tenant.Region"`
+	OwnerID         string            `gorm:"column:owner_id" validationID:"Tenant.OwnerID"`
+	OwnerType       string            `gorm:"column:owner_type" validationID:"Tenant.OwnerType"`
+	Status          TenantStatus      `gorm:"column:status"`
+	StatusUpdatedAt time.Time         `gorm:"column:status_updated_at"`
+	Role            string            `gorm:"column:role" validationID:"Tenant.Role"`
+	Labels          map[string]string `gorm:"column:labels;type:jsonb;serializer:json" validationID:"Tenant.Labels"`
+	UserGroups      []string          `gorm:"column:user_groups;serializer:json" validationID:"Tenant.UserGroups"`
+	UpdatedAt       time.Time         `gorm:"column:updated_at;autoUpdateTime"`
+	CreatedAt       time.Time         `gorm:"column:created_at;autoCreateTime"`
 }
 
 var _ validation.Model = &Tenant{}

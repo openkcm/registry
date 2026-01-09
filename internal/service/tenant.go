@@ -288,7 +288,7 @@ func (t *Tenant) SetTenantLabels(ctx context.Context, in *tenantgrpc.SetTenantLa
 		id: in.GetId(),
 		updateFunc: func(tenant *model.Tenant) {
 			if tenant.Labels == nil {
-				tenant.Labels = make(model.Map)
+				tenant.Labels = make(map[string]string)
 			}
 			maps.Copy(tenant.Labels, in.GetLabels())
 		},
@@ -543,7 +543,7 @@ func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRe
 		return ErrMissingLabels
 	}
 
-	labels := model.Map(in.GetLabels())
+	labels := in.GetLabels()
 	err = t.validation.Validate(model.TenantLabelsValidationID, labels)
 	if err != nil {
 		return err
@@ -709,7 +709,7 @@ func (t *Tenant) validateID(id string) error {
 	return nil
 }
 
-func addLabelsCondition(cond *repository.CompositeKey, validation *validation.Validation, labels model.Map) error {
+func addLabelsCondition(cond *repository.CompositeKey, validation *validation.Validation, labels map[string]string) error {
 	if len(labels) > 0 {
 		err := validation.Validate(model.TenantLabelsValidationID, labels)
 		if err != nil {

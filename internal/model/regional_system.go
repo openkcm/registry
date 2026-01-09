@@ -21,14 +21,14 @@ const (
 
 // RegionalSystem represents a customer-exposed "tenant" of any kind.
 type RegionalSystem struct {
-	SystemID      uuid.UUID `gorm:"type:uuid;column:system_id;primaryKey"`
-	Region        string    `gorm:"column:region;primaryKey" validationID:"RegionalSystem.Region"`
-	Status        string    `gorm:"column:status" validationID:"RegionalSystem.Status"`
-	L2KeyID       string    `gorm:"column:l2key_id" validationID:"RegionalSystem.L2KeyID"`
-	HasL1KeyClaim *bool     `gorm:"column:has_l1_key_claim"` // claim status of related L1 key
-	Labels        Map       `gorm:"column:labels;type:jsonb" validationID:"RegionalSystem.Labels"`
-	UpdatedAt     time.Time `gorm:"column:updated_at;autoUpdateTime"`
-	CreatedAt     time.Time `gorm:"column:created_at;autoCreateTime"`
+	SystemID      uuid.UUID         `gorm:"type:uuid;column:system_id;primaryKey"`
+	Region        string            `gorm:"column:region;primaryKey" validationID:"RegionalSystem.Region"`
+	Status        string            `gorm:"column:status" validationID:"RegionalSystem.Status"`
+	L2KeyID       string            `gorm:"column:l2key_id" validationID:"RegionalSystem.L2KeyID"`
+	HasL1KeyClaim *bool             `gorm:"column:has_l1_key_claim"` // claim status of related L1 key
+	Labels        map[string]string `gorm:"column:labels;type:jsonb;serializer:json" validationID:"RegionalSystem.Labels"`
+	UpdatedAt     time.Time         `gorm:"column:updated_at;autoUpdateTime"`
+	CreatedAt     time.Time         `gorm:"column:created_at;autoCreateTime"`
 
 	System *System `gorm:"foreignKey:SystemID;references:ID"`
 }
