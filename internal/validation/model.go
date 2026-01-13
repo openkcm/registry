@@ -16,19 +16,10 @@ type (
 	Model interface {
 		Validations() []Field
 	}
-
-	// Map defines an interface for types that can be represented as a map.
-	Map interface {
-		Map() map[string]any
-	}
 )
 
 // GetValues gets all values from the given model
 // mapped by their validation IDs.
-//
-// If one of the values implements the Map interface,
-// the keys and values of the resulting map will be flattened
-// into the resulting map.
 func GetValues(model Model) (map[ID]any, error) {
 	decMap := make(map[string]any)
 	config := mapstructure.DecoderConfig{
@@ -56,12 +47,8 @@ func addValuesByID(res map[ID]any, m map[string]any, id ID) {
 		}
 		res[totalID] = v
 
-		if m, ok := v.(map[string]any); ok {
-			addValuesByID(res, m, totalID)
-		}
-
-		if m, ok := v.(Map); ok {
-			addValuesByID(res, m.Map(), totalID)
+		if nested, ok := v.(map[string]any); ok {
+			addValuesByID(res, nested, totalID)
 		}
 	}
 }
@@ -95,8 +82,8 @@ func addIDs(res map[ID]struct{}, m map[string]any, id ID) {
 		}
 		res[totalID] = struct{}{}
 
-		if m, ok := v.(map[string]any); ok {
-			addIDs(res, m, totalID)
+		if nested, ok := v.(map[string]any); ok {
+			addIDs(res, nested, totalID)
 		}
 	}
 }

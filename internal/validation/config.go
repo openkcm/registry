@@ -9,7 +9,9 @@ const (
 	ConstraintTypeList         = "list"
 	ConstraintTypeNonEmpty     = "non-empty"
 	ConstraintTypeNonEmptyKeys = "non-empty-keys"
+	ConstraintTypeNonEmptyVals = "non-empty-vals"
 	ConstraintTypeRegex        = "regex"
+	ConstraintTypeMapKeys      = "map-keys"
 )
 
 var (
@@ -19,6 +21,8 @@ var (
 	ErrConstraintSpecMissing      = errors.New("constraint spec is missing")
 	ErrConstraintAllowListMissing = errors.New("constraint allow list is missing")
 	ErrConstraintPatternMissing   = errors.New("constraint pattern is missing")
+	ErrConstraintKeysMissing      = errors.New("constraint keys are missing")
+	ErrConstraintKeyNameMissing   = errors.New("constraint key name is missing")
 )
 
 type (
@@ -39,8 +43,16 @@ type (
 
 	// ConstraintSpec holds the specification for a constraint.
 	ConstraintSpec struct {
-		AllowList []string `yaml:"allowList,omitempty"`
-		Pattern   string   `yaml:"pattern, omitempty"`
+		AllowList []string     `yaml:"allowList,omitempty"`
+		Pattern   string       `yaml:"pattern,omitempty"`
+		Keys      []MapKeySpec `yaml:"keys,omitempty"`
+	}
+
+	// MapKeySpec holds the specification for a map key constraint.
+	MapKeySpec struct {
+		Name        string       `yaml:"name"`
+		Required    bool         `yaml:"required,omitempty"`
+		Constraints []Constraint `yaml:"constraints,omitempty"`
 	}
 )
 
@@ -63,6 +75,8 @@ func (c Constraint) getValidator() (Validator, error) {
 		return NonEmptyConstraint{}, nil
 	case ConstraintTypeNonEmptyKeys:
 		return NonEmptyKeysConstraint{}, nil
+	case ConstraintTypeNonEmptyVals:
+		return NonEmptyValConstraint{}, nil
 	case ConstraintTypeRegex:
 		if c.Spec == nil {
 			return nil, ErrConstraintSpecMissing
@@ -71,6 +85,14 @@ func (c Constraint) getValidator() (Validator, error) {
 			return nil, ErrConstraintPatternMissing
 		}
 		return NewRegexConstraint(c.Spec.Pattern)
+	case ConstraintTypeMapKeys:
+		if c.Spec == nil {
+			return nil, ErrConstraintSpecMissing
+		}
+		if len(c.Spec.Keys) == 0 {
+			return nil, ErrConstraintKeysMissing
+		}
+		return NewMapKeysConstraint(c.Spec.Keys)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnknownConstraintType, c.Type)
 	}

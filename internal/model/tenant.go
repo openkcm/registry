@@ -14,22 +14,23 @@ const (
 	TenantIDValidationID         = "Tenant.ID"
 	TenantOwnerTypeValidationID  = "Tenant.OwnerType"
 	TenantUserGroupsValidationID = "Tenant.UserGroups"
+	TenantLabelsValidationID     = "Tenant.Labels"
 )
 
 // Tenant represents the customer-managed key (CMK) tenant entity.
 type Tenant struct {
-	ID              string       `gorm:"column:id;primaryKey" validationID:"Tenant.ID"`
-	Name            string       `gorm:"column:name" validationID:"Tenant.Name"`
-	Region          string       `gorm:"column:region" validationID:"Tenant.Region"`
-	OwnerID         string       `gorm:"column:owner_id" validationID:"Tenant.OwnerID"`
-	OwnerType       string       `gorm:"column:owner_type" validationID:"Tenant.OwnerType"`
-	Status          TenantStatus `gorm:"column:status"`
-	StatusUpdatedAt time.Time    `gorm:"column:status_updated_at"`
-	Role            string       `gorm:"column:role" validationID:"Tenant.Role"`
-	Labels          Labels       `gorm:"column:labels;type:jsonb"`
-	UserGroups      []string     `gorm:"column:user_groups;serializer:json" validationID:"Tenant.UserGroups"`
-	UpdatedAt       time.Time    `gorm:"column:updated_at;autoUpdateTime"`
-	CreatedAt       time.Time    `gorm:"column:created_at;autoCreateTime"`
+	ID              string            `gorm:"column:id;primaryKey" validationID:"Tenant.ID"`
+	Name            string            `gorm:"column:name" validationID:"Tenant.Name"`
+	Region          string            `gorm:"column:region" validationID:"Tenant.Region"`
+	OwnerID         string            `gorm:"column:owner_id" validationID:"Tenant.OwnerID"`
+	OwnerType       string            `gorm:"column:owner_type" validationID:"Tenant.OwnerType"`
+	Status          TenantStatus      `gorm:"column:status"`
+	StatusUpdatedAt time.Time         `gorm:"column:status_updated_at"`
+	Role            string            `gorm:"column:role" validationID:"Tenant.Role"`
+	Labels          map[string]string `gorm:"column:labels;type:jsonb;serializer:json" validationID:"Tenant.Labels"`
+	UserGroups      []string          `gorm:"column:user_groups;serializer:json" validationID:"Tenant.UserGroups"`
+	UpdatedAt       time.Time         `gorm:"column:updated_at;autoUpdateTime"`
+	CreatedAt       time.Time         `gorm:"column:created_at;autoCreateTime"`
 }
 
 var _ validation.Model = &Tenant{}
@@ -41,7 +42,7 @@ func (t *Tenant) TableName() string {
 
 // Validations returns the validation fields for the Tenant Model.
 func (t *Tenant) Validations() []validation.Field {
-	validations := make([]validation.Field, 0, 7)
+	validations := make([]validation.Field, 0, 8)
 	validations = append(validations, validation.Field{
 		ID: TenantIDValidationID,
 		Validators: []validation.Validator{
@@ -78,6 +79,14 @@ func (t *Tenant) Validations() []validation.Field {
 			TenantRoleConstraint{},
 		},
 	})
+	validations = append(validations, validation.Field{
+		ID: TenantLabelsValidationID,
+		Validators: []validation.Validator{
+			validation.NonEmptyKeysConstraint{},
+			validation.NonEmptyValConstraint{},
+		},
+	})
+
 	return validations
 }
 

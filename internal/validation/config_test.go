@@ -134,6 +134,100 @@ func TestGetValidator(t *testing.T) {
 			},
 			expValidator: validation.NonEmptyKeysConstraint{},
 		},
+		{
+			name: "should return validator for valid non-empty-vals constraint",
+			constraint: validation.Constraint{
+				Type: validation.ConstraintTypeNonEmptyVals,
+			},
+			expValidator: validation.NonEmptyValConstraint{},
+		},
+		{
+			name: "should return error when spec is missing for map-keys constraint",
+			constraint: validation.Constraint{
+				Type: validation.ConstraintTypeMapKeys,
+			},
+			expErr: validation.ErrConstraintSpecMissing,
+		},
+		{
+			name: "should return error when keys are missing for map-keys constraint",
+			constraint: validation.Constraint{
+				Type: validation.ConstraintTypeMapKeys,
+				Spec: &validation.ConstraintSpec{},
+			},
+			expErr: validation.ErrConstraintKeysMissing,
+		},
+		{
+			name: "should return error when key name is empty for map-keys constraint",
+			constraint: validation.Constraint{
+				Type: validation.ConstraintTypeMapKeys,
+				Spec: &validation.ConstraintSpec{
+					Keys: []validation.MapKeySpec{
+						{Name: ""},
+					},
+				},
+			},
+			expErr: validation.ErrConstraintKeyNameMissing,
+		},
+		{
+			name: "should return error when nested constraint is invalid for map-keys constraint",
+			constraint: validation.Constraint{
+				Type: validation.ConstraintTypeMapKeys,
+				Spec: &validation.ConstraintSpec{
+					Keys: []validation.MapKeySpec{
+						{
+							Name:     "issuer",
+							Required: true,
+							Constraints: []validation.Constraint{
+								{Type: "unknown"},
+							},
+						},
+					},
+				},
+			},
+			expErr: validation.ErrUnknownConstraintType,
+		},
+		{
+			name: "should return validator for valid map-keys constraint",
+			constraint: validation.Constraint{
+				Type: validation.ConstraintTypeMapKeys,
+				Spec: &validation.ConstraintSpec{
+					Keys: []validation.MapKeySpec{
+						{Name: "issuer", Required: true},
+					},
+				},
+			},
+			expValidator: &validation.MapKeysConstraint{},
+		},
+		{
+			name: "should return validator for map-keys constraint with nested constraints",
+			constraint: validation.Constraint{
+				Type: validation.ConstraintTypeMapKeys,
+				Spec: &validation.ConstraintSpec{
+					Keys: []validation.MapKeySpec{
+						{
+							Name:     "issuer",
+							Required: false,
+							Constraints: []validation.Constraint{
+								{Type: validation.ConstraintTypeNonEmpty},
+							},
+						},
+						{
+							Name:     "application_id",
+							Required: true,
+							Constraints: []validation.Constraint{
+								{
+									Type: validation.ConstraintTypeList,
+									Spec: &validation.ConstraintSpec{
+										AllowList: []string{"id1", "id2"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expValidator: &validation.MapKeysConstraint{},
+		},
 	}
 
 	for _, tt := range tests {
