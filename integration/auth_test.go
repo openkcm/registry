@@ -534,7 +534,7 @@ func TestAuthValidation(t *testing.T) {
 					TenantId:   "tenant-id",
 					Type:       "oidc",
 					Properties: map[string]string{
-						"Issuer": "", // validation ID Auth.Properties.Issuer is created on startup
+						"issuer": "",
 					},
 				},
 				expErrCode: codes.InvalidArgument,

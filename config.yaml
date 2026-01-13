@@ -139,7 +139,7 @@ validations:
     - type: map-keys
       spec:
         keys:
-        - name: Issuer
+        - name: issuer
           constraints:
             - type: non-empty
   - id: Tenant.OwnerType
