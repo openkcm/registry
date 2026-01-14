@@ -3,12 +3,12 @@ module github.com/openkcm/registry
 go 1.25.0
 
 require (
-	github.com/go-viper/mapstructure/v2 v2.4.0
+	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/openkcm/api-sdk v0.14.0
-	github.com/openkcm/common-sdk v1.9.0
-	github.com/openkcm/orbital v0.3.1
+	github.com/openkcm/common-sdk v1.10.0
+	github.com/openkcm/orbital v0.3.2-0.20260114095704-c2378f262cd0
 	github.com/samber/oops v1.20.0
 	github.com/stretchr/testify v1.11.1
 	github.com/veqryn/slog-context v0.8.0
@@ -22,7 +22,7 @@ require (
 )
 
 require (
-	github.com/Azure/go-amqp v1.5.0 // indirect
+	github.com/Azure/go-amqp v1.5.1 // indirect
 	github.com/Dynatrace/OneAgent-SDK-for-Go v1.1.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
@@ -53,7 +53,7 @@ require (
 	github.com/samber/lo v1.52.0 // indirect
 	github.com/samber/slog-common v0.19.0 // indirect
 	github.com/samber/slog-formatter v1.2.2 // indirect
-	github.com/samber/slog-multi v1.6.0 // indirect
+	github.com/samber/slog-multi v1.7.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
@@ -79,13 +79,12 @@ require (
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.45.0 // indirect
-	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/sync v0.18.0 // indirect
-	golang.org/x/sys v0.39.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/net v0.49.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
+	golang.org/x/text v0.33.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260112192933-99fd39fd28a9 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
