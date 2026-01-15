@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/openkcm/registry/compare/v1.7.0...v1.8.0) (2026-01-15)
+
+
+### Features
+
+* added validation for map types ([#120](https://github.com/openkcm/registry/issues/120)) ([56d83ab](https://github.com/openkcm/registry/commit/56d83ab2cbf99da99d5845f6f0bb9e4aca0fe36b))
+
 ## [1.7.0](https://github.com/openkcm/registry/compare/v1.6.0...v1.7.0) (2025-12-18)
 
 
