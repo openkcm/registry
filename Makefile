@@ -51,8 +51,8 @@ int-test-up-and-run:
 	$(MAKE) go-stop-and-remove
 
 # Prerequisite: PostgreSQL and Registry Service need to be running
-int-test-run:
-	go test -v -count=1 -parallel=5 -race -shuffle=on ./integration/... -tags=integration
+int-test-run: install-gotestsum
+	gotestsum --junitfile=junit-integration.xml --format=testname -- -v -count=1 -parallel=5 -race -shuffle=on ./integration/... -tags=integration
 
 # Prerequisite: PostgreSQL needs to be running
 int-test-up-and-run-cover:
@@ -67,14 +67,14 @@ int-test-up-and-run-cover:
 
 # This target is used to run all tests and create a merged coverage report from unit and integration tests
 # Prerequisite: PostgreSQL needs to be running
-all-tests-run-cover:
+all-tests-run-cover: install-gotestsum
 	mkdir -p cover/integration
 	mkdir -p cover/unit
 	$(MAKE) go-build-and-run cover_flag=-cover cover_dir_env=GOCOVERDIR=${CURDIR}/cover/integration
 	-$(MAKE) int-test-run
 	$(MAKE) go-stop-and-remove
 	echo "Running unit tests"
-	go test -cover ./internal/... -args -test.gocoverdir="${CURDIR}/cover/unit"
+	gotestsum --junitfile=junit-unit.xml --format=testname -- -cover ./internal/... -args -test.gocoverdir="${CURDIR}/cover/unit"
 	echo "Creating coverage report"
 	go tool covdata textfmt -i=./cover/unit,./cover/integration -o cover.out
 	go tool cover --html=cover.out -o cover.html
@@ -90,6 +90,13 @@ go-stop-and-remove:
 
 clean-docker-compose:
 	docker compose down -v && docker compose rm -f -v
+
+.PHONY: clean
+clean:
+	rm -f junit*.xml
+	rm -f cover.out cover.html
+	rm -rf ./cover/
+	rm -f registry
 
 # Runs unit and integration tests with coverage, starts dependency containers, and generates coverage report
 integration-test: docker-compose-dependencies-up all-tests-run-cover
