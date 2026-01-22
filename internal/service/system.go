@@ -51,6 +51,8 @@ func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSyst
 		return nil, err
 	}
 
+	tenantID := in.GetTenantId()
+
 	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
 	defer cancel()
 
@@ -60,7 +62,7 @@ func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSyst
 			return ErrSystemSelect
 		}
 
-		if found && system.TenantID != nil && in.GetTenantId() != *system.TenantID {
+		if found && system.TenantID != nil && len(tenantID) > 0 && tenantID != *system.TenantID {
 			return ErrRegisterSystemNotAllowedWithTenantID
 		}
 

@@ -188,6 +188,41 @@ func TestSystemService(t *testing.T) {
 			assert.Equal(t, sys1.GetExternalId(), sys2.GetExternalId())
 			assert.Equal(t, sys1.GetType(), sys2.GetType())
 		})
+
+		t.Run("should create a RegionalSystem when tenantID on request is an empty string and a system already exists", func(t *testing.T) {
+			req1 := validRegisterSystemReq()
+			res, err := mSubj.MapSystemToTenant(t.Context(), &mappinggrpc.MapSystemToTenantRequest{
+				ExternalId: req1.ExternalId,
+				Type:       req1.Type,
+				TenantId:   existingTenantID,
+			})
+			assert.NoError(t, err)
+			assert.True(t, res.Success)
+
+			req2 := validRegisterSystemReq()
+			req2.ExternalId = req1.ExternalId
+			req2.Region = req1.Region
+			req2.TenantId = ""
+			res2, err := sSubj.RegisterSystem(ctx, req2)
+			assert.NoError(t, err)
+			assert.True(t, res2.Success)
+
+			defer func() {
+				unmap, err := mSubj.UnmapSystemFromTenant(ctx, &mappinggrpc.UnmapSystemFromTenantRequest{
+					ExternalId: req1.ExternalId,
+					Type:       req1.Type,
+					TenantId:   existingTenantID,
+				})
+				assert.NoError(t, err)
+				assert.True(t, unmap.Success)
+				assert.NoError(t, deleteSystem(ctx, sSubj, req2.GetExternalId(), req2.GetType(), req2.Region))
+			}()
+
+			regionalSystem, err := getRegionalSystem(t, ctx, sSubj, req2.GetExternalId(), req2.GetRegion(), req2.GetType())
+			assert.NoError(t, err)
+			assert.Equal(t, req2.GetExternalId(), regionalSystem.GetExternalId())
+
+		})
 	})
 
 	t.Run("DeleteSystem", func(t *testing.T) {
@@ -399,7 +434,6 @@ func TestSystemService(t *testing.T) {
 				}()
 				// when
 				result, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
-
 					ExternalId: req.GetExternalId(),
 					Type:       req.GetType(),
 					Region:     req.GetRegion(),
