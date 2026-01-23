@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.9.0](https://github.com/openkcm/registry/compare/v1.8.0...v1.9.0) (2026-01-23)
+
+
+### Features
+
+* Create Unit test result ([#126](https://github.com/openkcm/registry/issues/126)) ([bc5d465](https://github.com/openkcm/registry/commit/bc5d4652ae3e547243d415f4a6e7ad10219864db))
+
+
+### Bug Fixes
+
+* allowing regional system registration when tenant_id is provided… ([#128](https://github.com/openkcm/registry/issues/128)) ([178b6b7](https://github.com/openkcm/registry/commit/178b6b7d57f7fd01bdba7bbd3b96395e09d3fcae))
+
 ## [1.8.0](https://github.com/openkcm/registry/compare/v1.7.0...v1.8.0) (2026-01-15)
 
 
