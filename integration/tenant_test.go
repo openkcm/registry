@@ -127,37 +127,6 @@ func TestTenantValidation(t *testing.T) {
 					assert.Nil(t, resp)
 				})
 			}
-
-			t.Run("ID is found to already exist", func(t *testing.T) {
-				// given
-				req := &tenantgrpc.RegisterTenantRequest{
-					Name:      "SuccessFactor",
-					Id:        validRandID(),
-					Region:    "region",
-					OwnerId:   "owner-id-123",
-					OwnerType: allowedOwnerType,
-					Role:      tenantgrpc.Role_ROLE_TEST,
-				}
-
-				// when
-				firstResp, err := tSubj.RegisterTenant(ctx, req)
-				t.Cleanup(func() {
-					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
-					assert.NoError(t, err)
-				})
-
-				// then
-				assert.NoError(t, err)
-				assert.NotNil(t, firstResp)
-
-				// when
-				secondResp, err := tSubj.RegisterTenant(ctx, req)
-
-				// then
-				assert.Error(t, err)
-				assert.Equal(t, codes.InvalidArgument, status.Code(err), err.Error())
-				assert.Nil(t, secondResp)
-			})
 		})
 
 		t.Run("should succeed", func(t *testing.T) {

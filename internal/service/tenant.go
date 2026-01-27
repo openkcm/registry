@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -89,12 +88,8 @@ func (t *Tenant) RegisterTenant(ctx context.Context, in *tenantgrpc.RegisterTena
 	}
 
 	err := t.repo.Transaction(ctx, func(ctx context.Context, r repository.Repository) error {
-		if err := r.Create(ctx, tenant); err != nil {
-			var ucErr *repository.UniqueConstraintError
-			if errors.As(err, &ucErr) {
-				return status.Error(codes.InvalidArgument, ucErr.Error())
-			}
-
+		err := createOrPatchTenant(ctx, r, tenant)
+		if err != nil {
 			return err
 		}
 
@@ -566,6 +561,37 @@ func (t *Tenant) validateRemoveTenantLabelsRequest(in *tenantgrpc.RemoveTenantLa
 
 	if slices.Contains(in.GetLabelKeys(), "") {
 		return ErrEmptyLabelKeys
+	}
+
+	return nil
+}
+
+// createOrPatchTenant creates a new Tenant
+// or patches an existing one if it is in PROVISIONING_ERROR status.
+func createOrPatchTenant(ctx context.Context, r repository.Repository, tenant *model.Tenant) error {
+	existingTenant := &model.Tenant{
+		ID: tenant.ID,
+	}
+	found, err := r.Find(ctx, existingTenant)
+	if err != nil {
+		return ErrTenantSelect
+	}
+
+	if !found {
+		return r.Create(ctx, tenant)
+	}
+
+	if existingTenant.Status != model.TenantStatus(tenantgrpc.Status_STATUS_PROVISIONING_ERROR.String()) {
+		return status.Error(codes.AlreadyExists, "tenant is already provisioned")
+	}
+
+	patched, err := r.Patch(ctx, tenant)
+	if err != nil {
+		return ErrTenantUpdate
+	}
+
+	if !patched {
+		return ErrTenantNotFound
 	}
 
 	return nil
