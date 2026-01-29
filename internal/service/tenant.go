@@ -87,7 +87,10 @@ func (t *Tenant) RegisterTenant(ctx context.Context, in *tenantgrpc.RegisterTena
 		return nil, err
 	}
 
-	err := t.repo.Transaction(ctx, func(ctx context.Context, r repository.Repository) error {
+	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
+	defer cancel()
+
+	err := t.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
 		err := createOrPatchTenant(ctx, r, tenant)
 		if err != nil {
 			return err
