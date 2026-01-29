@@ -7,11 +7,11 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/openkcm/api-sdk v0.14.0
-	github.com/openkcm/common-sdk v1.10.0
+	github.com/openkcm/common-sdk v1.11.0
 	github.com/openkcm/orbital v0.3.2-0.20260114095704-c2378f262cd0
 	github.com/samber/oops v1.21.0
 	github.com/stretchr/testify v1.11.1
-	github.com/veqryn/slog-context v0.8.0
+	github.com/veqryn/slog-context v0.9.0
 	go.opentelemetry.io/otel v1.39.0
 	go.opentelemetry.io/otel/metric v1.39.0
 	go.opentelemetry.io/otel/sdk/metric v1.39.0
