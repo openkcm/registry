@@ -120,8 +120,8 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/openkcm/api-sdk v0.14.0 h1:S63WBhGpjT5w7bUQRp0V4JeCy+QbHG/qL4oO0mBc8nk=
 github.com/openkcm/api-sdk v0.14.0/go.mod h1:D6j5ntGP3so7ExG6wZunFOwglzw+ZTEdd/1gB5yqn3c=
-github.com/openkcm/common-sdk v1.10.0 h1:ywdT4ffKA14KMr35CnPRsIaGfAyBsOzunEPkYynnGlY=
-github.com/openkcm/common-sdk v1.10.0/go.mod h1:PhY2C5aDaYJzx9384leAnmYanXiUjA3JQua5JJaOnME=
+github.com/openkcm/common-sdk v1.11.0 h1:C4mkKV8wI2ucYL9+CDGASODY+JBkngTGVwep2yyPU8M=
+github.com/openkcm/common-sdk v1.11.0/go.mod h1:5QUCIBsjOkbwRxq9uqC0DnDhlHSX4OfVLm3s0s4UlO0=
 github.com/openkcm/orbital v0.3.2-0.20260114095704-c2378f262cd0 h1:+eFiash/Abe3mnGXxErohF6AQ7+Nitiqg9LertGYqxQ=
 github.com/openkcm/orbital v0.3.2-0.20260114095704-c2378f262cd0/go.mod h1:Dsg4pjc4Jut15P/mZm1PRBriAOs0vH7e5GhxOAJ6rzU=
 github.com/pborman/getopt v0.0.0-20170112200414-7148bc3a4c30/go.mod h1:85jBQOZwpVEaDAr341tbn15RS4fCAsIst0qp7i8ex1o=
@@ -186,8 +186,8 @@ github.com/tklauser/go-sysconf v0.3.16 h1:frioLaCQSsF5Cy1jgRBrzr6t502KIIwQ0MArYI
 github.com/tklauser/go-sysconf v0.3.16/go.mod h1:/qNL9xxDhc7tx3HSRsLWNnuzbVfh3e7gh/BmM179nYI=
 github.com/tklauser/numcpus v0.11.0 h1:nSTwhKH5e1dMNsCdVBukSZrURJRoHbSEQjdEbY+9RXw=
 github.com/tklauser/numcpus v0.11.0/go.mod h1:z+LwcLq54uWZTX0u/bGobaV34u6V7KNlTZejzM6/3MQ=
-github.com/veqryn/slog-context v0.8.0 h1:lDhwAgjwx52K5StqqQzi5d0Y/F4SNyGZbsXGd8MtucM=
-github.com/veqryn/slog-context v0.8.0/go.mod h1:8rsT72p0kzzN9lmkwtabIhxg7ZkpnKblt9x3Eix8Tc0=
+github.com/veqryn/slog-context v0.9.0 h1:VNXHBWufRGfKiumi7cYoh7p2iElquZ4v8AnAumFOhEI=
+github.com/veqryn/slog-context v0.9.0/go.mod h1:l953waOLsWW6hArZeJDGGKZYLrsOIPBeJ/QQnOA8RU0=
 github.com/veqryn/slog-context/otel v0.8.0 h1:tuMAAb/aXImUBTXz+RmNkTu6eBdzZAde8cZM/UL0HdI=
 github.com/veqryn/slog-context/otel v0.8.0/go.mod h1:CHln1I9F42pK+GvLKMiH/QzIdzTf2n3R0pkHa9+vYzQ=
 github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo0=
