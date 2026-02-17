@@ -189,7 +189,7 @@ func startStatusServer(cfg *config.Config, ctx context.Context) {
 		),
 	)
 
-	healthOptions := make([]health.Option, 0)
+	healthOptions := make([]health.Option, 0, 4)
 	healthOptions = append(healthOptions,
 		health.WithDisabledAutostart(),
 		health.WithStatusListener(func(ctx context.Context, state health.State) {
