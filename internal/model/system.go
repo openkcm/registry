@@ -57,21 +57,18 @@ func (s *System) PaginationKey() map[repository.QueryField]any {
 }
 
 func (s *System) Validations() []validation.Field {
-	fields := make([]validation.Field, 0)
-
-	fields = append(fields, validation.Field{
-		ID: SystemExternalIDValidationID,
-		Validators: []validation.Validator{
-			validation.NonEmptyConstraint{},
+	return []validation.Field{
+		{
+			ID: SystemExternalIDValidationID,
+			Validators: []validation.Validator{
+				validation.NonEmptyConstraint{},
+			},
 		},
-	})
-
-	fields = append(fields, validation.Field{
-		ID: SystemTypeValidationID,
-		Validators: []validation.Validator{
-			validation.NonEmptyConstraint{},
+		{
+			ID: SystemTypeValidationID,
+			Validators: []validation.Validator{
+				validation.NonEmptyConstraint{},
+			},
 		},
-	})
-
-	return fields
+	}
 }
