@@ -251,7 +251,8 @@ func handleQueryField(tx *gorm.DB, field repository.QueryField, value any) (*gor
 func handlePagination(resource repository.Resource, paginator repository.Paginator, db *gorm.DB) *gorm.DB {
 	createdAtField := fmt.Sprintf("%s.%s", resource.TableName(), repository.CreatedAtField)
 
-	orderedColumns := []string{createdAtField}
+	orderedColumns := make([]string, 0, len(paginator.OrderFields)+1)
+	orderedColumns = append(orderedColumns, createdAtField)
 	orderedColumns = append(orderedColumns, paginator.OrderFields...)
 
 	orderBy := make([]string, len(orderedColumns))
