@@ -172,10 +172,10 @@ func createAMQPClient(ctx context.Context, cfgTarget config.Target) (*amqp.Clien
 	}
 
 	slogctx.Info(ctx, "created orbital AMQP client",
-		slog.String("URL", connInfo.URL),
-		slog.String("Target", connInfo.Target),
-		slog.String("Source", connInfo.Source),
-		slog.String("AuthType", string(cfgTarget.Connection.Auth.Type)),
+		slog.String("url", connInfo.URL),
+		slog.String("target", connInfo.Target),
+		slog.String("source", connInfo.Source),
+		slog.String("authType", string(cfgTarget.Connection.Auth.Type)),
 	)
 
 	return client, nil
@@ -220,7 +220,7 @@ func configureOrbitalWorker(ctx context.Context, cfg *config.Worker, worker *orb
 
 func (o *Orbital) confirmJob() orbital.JobConfirmFunc {
 	return func(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
-		slogctx.Debug(ctx, "confirming job", "id", job.ID.String(), "type", job.Type, "externalID", job.ExternalID)
+		slogctx.Debug(ctx, "confirming job", "id", job.ID.String(), "type", job.Type, "externalId", job.ExternalID)
 
 		h, ok := o.getHandler(ctx, job.Type)
 		if !ok {
@@ -252,7 +252,7 @@ func (o *Orbital) resolveTasks() orbital.TaskResolveFunc {
 
 func (o *Orbital) handleJobDone() orbital.JobTerminatedEventFunc {
 	return func(ctx context.Context, job orbital.Job) error {
-		slogctx.Debug(ctx, "handling done job", "id", job.ID.String(), "type", job.Type, "externalID", job.ExternalID)
+		slogctx.Debug(ctx, "handling done job", "id", job.ID.String(), "type", job.Type, "externalId", job.ExternalID)
 
 		h, ok := o.getHandler(ctx, job.Type)
 		if !ok {
@@ -265,7 +265,7 @@ func (o *Orbital) handleJobDone() orbital.JobTerminatedEventFunc {
 
 func (o *Orbital) handleJobFailed() orbital.JobTerminatedEventFunc {
 	return func(ctx context.Context, job orbital.Job) error {
-		slogctx.Debug(ctx, "handling failed job", "id", job.ID.String(), "type", job.Type, "externalID", job.ExternalID)
+		slogctx.Debug(ctx, "handling failed job", "id", job.ID.String(), "type", job.Type, "externalId", job.ExternalID)
 
 		h, ok := o.getHandler(ctx, job.Type)
 		if !ok {

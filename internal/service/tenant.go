@@ -356,7 +356,7 @@ func (t *Tenant) GetTenant(ctx context.Context, in *tenantgrpc.GetTenantRequest)
 func (t *Tenant) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
 	tenant, err := getTenant(ctx, t.repo, job.ExternalID)
 	if err != nil {
-		slogctx.Error(ctx, "failed to load tenant for job", "error", err, "jobID", job.ID.String())
+		slogctx.Error(ctx, "failed to load tenant for job", "error", err, "jobId", job.ID.String())
 		return orbital.JobConfirmResult{}, err
 	}
 

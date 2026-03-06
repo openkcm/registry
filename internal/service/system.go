@@ -37,7 +37,7 @@ func NewSystem(repo repository.Repository, meters *Meters, validation *validatio
 
 // RegisterSystem handles the creation of a new System. The response contains the created System's ID.
 func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSystemRequest) (*systemgrpc.RegisterSystemResponse, error) {
-	slogctx.Debug(ctx, "RegisterSystem called", "external_id", in.GetExternalId(), "region", in.GetRegion(), "tenant_id", in.GetTenantId(), "system_type", in.GetType(), "status", in.GetStatus().String())
+	slogctx.Debug(ctx, "RegisterSystem called", "externalId", in.GetExternalId(), "region", in.GetRegion(), "tenantId", in.GetTenantId(), "systemType", in.GetType(), "status", in.GetStatus().String())
 
 	regionalSystem := &model.RegionalSystem{
 		L2KeyID:       in.GetL2KeyId(),
@@ -92,7 +92,7 @@ func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSyst
 //
 //nolint:cyclop
 func (s *System) ListSystems(ctx context.Context, in *systemgrpc.ListSystemsRequest) (*systemgrpc.ListSystemsResponse, error) {
-	slogctx.Debug(ctx, "ListSystems called", "external_id", in.GetExternalId(), "region", in.GetRegion(), "tenant_id", in.GetTenantId())
+	slogctx.Debug(ctx, "ListSystems called", "externalId", in.GetExternalId(), "region", in.GetRegion(), "tenantId", in.GetTenantId())
 
 	if in.GetExternalId() == "" && in.GetTenantId() == "" {
 		return nil, ErrSystemListNotAllowed
@@ -185,7 +185,7 @@ func (s *System) ListSystems(ctx context.Context, in *systemgrpc.ListSystemsRequ
 //
 //nolint:cyclop
 func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRequest) (*systemgrpc.DeleteSystemResponse, error) {
-	slogctx.Debug(ctx, "DeleteSystem called", "external_id", in.GetExternalId(), "type", in.GetType(), "region", in.GetRegion())
+	slogctx.Debug(ctx, "DeleteSystem called", "externalId", in.GetExternalId(), "type", in.GetType(), "region", in.GetRegion())
 
 	if err := s.validateExternalIDTypeAndRegion(in.GetExternalId(), in.GetType(), in.GetRegion()); err != nil {
 		return nil, err
@@ -252,7 +252,7 @@ func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRe
 
 // UpdateSystemL1KeyClaim updates the l1_key_claim parameter of the System identified by its system_id.
 func (s *System) UpdateSystemL1KeyClaim(ctx context.Context, in *systemgrpc.UpdateSystemL1KeyClaimRequest) (*systemgrpc.UpdateSystemL1KeyClaimResponse, error) {
-	slogctx.Debug(ctx, "UpdateSystemL1KeyClaim called", "external_id", in.GetExternalId(), "region", in.GetRegion(), "key_claim", in.GetL1KeyClaim(), "tenant_id", in.GetTenantId())
+	slogctx.Debug(ctx, "UpdateSystemL1KeyClaim called", "externalId", in.GetExternalId(), "region", in.GetRegion(), "keyClaim", in.GetL1KeyClaim(), "tenantId", in.GetTenantId())
 
 	if err := s.validateExternalIDTypeAndRegion(in.GetExternalId(), in.GetType(), in.GetRegion()); err != nil {
 		return nil, err
@@ -297,7 +297,7 @@ func (s *System) UpdateSystemL1KeyClaim(ctx context.Context, in *systemgrpc.Upda
 // The status can be one of a predefined set of values.
 // If the update is successful, a success message will be returned, otherwise an error will be returned.
 func (s *System) UpdateSystemStatus(ctx context.Context, in *systemgrpc.UpdateSystemStatusRequest) (*systemgrpc.UpdateSystemStatusResponse, error) {
-	slogctx.Debug(ctx, "UpdateSystemStatus called", "external_id", in.GetExternalId(), "type", in.GetType(), "region", in.GetRegion(), "status", in.GetStatus())
+	slogctx.Debug(ctx, "UpdateSystemStatus called", "externalId", in.GetExternalId(), "type", in.GetType(), "region", in.GetRegion(), "status", in.GetStatus())
 	if err := s.validateExternalIDTypeAndRegion(in.GetExternalId(), in.GetType(), in.GetRegion()); err != nil {
 		return nil, err
 	}
@@ -342,7 +342,7 @@ func (s *System) UpdateSystemStatus(ctx context.Context, in *systemgrpc.UpdateSy
 // Existing labels with the same keys will be overwritten.
 // If the update is successful, a success message will be returned, otherwise an error will be returned.
 func (s *System) SetSystemLabels(ctx context.Context, in *systemgrpc.SetSystemLabelsRequest) (*systemgrpc.SetSystemLabelsResponse, error) {
-	slogctx.Debug(ctx, "SetSystemLabels called", "external_id", in.GetExternalId(), "type", in.GetType(), "region", in.GetRegion())
+	slogctx.Debug(ctx, "SetSystemLabels called", "externalId", in.GetExternalId(), "type", in.GetType(), "region", in.GetRegion())
 
 	if err := s.validateSetSystemLabelsRequest(in); err != nil {
 		return nil, err
@@ -399,7 +399,7 @@ func (s *System) SetSystemLabels(ctx context.Context, in *systemgrpc.SetSystemLa
 // If one or more label keys are not found, they will be ignored.
 // If the update is successful, a success message will be returned, otherwise an error will be returned.
 func (s *System) RemoveSystemLabels(ctx context.Context, in *systemgrpc.RemoveSystemLabelsRequest) (*systemgrpc.RemoveSystemLabelsResponse, error) {
-	slogctx.Debug(ctx, "RemoveSystemLabels called", "external_id", in.GetExternalId(), "type", in.GetType(), "region", in.GetRegion())
+	slogctx.Debug(ctx, "RemoveSystemLabels called", "externalId", in.GetExternalId(), "type", in.GetType(), "region", in.GetRegion())
 
 	if err := s.validateRemoveSystemLabelsRequest(in); err != nil {
 		return nil, err
