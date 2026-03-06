@@ -32,7 +32,7 @@ func NewMapping(repo repository.Repository, meters *Meters, validation *validati
 
 // UnmapSystemFromTenant unlinks Systems from the Tenant.
 func (m *Mapping) UnmapSystemFromTenant(ctx context.Context, in *mappinggrpc.UnmapSystemFromTenantRequest) (*mappinggrpc.UnmapSystemFromTenantResponse, error) {
-	ctx = slogctx.With(ctx, "tenantID", in.GetTenantId(), "externalID", in.GetExternalId(), "type", in.GetType())
+	ctx = slogctx.With(ctx, "tenantId", in.GetTenantId(), "externalId", in.GetExternalId(), "type", in.GetType())
 	slogctx.Debug(ctx, "UnmapSystemFromTenant called")
 
 	if err := m.validateUnmapRequest(in); err != nil {
@@ -75,7 +75,7 @@ func (m *Mapping) UnmapSystemFromTenant(ctx context.Context, in *mappinggrpc.Unm
 
 // MapSystemToTenant links Systems to the Tenant.
 func (m *Mapping) MapSystemToTenant(ctx context.Context, in *mappinggrpc.MapSystemToTenantRequest) (*mappinggrpc.MapSystemToTenantResponse, error) {
-	ctx = slogctx.With(ctx, "tenantID", in.GetTenantId(), "externalID", in.GetExternalId(), "type", in.GetType())
+	ctx = slogctx.With(ctx, "tenantId", in.GetTenantId(), "externalId", in.GetExternalId(), "type", in.GetType())
 
 	tenantID := in.GetTenantId()
 	slogctx.Debug(ctx, "MapSystemToTenant called")
@@ -119,7 +119,7 @@ func (m *Mapping) MapSystemToTenant(ctx context.Context, in *mappinggrpc.MapSyst
 
 // Get gets the mapped tenant from the system.
 func (m *Mapping) Get(ctx context.Context, in *mappinggrpc.GetRequest) (*mappinggrpc.GetResponse, error) {
-	ctx = slogctx.With(ctx, "externalID", in.GetExternalId(), "type", in.GetType())
+	ctx = slogctx.With(ctx, "externalId", in.GetExternalId(), "type", in.GetType())
 	slogctx.Debug(ctx, "Get called")
 
 	if err := validateExternalIDAndType(m.validation, in.GetExternalId(), in.GetType()); err != nil {
