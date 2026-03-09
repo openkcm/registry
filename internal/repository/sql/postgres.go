@@ -18,7 +18,7 @@ import (
 func StartDB(ctx context.Context, dbConf config.DB) (*gorm.DB, error) {
 	dbCon, err := startDBConnection(dbConf)
 	if err != nil {
-		slog.Error("failed to initialize DB connection", slog.Any("err", err))
+		slog.Error("failed to initialize DB connection", slog.Any("error", err))
 		return nil, err
 	}
 
@@ -26,7 +26,7 @@ func StartDB(ctx context.Context, dbConf config.DB) (*gorm.DB, error) {
 	slog.Info("DB connection done")
 
 	if err = Migrate(dbCon); err != nil {
-		slog.Error("failed to run migrations", slog.Any("err", err))
+		slog.Error("failed to run migrations", slog.Any("error", err))
 		return nil, err
 	}
 
