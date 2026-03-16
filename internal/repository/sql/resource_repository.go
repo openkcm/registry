@@ -37,7 +37,7 @@ func NewRepository(db *gorm.DB) *ResourceRepository {
 func (r ResourceRepository) Create(ctx context.Context, resource repository.Resource) error {
 	result := r.db.WithContext(ctx).Create(resource)
 	if result.Error != nil {
-		slog.Error("error creating resource", slog.Any("err", result.Error))
+		slog.Error("error creating resource", slog.Any("error", result.Error))
 
 		var pgError *pgconn.PgError
 		if errors.As(result.Error, &pgError) && pgError.Code == pqUniqueViolationErrCode {
@@ -57,13 +57,13 @@ func (r ResourceRepository) List(ctx context.Context, result any, query reposito
 	dbQuery := r.db.WithContext(ctx).Model(result)
 	dbQuery, err := applyQuery(dbQuery, query)
 	if err != nil {
-		slog.Error("error applying query for listing resources", slog.Any("err", err))
+		slog.Error("error applying query for listing resources", slog.Any("error", err))
 		return err
 	}
 
 	err = dbQuery.Find(result).Error
 	if err != nil {
-		slog.Error("error listing resources", slog.Any("err", err))
+		slog.Error("error listing resources", slog.Any("error", err))
 		return err
 	}
 
@@ -78,7 +78,7 @@ func (r ResourceRepository) List(ctx context.Context, result any, query reposito
 func (r ResourceRepository) Delete(ctx context.Context, resource repository.Resource) (bool, error) {
 	result := r.db.WithContext(ctx).Clauses(clause.Returning{}).Delete(resource)
 	if result.Error != nil {
-		slog.Error("error deleting resource", slog.Any("err", result.Error))
+		slog.Error("error deleting resource", slog.Any("error", result.Error))
 		return false, result.Error
 	}
 
@@ -89,7 +89,7 @@ func (r ResourceRepository) Delete(ctx context.Context, resource repository.Reso
 func (r ResourceRepository) Find(ctx context.Context, resource repository.Resource) (bool, error) {
 	result := r.db.WithContext(ctx).Where(resource).Limit(1).Find(resource)
 	if result.Error != nil {
-		slog.Error("error finding a resource", slog.Any("err", result.Error))
+		slog.Error("error finding a resource", slog.Any("error", result.Error))
 		return false, result.Error
 	}
 
@@ -103,7 +103,7 @@ func (r ResourceRepository) Find(ctx context.Context, resource repository.Resour
 func (r ResourceRepository) Patch(ctx context.Context, resource repository.Resource) (bool, error) {
 	db := r.db.WithContext(ctx).Clauses(clause.Returning{}).Updates(resource)
 	if db.Error != nil {
-		slog.Error("error updating resource", slog.Any("err", db.Error))
+		slog.Error("error updating resource", slog.Any("error", db.Error))
 		return false, db.Error
 	}
 
@@ -117,13 +117,13 @@ func (r ResourceRepository) PatchAll(ctx context.Context, resource repository.Re
 	db := r.db.WithContext(ctx).Model(result).Clauses(clause.Returning{})
 	db, err := applyQuery(db, query)
 	if err != nil {
-		slog.Error("error applying query for updating resources", slog.Any("err", err))
+		slog.Error("error applying query for updating resources", slog.Any("error", err))
 		return 0, err
 	}
 
 	db = db.Updates(resource)
 	if db.Error != nil {
-		slog.Error("error updating resources", slog.Any("err", db.Error))
+		slog.Error("error updating resources", slog.Any("error", db.Error))
 		return db.RowsAffected, db.Error
 	}
 

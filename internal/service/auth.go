@@ -73,7 +73,7 @@ func NewAuth(repo repository.Repository, orbital *Orbital, validation *validatio
 // ApplyAuth creates a new auth and starts a job to apply it to the linked tenant.
 // If an auth with the same external ID already exists, it returns success to make the action idempotent.
 func (a *Auth) ApplyAuth(ctx context.Context, req *authgrpc.ApplyAuthRequest) (*authgrpc.ApplyAuthResponse, error) {
-	ctx = slogctx.With(ctx, "externalID", req.ExternalId, "tenantID", req.TenantId, "type", req.Type, "properties", req.Properties)
+	ctx = slogctx.With(ctx, "externalId", req.ExternalId, "tenantId", req.TenantId, "type", req.Type, "properties", req.Properties)
 	slogctx.Debug(ctx, "applying auth")
 
 	auth := &model.Auth{
@@ -128,7 +128,7 @@ func (a *Auth) ApplyAuth(ctx context.Context, req *authgrpc.ApplyAuthRequest) (*
 
 // GetAuth retrieves an auth by its external ID.
 func (a *Auth) GetAuth(ctx context.Context, req *authgrpc.GetAuthRequest) (*authgrpc.GetAuthResponse, error) {
-	ctx = slogctx.With(ctx, "externalID", req.ExternalId)
+	ctx = slogctx.With(ctx, "externalId", req.ExternalId)
 	slogctx.Debug(ctx, "getting auth")
 
 	err := a.validation.Validate(model.AuthExternalIDValidationID, req.ExternalId)
@@ -150,7 +150,7 @@ func (a *Auth) GetAuth(ctx context.Context, req *authgrpc.GetAuthRequest) (*auth
 }
 
 func (a *Auth) ListAuths(ctx context.Context, in *authgrpc.ListAuthsRequest) (*authgrpc.ListAuthsResponse, error) {
-	ctx = slogctx.With(ctx, "tenantID", in.TenantId)
+	ctx = slogctx.With(ctx, "tenantId", in.TenantId)
 	slogctx.Debug(ctx, "list auth")
 
 	err := a.validation.Validate(model.AuthTenantIDValidationID, in.TenantId)
@@ -203,7 +203,7 @@ func (a *Auth) ListAuths(ctx context.Context, in *authgrpc.ListAuthsRequest) (*a
 // If the auth does not exist or is not in APPLIED status, it returns an error.
 // If the linked tenant does not exist or is not active, it returns an error.
 func (a *Auth) RemoveAuth(ctx context.Context, req *authgrpc.RemoveAuthRequest) (*authgrpc.RemoveAuthResponse, error) {
-	ctx = slogctx.With(ctx, "externalID", req.ExternalId)
+	ctx = slogctx.With(ctx, "externalId", req.ExternalId)
 	slogctx.Debug(ctx, "removing auth")
 
 	err := a.validation.Validate(model.AuthExternalIDValidationID, req.ExternalId)
@@ -296,7 +296,7 @@ func (a *Auth) ResolveTasks(ctx context.Context, job orbital.Job, targetsByRegio
 			CanceledErrorMessage: fmt.Sprintf("failed to decode auth proto: %v", err),
 		}, nil
 	}
-	ctx = slogctx.With(ctx, "tenantID", auth.TenantId)
+	ctx = slogctx.With(ctx, "tenantId", auth.TenantId)
 
 	tenant, err := getTenant(ctx, a.repo, auth.TenantId)
 	if err != nil {
