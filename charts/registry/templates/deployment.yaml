@@ -30,6 +30,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "registry.serviceAccountName" . }}
+      automountServiceAccountToken: false
       {{- with .Values.pod.securityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
