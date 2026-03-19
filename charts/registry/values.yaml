@@ -255,8 +255,8 @@ config:
     confirmJobAfter: 0
     # taskLimitNum is the maximum number of tasks to process concurrently.
     taskLimitNum: 10
-    # maxReconcileCount is the maximum number of times a task can be reconciled.
-    maxReconcileCount: 10
+    # maxPendingReconciles is the maximum number of times a task can be reconciled.
+    maxPendingReconciles: 10
     # backoffBaseIntervalSec is the base interval for exponential backoff in seconds.
     backoffBaseIntervalSec: 2
     # backoffMaxIntervalSec is the maximum interval for exponential backoff in seconds.

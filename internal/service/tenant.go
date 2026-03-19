@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -353,68 +354,63 @@ func (t *Tenant) GetTenant(ctx context.Context, in *tenantgrpc.GetTenantRequest)
 }
 
 // ConfirmJob checks if a job can be confirmed based on tenant existence and tenant status.
-func (t *Tenant) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
+func (t *Tenant) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConfirmerResult, error) {
 	tenant, err := getTenant(ctx, t.repo, job.ExternalID)
 	if err != nil {
+		if errors.Is(err, ErrTenantNotFound) {
+			return orbital.CancelJobConfirmer("tenant not found"), nil
+		}
 		slogctx.Error(ctx, "failed to load tenant for job", "error", err, "jobId", job.ID.String())
-		return orbital.JobConfirmResult{}, err
+		return nil, err
 	}
 
 	switch job.Type {
 	case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String():
-		return orbital.JobConfirmResult{Done: true}, nil
+		return orbital.CompleteJobConfirmer(), nil
 	case tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String(), tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String(), tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String():
 		status, err := jobTypeToStatus(job.Type)
 		if err != nil { //nolint:nilerr // if we return an error here, the job will be retried indefinitely
-			return orbital.JobConfirmResult{
-				IsCanceled:           true,
-				CanceledErrorMessage: fmt.Sprintf("%s: %s", ErrUnexpectedJobType, job.Type),
-			}, nil
+			return orbital.CancelJobConfirmer(fmt.Sprintf("%s: %s",
+				ErrUnexpectedJobType, job.Type)), nil
 		}
 
 		if tenant.Status != model.TenantStatus(status.String()) {
-			return orbital.JobConfirmResult{}, ErrInvalidTenantStatus
+			return orbital.CancelJobConfirmer("invalid tenant status"), nil
 		}
 
-		return orbital.JobConfirmResult{Done: true}, nil
+		return orbital.CompleteJobConfirmer(), nil
 	default:
-		return orbital.JobConfirmResult{
-			IsCanceled:           true,
-			CanceledErrorMessage: fmt.Sprintf("%s: %s", ErrUnexpectedJobType, job.Type),
-		}, nil
+		slogctx.Error(ctx, "unexpected job type for tenant")
+		return orbital.CancelJobConfirmer(fmt.Sprintf("%s: %s",
+			ErrUnexpectedJobType, job.Type)), nil
 	}
 }
 
 // ResolveTasks creates a task for the job based on the tenant's region.
-func (t *Tenant) ResolveTasks(_ context.Context, job orbital.Job, targetsByRegion map[string]orbital.ManagerTarget) (orbital.TaskResolverResult, error) {
+func (t *Tenant) ResolveTasks(_ context.Context, job orbital.Job, targetsByRegion map[string]orbital.TargetManager) (orbital.TaskResolverResult, error) {
 	tenant := &tenantgrpc.Tenant{}
 
 	err := proto.Unmarshal(job.Data, tenant)
 	if err != nil {
-		return orbital.TaskResolverResult{
-			IsCanceled:           true,
-			CanceledErrorMessage: fmt.Sprintf("failed to unmarshal tenant data: %v", err),
-		}, nil
+		return orbital.CancelTaskResolver(
+			fmt.Sprintf("failed to unmarshal tenant data: %v", err)), nil
 	}
 
 	_, ok := targetsByRegion[tenant.GetRegion()]
 	if !ok {
-		return orbital.TaskResolverResult{
-			IsCanceled:           true,
-			CanceledErrorMessage: "no orbital initiator found for region: " + tenant.GetRegion(),
-		}, nil
+		return orbital.CancelTaskResolver(
+			"no orbital initiator found for region: " + tenant.GetRegion()), nil
 	}
 
-	return orbital.TaskResolverResult{
-		TaskInfos: []orbital.TaskInfo{
+	return orbital.CompleteTaskResolver().WithTaskInfo(
+		[]orbital.TaskInfo{
 			{
 				Data:   job.Data,
 				Type:   job.Type,
 				Target: tenant.GetRegion(),
 			},
 		},
-		Done: true,
-	}, nil
+	), nil
 }
 
 // HandleJobFailed applies the changes to the tenant based on the job type when the job is failed.

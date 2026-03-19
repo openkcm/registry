@@ -27,7 +27,7 @@ type (
 	// Orbital manages jobs and their execution targets.
 	Orbital struct {
 		manager  *orbital.Manager
-		targets  map[string]orbital.ManagerTarget
+		targets  map[string]orbital.TargetManager
 		registry handlerRegistry
 	}
 
@@ -39,8 +39,8 @@ type (
 
 	// JobHandler defines the lifecycle callbacks for job processing.
 	JobHandler interface {
-		ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error)
-		ResolveTasks(ctx context.Context, job orbital.Job, targets map[string]orbital.ManagerTarget) (orbital.TaskResolverResult, error)
+		ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConfirmerResult, error)
+		ResolveTasks(ctx context.Context, job orbital.Job, targets map[string]orbital.TargetManager) (orbital.TaskResolverResult, error)
 		HandleJobDone(ctx context.Context, job orbital.Job) error
 		HandleJobCanceled(ctx context.Context, job orbital.Job) error
 		HandleJobFailed(ctx context.Context, job orbital.Job) error
@@ -85,13 +85,17 @@ func NewOrbital(ctx context.Context, db *gorm.DB, cfg config.Orbital) (*Orbital,
 
 	configureOrbital(ctx, cfg, manager)
 
-	err = manager.Start(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start orbital job manager: %w", err)
-	}
-
 	o.manager = manager
 	return o, nil
+}
+
+// Start starts the orbital and begins job processing.
+func (o *Orbital) Start(ctx context.Context) error {
+	err := o.manager.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start orbital job manager: %w", err)
+	}
+	return nil
 }
 
 // RegisterJobHandler registers a JobHandler for a specific job type.
@@ -121,8 +125,8 @@ func (o *Orbital) PrepareJob(ctx context.Context, data []byte, externalID, jobTy
 	return nil
 }
 
-func createTargets(ctx context.Context, cfgTargets []config.Target) (map[string]orbital.ManagerTarget, error) {
-	targets := make(map[string]orbital.ManagerTarget, len(cfgTargets))
+func createTargets(ctx context.Context, cfgTargets []config.Target) (map[string]orbital.TargetManager, error) {
+	targets := make(map[string]orbital.TargetManager, len(cfgTargets))
 	for _, cfgTarget := range cfgTargets {
 		slogctx.Info(ctx, "creating orbital target", slog.String("Region", cfgTarget.Region))
 
@@ -131,7 +135,7 @@ func createTargets(ctx context.Context, cfgTargets []config.Target) (map[string]
 			return nil, fmt.Errorf("failed to create AMQP client for %s: %w", cfgTarget.Region, err)
 		}
 
-		targets[cfgTarget.Region] = orbital.ManagerTarget{
+		targets[cfgTarget.Region] = orbital.TargetManager{
 			Client: client,
 		}
 	}
@@ -184,7 +188,7 @@ func createAMQPClient(ctx context.Context, cfgTarget config.Target) (*amqp.Clien
 func configureOrbital(ctx context.Context, cfg config.Orbital, manager *orbital.Manager) {
 	manager.Config.ConfirmJobAfter = cfg.ConfirmJobAfter
 	manager.Config.TaskLimitNum = cfg.TaskLimitNum
-	manager.Config.MaxReconcileCount = cfg.MaxReconcileCount
+	manager.Config.MaxPendingReconciles = cfg.MaxPendingReconciles
 	manager.Config.BackoffBaseIntervalSec = cfg.BackoffBaseIntervalSec
 	manager.Config.BackoffMaxIntervalSec = cfg.BackoffMaxIntervalSec
 	configureOrbitalWorkers(ctx, cfg, manager)
@@ -219,15 +223,13 @@ func configureOrbitalWorker(ctx context.Context, cfg *config.Worker, worker *orb
 }
 
 func (o *Orbital) confirmJob() orbital.JobConfirmFunc {
-	return func(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
+	return func(ctx context.Context, job orbital.Job) (orbital.JobConfirmerResult, error) {
 		slogctx.Debug(ctx, "confirming job", "id", job.ID.String(), "type", job.Type, "externalId", job.ExternalID)
 
 		h, ok := o.getHandler(ctx, job.Type)
 		if !ok {
-			return orbital.JobConfirmResult{
-				IsCanceled:           true,
-				CanceledErrorMessage: fmt.Sprintf("%s: %s", ErrUnexpectedJobType, job.Type),
-			}, nil
+			return orbital.CancelJobConfirmer(fmt.Sprintf("%s: %s",
+				ErrUnexpectedJobType, job.Type)), nil
 		}
 
 		return h.ConfirmJob(ctx, job)
@@ -240,10 +242,7 @@ func (o *Orbital) resolveTasks() orbital.TaskResolveFunc {
 
 		h, ok := o.getHandler(ctx, job.Type)
 		if !ok {
-			return orbital.TaskResolverResult{
-				IsCanceled:           true,
-				CanceledErrorMessage: fmt.Sprintf("%s: %s", ErrUnexpectedJobType, job.Type),
-			}, nil
+			return orbital.CancelTaskResolver(fmt.Sprintf("%s: %s", ErrUnexpectedJobType, job.Type)), nil
 		}
 
 		return h.ResolveTasks(ctx, job, o.targets)

@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/openkcm/common-sdk/pkg/commoncfg"
 	"github.com/openkcm/orbital"
@@ -40,6 +41,7 @@ const (
 const (
 	AuthExternalIDFail    = "test-auth-fail"
 	AuthExternalIDSuccess = "test-auth-success"
+	taskWaitTime          = 1 * time.Second
 )
 
 var ErrNoTestRegion = errors.New("no test region found in configuration")
@@ -75,7 +77,7 @@ func New(ctx context.Context) (*orbital.Operator, error) {
 		return nil, err
 	}
 
-	operatorTarget := orbital.OperatorTarget{
+	operatorTarget := orbital.TargetOperator{
 		Client: client,
 	}
 
@@ -153,50 +155,44 @@ func registerHandlers(operator *orbital.Operator) error {
 	return nil
 }
 
-func handleTenant(_ context.Context, handlerReq orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+func handleTenant(_ context.Context,
+	handlerRequest orbital.HandlerRequest,
+	handlerResponse *orbital.HandlerResponse) {
 	var tenant tenantgrpc.Tenant
 
-	err := proto.Unmarshal(handlerReq.Data, &tenant)
+	err := proto.Unmarshal(handlerRequest.TaskData, &tenant)
 	if err != nil {
-		return orbital.HandlerResponse{}, err
+		handlerResponse.Fail(fmt.Sprintf("failed to unmarshal tenant: %v", err))
+		return
 	}
 
 	switch tenant.GetId() {
 	case TenantIDSuccess:
-		return orbital.HandlerResponse{
-			Result: orbital.ResultDone,
-		}, nil
+		handlerResponse.Complete()
 	case TenantIDFail:
-		return orbital.HandlerResponse{
-			Result: orbital.ResultFailed,
-		}, nil
+		handlerResponse.Fail("simulated tenant failure")
+	default:
+		handlerResponse.ContinueAndWaitFor(taskWaitTime)
 	}
-
-	return orbital.HandlerResponse{
-		Result: orbital.ResultProcessing,
-	}, nil
 }
 
-func handleAuth(_ context.Context, handlerReq orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+func handleAuth(_ context.Context,
+	handlerRequest orbital.HandlerRequest,
+	handlerResponse *orbital.HandlerResponse) {
 	var auth authgrpc.Auth
 
-	err := proto.Unmarshal(handlerReq.Data, &auth)
+	err := proto.Unmarshal(handlerRequest.TaskData, &auth)
 	if err != nil {
-		return orbital.HandlerResponse{}, err
+		handlerResponse.Fail(fmt.Sprintf("failed to unmarshal auth: %v", err))
+		return
 	}
 
 	switch auth.GetExternalId() {
 	case AuthExternalIDSuccess:
-		return orbital.HandlerResponse{
-			Result: orbital.ResultDone,
-		}, nil
+		handlerResponse.Complete()
 	case AuthExternalIDFail:
-		return orbital.HandlerResponse{
-			Result: orbital.ResultFailed,
-		}, nil
+		handlerResponse.Fail("simulated auth failure")
+	default:
+		handlerResponse.ContinueAndWaitFor(taskWaitTime)
 	}
-
-	return orbital.HandlerResponse{
-		Result: orbital.ResultProcessing,
-	}, nil
 }

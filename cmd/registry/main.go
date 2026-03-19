@@ -77,6 +77,9 @@ func main() {
 	systemgrpc.RegisterServiceServer(grpcServer, systemSrv)
 	authgrpc.RegisterServiceServer(grpcServer, authSrv)
 
+	err = orbital.Start(ctx)
+	handleErr("starting orbital", err)
+
 	startGRPCServer(ctx, cfg, grpcServer)
 }
 

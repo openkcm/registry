@@ -257,72 +257,69 @@ func (a *Auth) RemoveAuth(ctx context.Context, req *authgrpc.RemoveAuthRequest) 
 }
 
 // ConfirmJob confirms that the auth associated with the job exists.
-func (a *Auth) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
+func (a *Auth) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConfirmerResult, error) {
 	auth, err := getAuth(ctx, a.repo, job.ExternalID)
 	if err != nil {
+		if errors.Is(err, ErrAuthNotFound) {
+			return orbital.CancelJobConfirmer("auth not found"), nil
+		}
 		slogctx.Error(ctx, "failed to get auth for job confirmation", "error", err)
-		return orbital.JobConfirmResult{}, err
+		return nil, err
 	}
 
 	switch job.Type {
 	case authgrpc.AuthAction_AUTH_ACTION_APPLY_AUTH.String():
-		return orbital.JobConfirmResult{Done: true}, nil
+		return orbital.CompleteJobConfirmer(), nil
 	case authgrpc.AuthAction_AUTH_ACTION_REMOVE_AUTH.String():
 		if auth.Status != authgrpc.AuthStatus_AUTH_STATUS_REMOVING.String() {
 			slogctx.Error(ctx, AuthInvalidStatusMsg, "status", auth.Status)
-			return orbital.JobConfirmResult{
-				IsCanceled:           true,
-				CanceledErrorMessage: fmt.Sprintf("%s: %s", ErrAuthInvalidStatus, auth.Status),
-			}, nil
+			return orbital.CancelJobConfirmer(fmt.Sprintf("%s: %s",
+				ErrAuthInvalidStatus, auth.Status)), nil
 		}
-		return orbital.JobConfirmResult{Done: true}, nil
+		return orbital.CompleteJobConfirmer(), nil
 	default:
 		slogctx.Error(ctx, "unexpected job type for auth")
-		return orbital.JobConfirmResult{
-			IsCanceled:           true,
-			CanceledErrorMessage: fmt.Sprintf("%s: %s", ErrUnexpectedJobType, job.Type),
-		}, nil
+		return orbital.CancelJobConfirmer(fmt.Sprintf("%s: %s",
+			ErrUnexpectedJobType, job.Type)), nil
 	}
 }
 
 // ResolveTasks determines the tasks to be executed for a given job.
-func (a *Auth) ResolveTasks(ctx context.Context, job orbital.Job, targetsByRegion map[string]orbital.ManagerTarget) (orbital.TaskResolverResult, error) {
+func (a *Auth) ResolveTasks(ctx context.Context, job orbital.Job,
+	targetsByRegion map[string]orbital.TargetManager) (
+	orbital.TaskResolverResult, error) {
 	auth := &authgrpc.Auth{}
 	err := proto.Unmarshal(job.Data, auth)
 	if err != nil {
 		slogctx.Error(ctx, "failed to decode auth proto", "error", err)
-		return orbital.TaskResolverResult{
-			IsCanceled:           true,
-			CanceledErrorMessage: fmt.Sprintf("failed to decode auth proto: %v", err),
-		}, nil
+		return orbital.CancelTaskResolver(fmt.Sprintf("failed to decode auth proto: %v", err)), nil
 	}
 	ctx = slogctx.With(ctx, "tenantId", auth.TenantId)
 
 	tenant, err := getTenant(ctx, a.repo, auth.TenantId)
 	if err != nil {
+		if errors.Is(err, ErrTenantNotFound) {
+			return orbital.CancelTaskResolver("tenant not found"), nil
+		}
 		slogctx.Error(ctx, "failed to get tenant for resolving tasks for auth", "error", err)
-		return orbital.TaskResolverResult{}, err
+		return nil, err
 	}
 
 	_, ok := targetsByRegion[tenant.Region]
 	if !ok {
 		slogctx.Error(ctx, "no target for region", "region", tenant.Region)
-		return orbital.TaskResolverResult{
-			IsCanceled:           true,
-			CanceledErrorMessage: "no target for region: " + tenant.Region,
-		}, nil
+		return orbital.CancelTaskResolver("no target for region: " + tenant.Region), nil
 	}
 
-	return orbital.TaskResolverResult{
-		TaskInfos: []orbital.TaskInfo{
+	return orbital.CompleteTaskResolver().WithTaskInfo(
+		[]orbital.TaskInfo{
 			{
 				Data:   job.Data,
 				Type:   job.Type,
 				Target: tenant.Region,
 			},
 		},
-		Done: true,
-	}, nil
+	), nil
 }
 
 // HandleJobDone updates auth when the job is done.
