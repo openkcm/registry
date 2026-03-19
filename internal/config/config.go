@@ -55,7 +55,7 @@ var (
 
 	ErrConfirmJobAfterMustBeEqualGreaterThanZero = errors.New("confirm job delay must be equal or greater than zero")
 	ErrTaskLimitNumMustBeGreaterThanZero         = errors.New("task limit number must be greater than zero")
-	ErrMaxReconcileCountMustBeGreaterThanZero    = errors.New("max reconcile count must be greater than zero")
+	ErrMaxPendingReconcilesMustBeGreaterThanZero = errors.New("max pending reconcile count must be greater than zero")
 	ErrBackoffBaseIntervalMustBeGreaterThanZero  = errors.New("backoff base interval must be greater than zero")
 	ErrBackoffMaxIntervalMustBeGreaterThanZero   = errors.New("backoff max interval must be greater than zero")
 )
@@ -105,9 +105,9 @@ type GRPCServer struct {
 type Orbital struct {
 	ConfirmJobAfter        time.Duration `yaml:"confirmJobAfter" json:"confirmJobAfter"`
 	TaskLimitNum           int           `yaml:"taskLimitNum" json:"taskLimitNum"`
-	MaxReconcileCount      int64         `yaml:"maxReconcileCount" json:"maxReconcileCount"`
-	BackoffBaseIntervalSec int64         `yaml:"backoffBaseIntervalSec" json:"backoffBaseIntervalSec"`
-	BackoffMaxIntervalSec  int64         `yaml:"backoffMaxIntervalSec" json:"backoffMaxIntervalSec"`
+	MaxPendingReconciles   uint64        `yaml:"maxPendingReconciles" json:"maxPendingReconciles"`
+	BackoffBaseIntervalSec uint64        `yaml:"backoffBaseIntervalSec" json:"backoffBaseIntervalSec"`
+	BackoffMaxIntervalSec  uint64        `yaml:"backoffMaxIntervalSec" json:"backoffMaxIntervalSec"`
 	Targets                []Target      `yaml:"targets" json:"targets"`
 	Workers                []Worker      `yaml:"workers" json:"workers"`
 }
@@ -121,15 +121,15 @@ func (o *Orbital) Validate() error {
 		return fmt.Errorf("%w: %d", ErrTaskLimitNumMustBeGreaterThanZero, o.TaskLimitNum)
 	}
 
-	if o.MaxReconcileCount <= 0 {
-		return fmt.Errorf("%w: %d", ErrMaxReconcileCountMustBeGreaterThanZero, o.MaxReconcileCount)
+	if o.MaxPendingReconciles == 0 {
+		return fmt.Errorf("%w: %d", ErrMaxPendingReconcilesMustBeGreaterThanZero, o.MaxPendingReconciles)
 	}
 
-	if o.BackoffBaseIntervalSec <= 0 {
+	if o.BackoffBaseIntervalSec == 0 {
 		return fmt.Errorf("%w: %d", ErrBackoffBaseIntervalMustBeGreaterThanZero, o.BackoffBaseIntervalSec)
 	}
 
-	if o.BackoffMaxIntervalSec <= 0 {
+	if o.BackoffMaxIntervalSec == 0 {
 		return fmt.Errorf("%w: %d", ErrBackoffMaxIntervalMustBeGreaterThanZero, o.BackoffMaxIntervalSec)
 	}
 

@@ -168,7 +168,7 @@ func TestValidateTarget(t *testing.T) {
 				Orbital: config.Orbital{
 					ConfirmJobAfter:        10 * time.Second,
 					TaskLimitNum:           10,
-					MaxReconcileCount:      5,
+					MaxPendingReconciles:   5,
 					BackoffBaseIntervalSec: 1,
 					BackoffMaxIntervalSec:  10,
 					Targets:                []config.Target{target},
@@ -277,7 +277,7 @@ func TestValidateWorker(t *testing.T) {
 				Orbital: config.Orbital{
 					ConfirmJobAfter:        10 * time.Second,
 					TaskLimitNum:           10,
-					MaxReconcileCount:      5,
+					MaxPendingReconciles:   5,
 					BackoffBaseIntervalSec: 1,
 					BackoffMaxIntervalSec:  10,
 					Workers:                []config.Worker{w},
@@ -299,7 +299,7 @@ func TestValidateOrbitalFields(t *testing.T) {
 	validOrbital := config.Orbital{
 		ConfirmJobAfter:        10 * time.Second,
 		TaskLimitNum:           10,
-		MaxReconcileCount:      5,
+		MaxPendingReconciles:   5,
 		BackoffBaseIntervalSec: 1,
 		BackoffMaxIntervalSec:  10,
 	}
@@ -334,28 +334,12 @@ func TestValidateOrbitalFields(t *testing.T) {
 			expErr: config.ErrTaskLimitNumMustBeGreaterThanZero,
 		},
 		{
-			name: "negative max reconcile count",
+			name: "zero max pending reconcile count",
 			patch: func(o config.Orbital) config.Orbital {
-				o.MaxReconcileCount = -1
+				o.MaxPendingReconciles = 0
 				return o
 			},
-			expErr: config.ErrMaxReconcileCountMustBeGreaterThanZero,
-		},
-		{
-			name: "zero max reconcile count",
-			patch: func(o config.Orbital) config.Orbital {
-				o.MaxReconcileCount = 0
-				return o
-			},
-			expErr: config.ErrMaxReconcileCountMustBeGreaterThanZero,
-		},
-		{
-			name: "negative backoff base interval",
-			patch: func(o config.Orbital) config.Orbital {
-				o.BackoffBaseIntervalSec = -1
-				return o
-			},
-			expErr: config.ErrBackoffBaseIntervalMustBeGreaterThanZero,
+			expErr: config.ErrMaxPendingReconcilesMustBeGreaterThanZero,
 		},
 		{
 			name: "zero backoff base interval",
@@ -364,14 +348,6 @@ func TestValidateOrbitalFields(t *testing.T) {
 				return o
 			},
 			expErr: config.ErrBackoffBaseIntervalMustBeGreaterThanZero,
-		},
-		{
-			name: "negative backoff max interval",
-			patch: func(o config.Orbital) config.Orbital {
-				o.BackoffMaxIntervalSec = -1
-				return o
-			},
-			expErr: config.ErrBackoffMaxIntervalMustBeGreaterThanZero,
 		},
 		{
 			name: "zero backoff max interval",

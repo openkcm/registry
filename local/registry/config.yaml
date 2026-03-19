@@ -53,7 +53,7 @@ grpcServer:
 orbital:
   confirmJobAfter: 0
   taskLimitNum: 10
-  maxReconcileCount: 10
+  maxPendingReconciles: 10
   backoffBaseIntervalSec: 2
   backoffMaxIntervalSec: 240
   targets:

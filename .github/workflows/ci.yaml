@@ -22,4 +22,7 @@ jobs:
   check:
     uses: openkcm/build/.github/workflows/ci.svc.yaml@main
     secrets: inherit
-
+    with:
+      run_task_tests: false
+      run_makefile_tests: true
+      makefile_test_name: integration-test
