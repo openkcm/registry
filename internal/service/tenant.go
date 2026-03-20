@@ -84,7 +84,7 @@ func (t *Tenant) RegisterTenant(ctx context.Context, in *tenantgrpc.RegisterTena
 		Labels:          in.GetLabels(),
 	}
 
-	if err := t.validateTenant(tenant); err != nil {
+	if err := t.validateTenant(tenant, true); err != nil {
 		return nil, err
 	}
 
@@ -625,7 +625,7 @@ func (t *Tenant) patchTenant(ctx context.Context, opts patchTenantOpts) error {
 
 		if opts.updateFunc != nil {
 			opts.updateFunc(tenant)
-			err = t.validateTenant(tenant)
+			err = t.validateTenant(tenant, false)
 			if err != nil {
 				return err
 			}
@@ -723,12 +723,16 @@ func (t *Tenant) mapTenantsToGRPCResponse(tenants []model.Tenant) []*tenantgrpc.
 	return pbTenants
 }
 
-// validateID checks if the provided tenant ID is valid according to
-// the TenantIDValidationID rules. Returns an error with InvalidArgument
-// status if validation fails.
+// validateID checks if the provided tenant ID is not empty. Returns an error with InvalidArgument if
+// empty. Note that custom ID validation is not applied here. Custom validation is only applied
+// when registering a new tenant (to preserve backwards compatibility with any existing tenants with
+// non compliant IDs). We apply only the NonEmptyConstraint for non-registration actions.
 func (t *Tenant) validateID(id string) error {
-	err := t.validation.Validate(model.TenantIDValidationID, id)
+	c := validation.NonEmptyConstraint{}
+	err := c.Validate(id)
 	if err != nil {
+		// Reproduce the error from validation package
+		err = fmt.Errorf("validation failed for %s: %w", model.TenantIDValidationID, err)
 		return status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
 	}
 	return nil
@@ -816,10 +820,14 @@ func jobTypeToStatus(jobType string) (tenantgrpc.Status, error) {
 // It checks all tenant fields using the validation package and also
 // validates tenant labels. Returns an error with appropriate gRPC status
 // if any validation fails.
-func (t *Tenant) validateTenant(tenant *model.Tenant) error {
+func (t *Tenant) validateTenant(tenant *model.Tenant, validateId bool) error {
 	valuesByID, err := validation.GetValues(tenant)
 	if err != nil {
 		return status.Error(codes.Internal, "failed to get tenant values by validation ID")
+	}
+
+	if !validateId {
+		delete(valuesByID, model.TenantIDValidationID)
 	}
 
 	err = t.validation.ValidateAll(valuesByID)
