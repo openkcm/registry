@@ -50,6 +50,9 @@ func TestAuth(t *testing.T) {
 					ExternalId: auth.ExternalID,
 					TenantId:   "non-existing-tenant",
 					Type:       auth.Type,
+					Properties: map[string]string{
+						"requiredProperty": "requiredPropertyVal",
+					},
 				})
 
 				// then
@@ -76,6 +79,9 @@ func TestAuth(t *testing.T) {
 					ExternalId: auth.ExternalID,
 					TenantId:   inactiveTenant.ID,
 					Type:       auth.Type,
+					Properties: map[string]string{
+						"requiredProperty": "requiredPropertyVal",
+					},
 				})
 
 				// then
@@ -108,6 +114,9 @@ func TestAuth(t *testing.T) {
 				ExternalId: auth.ExternalID,
 				TenantId:   tenant.ID,
 				Type:       auth.Type,
+				Properties: map[string]string{
+					"requiredProperty": "requiredPropertyVal",
+				},
 			})
 
 			// then
@@ -162,7 +171,7 @@ func TestAuth(t *testing.T) {
 					TenantId:   tenant.ID,
 					Type:       auth.Type,
 					Properties: map[string]string{
-						"auth_prop": "auth_value",
+						"requiredProperty": "requiredPropertyVal",
 					},
 				})
 				defer func() {
@@ -188,7 +197,7 @@ func TestAuth(t *testing.T) {
 				assert.Equal(t, tt.externalID, getResp.Auth.ExternalId)
 				assert.Equal(t, tenant.ID, getResp.Auth.TenantId)
 				assert.Equal(t, auth.Type, getResp.Auth.Type)
-				assert.Equal(t, "auth_value", getResp.Auth.Properties["auth_prop"])
+				assert.Equal(t, "requiredPropertyVal", getResp.Auth.Properties["requiredProperty"])
 
 				err = waitForAuthReconciliation(ctx, subj, tt.externalID, tt.expStatus)
 				assert.NoError(t, err)
@@ -515,6 +524,9 @@ func TestAuthValidation(t *testing.T) {
 				request: &authgrpc.ApplyAuthRequest{
 					TenantId: "tenant-id",
 					Type:     "oidc",
+					Properties: map[string]string{
+						"requiredProperty": "requiredPropertyVal",
+					},
 				},
 				expErrCode: codes.InvalidArgument,
 			},
@@ -524,17 +536,43 @@ func TestAuthValidation(t *testing.T) {
 					ExternalId: "external-id",
 					TenantId:   "tenant-id",
 					Type:       "saml",
+					Properties: map[string]string{
+						"requiredProperty": "requiredPropertyVal",
+					},
 				},
 				expErrCode: codes.InvalidArgument,
 			},
 			{
-				name: "should return error for failed configured validation without pre-existing validation ID (Auth.Properties)",
+				name: "should return error if required property is missing (Auth.Properties)",
+				request: &authgrpc.ApplyAuthRequest{
+					ExternalId: "external-id",
+					TenantId:   "tenant-id",
+					Type:       "oidc",
+					Properties: map[string]string{},
+				},
+				expErrCode: codes.InvalidArgument,
+			},
+			{
+				name: "should return error if required property is empty (Auth.Properties)",
 				request: &authgrpc.ApplyAuthRequest{
 					ExternalId: "external-id",
 					TenantId:   "tenant-id",
 					Type:       "oidc",
 					Properties: map[string]string{
-						"issuer": "",
+						"requiredProperty": "",
+					},
+				},
+				expErrCode: codes.InvalidArgument,
+			},
+			{
+				name: "should return error if optional property is empty (Auth.Properties)",
+				request: &authgrpc.ApplyAuthRequest{
+					ExternalId: "external-id",
+					TenantId:   "tenant-id",
+					Type:       "oidc",
+					Properties: map[string]string{
+						"requiredProperty": "requiredPropertyVal",
+						"optionalProperty": "",
 					},
 				},
 				expErrCode: codes.InvalidArgument,
