@@ -173,7 +173,7 @@ func (t *Tenant) ListTenants(ctx context.Context, in *tenantgrpc.ListTenantsRequ
 func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequest) (*tenantgrpc.BlockTenantResponse, error) {
 	slogctx.Debug(ctx, "BlockTenant called", "tenantId", in.GetId())
 
-	err := t.validateID(in.GetId())
+	err := t.validateIDNonEmpty(in.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenantRequest) (*tenantgrpc.UnblockTenantResponse, error) {
 	slogctx.Debug(ctx, "UnblockTenant called", "tenantId", in.GetId())
 
-	err := t.validateID(in.GetId())
+	err := t.validateIDNonEmpty(in.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +241,7 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTenantRequest) (*tenantgrpc.TerminateTenantResponse, error) {
 	slogctx.Debug(ctx, "TerminateTenant called", "tenantId", in.GetId())
 
-	err := t.validateID(in.GetId())
+	err := t.validateIDNonEmpty(in.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +338,7 @@ func (t *Tenant) RemoveTenantLabels(ctx context.Context, in *tenantgrpc.RemoveTe
 func (t *Tenant) GetTenant(ctx context.Context, in *tenantgrpc.GetTenantRequest) (*tenantgrpc.GetTenantResponse, error) {
 	slogctx.Debug(ctx, "GetTenant called", "tenantId", in.GetId())
 
-	err := t.validateID(in.GetId())
+	err := t.validateIDNonEmpty(in.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +462,7 @@ func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTenantUserGroupsRequest) (*tenantgrpc.SetTenantUserGroupsResponse, error) {
 	slogctx.Debug(ctx, "SetTenantUserGroups called", "tenantId", in.GetId())
 
-	err := t.validateID(in.GetId())
+	err := t.validateIDNonEmpty(in.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -528,7 +528,7 @@ func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
 // validateSetTenantLabelsRequest validates the SetTenantLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRequest) error {
-	err := t.validateID(in.GetId())
+	err := t.validateIDNonEmpty(in.GetId())
 	if err != nil {
 		return err
 	}
@@ -549,7 +549,7 @@ func (t *Tenant) validateSetTenantLabelsRequest(in *tenantgrpc.SetTenantLabelsRe
 // validateRemoveTenantLabelsRequest validates the RemoveTenantLabelsRequest.
 // If the request is valid, it returns nil, otherwise it returns an error.
 func (t *Tenant) validateRemoveTenantLabelsRequest(in *tenantgrpc.RemoveTenantLabelsRequest) error {
-	err := t.validateID(in.GetId())
+	err := t.validateIDNonEmpty(in.GetId())
 	if err != nil {
 		return err
 	}
@@ -625,7 +625,7 @@ func (t *Tenant) patchTenant(ctx context.Context, opts patchTenantOpts) error {
 
 		if opts.updateFunc != nil {
 			opts.updateFunc(tenant)
-			err = t.validateTenant(tenant)
+			err = t.validateTenantWithoutID(tenant)
 			if err != nil {
 				return err
 			}
@@ -723,12 +723,16 @@ func (t *Tenant) mapTenantsToGRPCResponse(tenants []model.Tenant) []*tenantgrpc.
 	return pbTenants
 }
 
-// validateID checks if the provided tenant ID is valid according to
-// the TenantIDValidationID rules. Returns an error with InvalidArgument
-// status if validation fails.
-func (t *Tenant) validateID(id string) error {
-	err := t.validation.Validate(model.TenantIDValidationID, id)
+// validateIDNonEmpty checks if the provided tenant ID is not empty. Returns an error with InvalidArgument if
+// empty. Note that custom ID validation is not applied here. Custom validation is only applied
+// when registering a new tenant (to preserve backwards compatibility with any existing tenants with
+// non compliant IDs). We apply only the NonEmptyConstraint for non-registration actions.
+func (t *Tenant) validateIDNonEmpty(id string) error {
+	c := validation.NonEmptyConstraint{}
+	err := c.Validate(id)
 	if err != nil {
+		// Reproduce the error from validation package
+		err = fmt.Errorf("validation failed for %s: %w", model.TenantIDValidationID, err)
 		return status.Errorf(codes.InvalidArgument, "invalid ID: %v", err)
 	}
 	return nil
@@ -817,9 +821,25 @@ func jobTypeToStatus(jobType string) (tenantgrpc.Status, error) {
 // validates tenant labels. Returns an error with appropriate gRPC status
 // if any validation fails.
 func (t *Tenant) validateTenant(tenant *model.Tenant) error {
+	return t.validateTenantBase(tenant, true)
+}
+
+// validateTenantWithoutID performs validation on the provided Tenant model, without ID.
+// It checks all tenant fields, expect for ID,  using the validation package and also
+// validates tenant labels. Returns an error with appropriate gRPC status
+// if any validation fails.
+func (t *Tenant) validateTenantWithoutID(tenant *model.Tenant) error {
+	return t.validateTenantBase(tenant, false)
+}
+
+func (t *Tenant) validateTenantBase(tenant *model.Tenant, validateId bool) error {
 	valuesByID, err := validation.GetValues(tenant)
 	if err != nil {
 		return status.Error(codes.Internal, "failed to get tenant values by validation ID")
+	}
+
+	if !validateId {
+		delete(valuesByID, model.TenantIDValidationID)
 	}
 
 	err = t.validation.ValidateAll(valuesByID)
