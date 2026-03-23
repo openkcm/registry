@@ -41,6 +41,7 @@ const (
 	MissingLabelsMsg    = "missing labels"
 	EmptyLabelKeysMsg   = "label keys cannot be empty"
 	UserGroupsNilMsg    = "user groups cannot be nil"
+	ValidationFailedMsg = "validation failed"
 )
 
 var (
@@ -92,7 +93,7 @@ var (
 	ErrMissingLabels           = status.Error(codes.InvalidArgument, MissingLabelsMsg)
 	ErrEmptyLabelKeys          = status.Error(codes.InvalidArgument, EmptyLabelKeysMsg)
 	ErrValidationConversion    = status.Error(codes.Internal, "validation conversion error")
-	ErrValidationFailed        = status.Error(codes.InvalidArgument, "validation failed")
+	ErrValidationFailed        = status.Error(codes.InvalidArgument, ValidationFailedMsg)
 )
 
 // ErrorWithParams will return an error with new message,
@@ -110,13 +111,13 @@ func ErrorWithParams(err error, params ...any) error {
 
 	for index, param := range params {
 		if (index+1)%2 == 0 {
-			sb.WriteString(fmt.Sprintf("=%v", param))
+			fmt.Fprintf(&sb, "=%v", param)
 		} else {
 			if index != 0 {
-				sb.WriteString(" ")
+				fmt.Fprintf(&sb, " ")
 			}
 
-			sb.WriteString(fmt.Sprintf("%v", param))
+			fmt.Fprintf(&sb, "%v", param)
 		}
 	}
 
