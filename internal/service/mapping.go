@@ -180,6 +180,7 @@ func validateAndGetSystemForUnmap(ctx context.Context, r repository.Repository, 
 	}
 
 	if err := validateRegionalSystemsForUnmap(ctx, r, system); err != nil {
+		slogctx.Warn(ctx, "validation failed for UnmapSystemFromTenant request", "error", err)
 		return nil, err
 	}
 
@@ -249,11 +250,14 @@ func validateRegionalSystemsForLink(ctx context.Context, r repository.Repository
 	for _, s := range regionalSystems {
 		err := checkRegionalSystemAvailable(&s)
 		if err != nil {
+			slogctx.Warn(ctx, "validation failed for MapSystemToTenant request", "error", err)
 			return err
 		}
 
 		if s.HasL1KeyClaim != nil && *s.HasL1KeyClaim {
-			return ErrorWithParams(ErrSystemHasL1KeyClaim, "externalID", system.ExternalID, "type", system.Type, "region", s.Region)
+			err = ErrorWithParams(ErrSystemHasL1KeyClaim, "externalID", system.ExternalID, "type", system.Type, "region", s.Region)
+			slogctx.Warn(ctx, "validation failed for MapSystemToTenant request", "error", err)
+			return err
 		}
 	}
 
