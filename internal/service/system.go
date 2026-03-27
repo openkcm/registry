@@ -48,6 +48,7 @@ func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSyst
 	}
 
 	if err := validateRegionalSystem(s.validation, regionalSystem); err != nil {
+		slogctx.Warn(ctx, "validation failed for RegisterSystem request", "error", err)
 		return nil, err
 	}
 
@@ -188,6 +189,7 @@ func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRe
 	slogctx.Debug(ctx, "DeleteSystem called", "externalId", in.GetExternalId(), "type", in.GetType(), "region", in.GetRegion())
 
 	if err := s.validateExternalIDTypeAndRegion(in.GetExternalId(), in.GetType(), in.GetRegion()); err != nil {
+		slogctx.Warn(ctx, "validation failed for DeleteSystem request", "error", err)
 		return nil, err
 	}
 
@@ -255,6 +257,7 @@ func (s *System) UpdateSystemL1KeyClaim(ctx context.Context, in *systemgrpc.Upda
 	slogctx.Debug(ctx, "UpdateSystemL1KeyClaim called", "externalId", in.GetExternalId(), "region", in.GetRegion(), "keyClaim", in.GetL1KeyClaim(), "tenantId", in.GetTenantId())
 
 	if err := s.validateExternalIDTypeAndRegion(in.GetExternalId(), in.GetType(), in.GetRegion()); err != nil {
+		slogctx.Warn(ctx, "validation failed for UpdateSystemL1KeyClaim request", "error", err)
 		return nil, err
 	}
 
@@ -299,10 +302,13 @@ func (s *System) UpdateSystemL1KeyClaim(ctx context.Context, in *systemgrpc.Upda
 func (s *System) UpdateSystemStatus(ctx context.Context, in *systemgrpc.UpdateSystemStatusRequest) (*systemgrpc.UpdateSystemStatusResponse, error) {
 	slogctx.Debug(ctx, "UpdateSystemStatus called", "externalId", in.GetExternalId(), "type", in.GetType(), "region", in.GetRegion(), "status", in.GetStatus())
 	if err := s.validateExternalIDTypeAndRegion(in.GetExternalId(), in.GetType(), in.GetRegion()); err != nil {
+		slogctx.Warn(ctx, "validation failed for UpdateSystemStatus request", "error", err)
 		return nil, err
 	}
 	if err := s.validation.Validate(model.SystemStatusValidationID, in.GetStatus().String()); err != nil {
-		return nil, ErrorWithParams(ErrValidationFailed, "err", err.Error())
+		err = ErrorWithParams(ErrValidationFailed, "err", err.Error())
+		slogctx.Warn(ctx, "validation failed for UpdateSystemStatus request", "error", err)
+		return nil, err
 	}
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
@@ -345,6 +351,7 @@ func (s *System) SetSystemLabels(ctx context.Context, in *systemgrpc.SetSystemLa
 	slogctx.Debug(ctx, "SetSystemLabels called", "externalId", in.GetExternalId(), "type", in.GetType(), "region", in.GetRegion())
 
 	if err := s.validateSetSystemLabelsRequest(in); err != nil {
+		slogctx.Warn(ctx, "validation failed for SetSystemLabels request", "error", err)
 		return nil, err
 	}
 
@@ -402,6 +409,7 @@ func (s *System) RemoveSystemLabels(ctx context.Context, in *systemgrpc.RemoveSy
 	slogctx.Debug(ctx, "RemoveSystemLabels called", "externalId", in.GetExternalId(), "type", in.GetType(), "region", in.GetRegion())
 
 	if err := s.validateRemoveSystemLabelsRequest(in); err != nil {
+		slogctx.Warn(ctx, "validation failed for RemoveSystemLabels request", "error", err)
 		return nil, err
 	}
 
