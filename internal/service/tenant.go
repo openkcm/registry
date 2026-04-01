@@ -123,11 +123,11 @@ func (t *Tenant) RegisterTenant(ctx context.Context, in *tenantgrpc.RegisterTena
 	}, nil
 }
 
-// ListTenants retrieves a list of Tenants based on optional query parameters such as id, name, region,
+// ListTenants retrieves a list of Tenants based on optional query parameters such as name, region,
 // owner_id, and owner_type.
 // Retrieves all Tenants if all query parameters are empty.
 func (t *Tenant) ListTenants(ctx context.Context, in *tenantgrpc.ListTenantsRequest) (*tenantgrpc.ListTenantsResponse, error) {
-	slogctx.Debug(ctx, "ListTenants called", "id", in.GetId(), "name", in.GetName(), "region", in.GetRegion(), "ownerId", in.GetOwnerId(), "ownerType", in.GetOwnerType())
+	slogctx.Debug(ctx, "ListTenants called", "name", in.GetName(), "region", in.GetRegion(), "ownerId", in.GetOwnerId(), "ownerType", in.GetOwnerType())
 
 	query, err := t.buildListTenantsQuery(in)
 	if err != nil {
@@ -680,10 +680,6 @@ func (t *Tenant) buildListTenantsQuery(in *tenantgrpc.ListTenantsRequest) (*repo
 	}
 
 	cond := repository.NewCompositeKey()
-	if in.GetId() != "" {
-		cond.Where(repository.IDField, in.GetId())
-	}
-
 	if in.GetName() != "" {
 		cond.Where(repository.NameField, in.GetName())
 	}
