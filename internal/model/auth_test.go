@@ -41,8 +41,7 @@ func TestAuthValidationIDs(t *testing.T) {
 	authType := reflect.TypeFor[model.Auth]()
 
 	var tagValidationIDs []string
-	for i := range authType.NumField() {
-		field := authType.Field(i)
+	for field := range authType.Fields() {
 		if validationID := field.Tag.Get(validation.TagName); validationID != "" {
 			tagValidationIDs = append(tagValidationIDs, validationID)
 		}
