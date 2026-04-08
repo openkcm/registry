@@ -10,6 +10,8 @@ import (
 
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	slogctx "github.com/veqryn/slog-context"
+	grpccodes "google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository"
@@ -36,6 +38,8 @@ func NewSystem(repo repository.Repository, meters *Meters, validation *validatio
 }
 
 // RegisterSystem handles the creation of a new System. The response contains the created System's ID.
+//
+//nolint:cyclop
 func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSystemRequest) (*systemgrpc.RegisterSystemResponse, error) {
 	slogctx.Debug(ctx, "RegisterSystem called", "externalId", in.GetExternalId(), "region", in.GetRegion(), "tenantId", in.GetTenantId(), "systemType", in.GetType(), "status", in.GetStatus().String())
 
@@ -78,6 +82,10 @@ func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSyst
 
 		return r.Create(ctx, regionalSystem)
 	}); err != nil {
+		if _, ok := errors.AsType[*repository.UniqueConstraintError](err); ok {
+			return nil, grpcstatus.Error(grpccodes.AlreadyExists, "system already exists")
+		}
+
 		return nil, err
 	}
 

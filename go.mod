@@ -1,8 +1,6 @@
 module github.com/openkcm/registry
 
-go 1.25.6
-
-toolchain go1.26.1
+go 1.26.1
 
 require (
 	github.com/go-viper/mapstructure/v2 v2.5.0
