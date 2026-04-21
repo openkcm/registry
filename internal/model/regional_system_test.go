@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -15,14 +15,19 @@ import (
 )
 
 func TestSystemToProto(t *testing.T) {
-	tenantID := uuid.NewString()
+	tenantIDUUID, err := uuid.NewV4()
+	require.NoError(t, err)
+	tenantID := tenantIDUUID.String()
 	labelKey := "key1"
-	externalID := uuid.NewString()
-	systemID := uuid.New()
+	externalIDUUID, err := uuid.NewV4()
+	require.NoError(t, err)
+	externalID := externalIDUUID.String()
+	systemID, err := uuid.NewV4()
+	require.NoError(t, err)
 	system := model.RegionalSystem{
 		SystemID: systemID,
 		Region:   "REGION_EU",
-		L2KeyID:  uuid.NewString(),
+		L2KeyID:  uuid.Must(uuid.NewV4()).String(),
 		Status:   typespb.Status_STATUS_AVAILABLE.String(),
 		Labels: map[string]string{
 			labelKey: "value1",
@@ -68,10 +73,10 @@ func TestRegionalSystemValidations(t *testing.T) {
 	assert.NoError(t, err)
 
 	validSystem := model.RegionalSystem{
-		SystemID: uuid.New(),
+		SystemID: uuid.Must(uuid.NewV4()),
 		Region:   "REGION_US",
 		Status:   typespb.Status_STATUS_AVAILABLE.String(),
-		L2KeyID:  uuid.NewString(),
+		L2KeyID:  uuid.Must(uuid.NewV4()).String(),
 		Labels: map[string]string{
 			"env": "prod",
 		},

@@ -3,7 +3,7 @@ package model_test
 import (
 	"testing"
 
-	"github.com/google/uuid"
+	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -13,7 +13,9 @@ import (
 )
 
 func TestNewSystem(t *testing.T) {
-	externalID := uuid.NewString()
+	externalIDUUID, err := uuid.NewV4()
+	require.NoError(t, err)
+	externalID := externalIDUUID.String()
 	sysType := "APPLICATION"
 
 	sys := model.NewSystem(externalID, sysType)
@@ -26,7 +28,9 @@ func TestNewSystem(t *testing.T) {
 
 func TestSystemTenantLinking(t *testing.T) {
 	sys := model.NewSystem("ext-1", "TYPE")
-	tenantID := uuid.NewString()
+	tenantIDUUID, err := uuid.NewV4()
+	require.NoError(t, err)
+	tenantID := tenantIDUUID.String()
 
 	assert.False(t, sys.IsLinkedToTenant())
 	assert.Nil(t, sys.TenantID)
@@ -57,7 +61,7 @@ func TestSystemValidations(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	validSystem := *model.NewSystem(uuid.NewString(), "Types")
+	validSystem := *model.NewSystem(uuid.Must(uuid.NewV4()).String(), "Types")
 
 	type mutateSystem func(s model.System) model.System
 
