@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/openkcm/registry/compare/v1.7.0...v1.7.1) (2026-04-22)
+
+
+### Bug Fixes
+
+* allowing regional system registration when tenant_id is provided as an empty string and logical system is already mapped to a tenant ([a4704f0](https://github.com/openkcm/registry/commit/a4704f093efce8fc9cbf129abc4dc1e82f6fd20a))
+
 ## [1.7.0](https://github.com/openkcm/registry/compare/v1.6.0...v1.7.0) (2025-12-18)
 
 
