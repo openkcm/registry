@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.9.0](https://github.com/openkcm/registry/compare/v1.8.0...v1.9.0) (2026-04-20)
+
+
+### Features
+
+* Create Unit test result ([#126](https://github.com/openkcm/registry/issues/126)) ([bc5d465](https://github.com/openkcm/registry/commit/bc5d4652ae3e547243d415f4a6e7ad10219864db))
+* disable custom id validations on tenant reads ([#150](https://github.com/openkcm/registry/issues/150)) ([c5eae94](https://github.com/openkcm/registry/commit/c5eae943573ee13a92b229d3532442e1691e46ad))
+* improve error and debug logs in mapping svc  ([e6e07ae](https://github.com/openkcm/registry/commit/e6e07ae4993e6023106cda895876e8fd6643a113))
+* remove tenant id filter from ListTenants method ([#156](https://github.com/openkcm/registry/issues/156)) ([76f86d0](https://github.com/openkcm/registry/commit/76f86d0b26a69a0802870e45d32cf16cadcb3907))
+* return grpc status already_exists for RegisterSystem ([#159](https://github.com/openkcm/registry/issues/159)) ([37213a8](https://github.com/openkcm/registry/commit/37213a8708cc26ec4e7f0e499b86c1dafe1752af))
+* update for latest orbital v0.5.0 ([#148](https://github.com/openkcm/registry/issues/148)) ([674b7ef](https://github.com/openkcm/registry/commit/674b7ef7eb6ba02af126c1710c48f40d16f3cd4b))
+
+
+### Bug Fixes
+
+* allowing regional system registration when tenant_id is provided… ([#128](https://github.com/openkcm/registry/issues/128)) ([178b6b7](https://github.com/openkcm/registry/commit/178b6b7d57f7fd01bdba7bbd3b96395e09d3fcae))
+* **deps:** bump actions/setup-go from 6.3.0 to 6.4.0 in the actions-group group across 1 directory ([#158](https://github.com/openkcm/registry/issues/158)) ([1dd6677](https://github.com/openkcm/registry/commit/1dd6677ceb32be4b333e6d85aa6dd995bdb7e38b))
+* **deps:** bump the gomod-group group across 1 directory with 5 updates ([#160](https://github.com/openkcm/registry/issues/160)) ([badae2d](https://github.com/openkcm/registry/commit/badae2dd7063399962137ec5a3f9e1f67e525269))
+* **deps:** bump the gomod-group group across 1 directory with 6 updates ([#149](https://github.com/openkcm/registry/issues/149)) ([e69daf7](https://github.com/openkcm/registry/commit/e69daf730feef62d3c9eb04054c9ebbf8e363379))
+* **deps:** bump the gomod-group group with 4 updates ([#152](https://github.com/openkcm/registry/issues/152)) ([9c2751e](https://github.com/openkcm/registry/commit/9c2751e409f2f205e881ccc21625c55b69bf1fef))
+* do not automount service account token ([#147](https://github.com/openkcm/registry/issues/147)) ([91f733f](https://github.com/openkcm/registry/commit/91f733f0bc22e947f49a93f8b4dbe3ea959bfafb))
+* improve dependabot config ([#145](https://github.com/openkcm/registry/issues/145)) ([ea94a1f](https://github.com/openkcm/registry/commit/ea94a1f9e1aa19d65933034ae5648b1c5efa9c6b))
+* make failed tenant provisioning attempts recoverable ([2d3a57b](https://github.com/openkcm/registry/commit/2d3a57ba6b0bc336980d3db3b95691330a910929)), closes [#131](https://github.com/openkcm/registry/issues/131)
+
 ## [1.8.0](https://github.com/openkcm/registry/compare/v1.7.0...v1.8.0) (2026-01-15)
 
 
