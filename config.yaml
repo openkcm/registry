@@ -62,8 +62,8 @@ orbital:
         type: amqp
         amqp:
           url: "amqps://localhost:5671"
-          source: "cmk.global.tenants"
-          target: "cmk.emea.tenants"
+          source: "/queues/cmk.global.tenants"
+          target: "/queues/cmk.emea.tenants"
         auth:
           type: mtls
           mtls:
