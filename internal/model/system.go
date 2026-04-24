@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/gofrs/uuid/v5"
 
 	"github.com/openkcm/registry/internal/repository"
 	"github.com/openkcm/registry/internal/validation"

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
+	"github.com/gofrs/uuid/v5"
 	"github.com/openkcm/common-sdk/pkg/commoncfg"
 	"github.com/openkcm/orbital"
 	"github.com/stretchr/testify/assert"
@@ -105,8 +105,8 @@ func newGRPCClientConn() (*grpc.ClientConn, error) {
 
 func validRandID() string {
 	var sb strings.Builder
-	sb.WriteString(strings.ReplaceAll(uuid.New().String(), "-", ""))
-	sb.WriteString(strings.ReplaceAll(uuid.New().String(), "-", "")[:8])
+	sb.WriteString(strings.ReplaceAll(uuid.Must(uuid.NewV4()).String(), "-", ""))
+	sb.WriteString(strings.ReplaceAll(uuid.Must(uuid.NewV4()).String(), "-", "")[:8])
 	return sb.String()
 }
 

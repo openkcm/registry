@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -84,7 +84,9 @@ func TestExecuteTransactionError(t *testing.T) {
 		assert.Error(t, err)
 
 		// given
-		newTenantID := uuid.New().String()
+		newTenantIDUUID, err := uuid.NewV4()
+		require.NoError(t, err)
+		newTenantID := newTenantIDUUID.String()
 
 		// when
 		err = subj.Transaction(ctx,
@@ -144,7 +146,9 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 		wg := sync.WaitGroup{}
 		wg.Add(2)
 
-		newTenantID := uuid.New().String()
+		newTenantIDUUID, err := uuid.NewV4()
+		require.NoError(t, err)
+		newTenantID := newTenantIDUUID.String()
 		go func() {
 			assert.Equal(t, "1st transaction start", <-transactor1)
 			defer wg.Done()
@@ -212,7 +216,9 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 		wg.Add(2)
 
 		// when
-		newTenantID1 := uuid.New().String()
+		newTenantID1UUID, err := uuid.NewV4()
+		require.NoError(t, err)
+		newTenantID1 := newTenantID1UUID.String()
 		go func() {
 			assert.Equal(t, "1st transaction start", <-transactor1)
 			defer wg.Done()
@@ -238,7 +244,9 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 			assert.NoError(t, err)
 		}()
 
-		newTenantID2 := uuid.New().String()
+		newTenantID2UUID, err := uuid.NewV4()
+		require.NoError(t, err)
+		newTenantID2 := newTenantID2UUID.String()
 		go func() {
 			assert.Equal(t, "2nd transaction start", <-transactor2)
 			defer wg.Done()
@@ -318,7 +326,9 @@ func TestExecuteTransactionWithoutRaceConditions(t *testing.T) {
 		wg.Add(2)
 
 		// when
-		newTenantID1 := uuid.New().String()
+		newTenantID1UUID, err := uuid.NewV4()
+		require.NoError(t, err)
+		newTenantID1 := newTenantID1UUID.String()
 		go func() {
 			assert.Equal(t, "1st transaction start", <-transactor1)
 			defer wg.Done()
@@ -344,7 +354,9 @@ func TestExecuteTransactionWithoutRaceConditions(t *testing.T) {
 			transactor1 <- "1st transaction finish"
 		}()
 
-		newTenantID2 := uuid.New().String()
+		newTenantID2UUID, err := uuid.NewV4()
+		require.NoError(t, err)
+		newTenantID2 := newTenantID2UUID.String()
 		go func() {
 			assert.Equal(t, "2nd transaction start", <-transactor2)
 			defer wg.Done()
