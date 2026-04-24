@@ -7,7 +7,7 @@ toolchain go1.26.2
 require (
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/gofrs/uuid/v5 v5.4.0
-	github.com/jackc/pgx/v5 v5.9.1
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/openkcm/api-sdk v0.17.0
 	github.com/openkcm/common-sdk v1.15.2
 	github.com/openkcm/orbital v0.5.1
