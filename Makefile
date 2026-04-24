@@ -27,13 +27,6 @@ docker-build: go-build-for-docker
 
 docker-compose-dependencies-up: generate-certs
 	docker compose up postgres rabbitmq otel-collector -d --wait
-	docker compose restart rabbitmq
-	@echo "Waiting for RabbitMQ to be ready..."
-	@until docker compose exec rabbitmq rabbitmq-diagnostics -q ping &>/dev/null; do \
-		echo "RabbitMQ not ready yet, retrying..."; \
-		sleep 1; \
-	done
-	@echo "RabbitMQ is ready"
 
 docker-compose-registry-up: docker-build
 	docker compose up registry -d
