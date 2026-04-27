@@ -46,9 +46,10 @@ docker-compose-dependencies-up-and-log: docker-compose-dependencies-up
 
 # Prerequisite: PostgreSQL needs to be running
 int-test-up-and-run:
-	$(MAKE) go-build-and-run
-	-$(MAKE) int-test-run
-	$(MAKE) go-stop-and-remove
+	# capture the exit status of the tests to ensure we stop and remove the registry service even if tests fail
+	$(MAKE) go-build-and-run; \
+	$(MAKE) int-test-run; status=$$?; \
+	$(MAKE) go-stop-and-remove; exit $$status
 
 # Prerequisite: PostgreSQL and Registry Service need to be running
 int-test-run: install-gotestsum
@@ -57,9 +58,12 @@ int-test-run: install-gotestsum
 # Prerequisite: PostgreSQL needs to be running
 int-test-up-and-run-cover:
 	mkdir -p cover
-	$(MAKE) go-build-and-run cover_flag=-cover cover_dir_env=GOCOVERDIR=cover
-	-$(MAKE) int-test-run
-	$(MAKE) go-stop-and-remove
+
+	# capture the exit status of the tests to ensure we stop and remove the registry service even if tests fail
+	$(MAKE) go-build-and-run cover_flag=-cover cover_dir_env=GOCOVERDIR=cover; \
+	$(MAKE) int-test-run; status=$$?; \
+	$(MAKE) go-stop-and-remove; exit $$status
+
 	go tool covdata textfmt -i=./cover -o cover.out
 	rm -r ./cover
 	go tool cover -html=cover.out
@@ -70,9 +74,12 @@ int-test-up-and-run-cover:
 all-tests-run-cover: install-gotestsum
 	mkdir -p cover/integration
 	mkdir -p cover/unit
-	$(MAKE) go-build-and-run cover_flag=-cover cover_dir_env=GOCOVERDIR=${CURDIR}/cover/integration
-	-$(MAKE) int-test-run
-	$(MAKE) go-stop-and-remove
+
+	# capture the exit status of the tests to ensure we stop and remove the registry service even if tests fail
+	$(MAKE) go-build-and-run cover_flag=-cover cover_dir_env=GOCOVERDIR=${CURDIR}/cover/integration; \
+	$(MAKE) int-test-run; status=$$?; \
+	$(MAKE) go-stop-and-remove; exit $$status
+
 	echo "Running unit tests"
 	gotestsum --junitfile=junit-unit.xml --format=testname -- -cover ./internal/... -args -test.gocoverdir="${CURDIR}/cover/unit"
 	echo "Creating coverage report"
@@ -85,8 +92,8 @@ go-build-and-run:
 	$(cover_dir_env) ./registry 1>/dev/null 2>/dev/null & echo $$! > pid.txt
 
 go-stop-and-remove:
-	kill -2 `cat pid.txt` && rm pid.txt
-	rm registry
+	kill -2 `cat pid.txt` || true
+	rm -f pid.txt registry
 
 clean-docker-compose:
 	docker compose down -v && docker compose rm -f -v
@@ -99,7 +106,11 @@ clean:
 	rm -f registry
 
 # Runs unit and integration tests with coverage, starts dependency containers, and generates coverage report
-integration-test: docker-compose-dependencies-up all-tests-run-cover
+integration-test:
+	# capture the exit status of the tests to ensure we stop and remove the registry service even if tests fail
+	$(MAKE) docker-compose-dependencies-up; \
+	$(MAKE) all-tests-run-cover; status=$$?; \
+	$(MAKE) clean-docker-compose; exit $$status
 
 generate-certs:
 	(cd local/rabbitmq && chmod +x generate-certs.sh && ./generate-certs.sh)
