@@ -130,25 +130,11 @@ func (r ResourceRepository) PatchAll(ctx context.Context, resource repository.Re
 	return db.RowsAffected, nil
 }
 
-// Transaction will give transaction locking on particular rows.
-// txFunc is a type TransactionFunc where we can define the transactional logic.
-// if txFunc return no error then transaction is committed,
-// else if txFunc return error then transaction is rolled back.
-// Note: please dont use Goroutines inside the txFunc as this might lead to panic.
+// Transaction executes txFunc inside a GORM transaction with SELECT FOR UPDATE locking.
+// Commits on nil return, rolls back on error.
 func (r ResourceRepository) Transaction(ctx context.Context, txFunc repository.TransactionFunc) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		errorChan := make(chan error)
-
-		go func() {
-			errorChan <- txFunc(ctx, NewRepository(tx.Clauses(clause.Locking{Strength: "UPDATE"})))
-		}()
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case err := <-errorChan:
-			return err
-		}
+		return txFunc(ctx, NewRepository(tx.Clauses(clause.Locking{Strength: "UPDATE"})))
 	})
 }
 
