@@ -76,11 +76,12 @@ Create the name of the service account to use
 
 {{/*
 Util function for generating the image URL based on the provided options.
+Either image.tag or image.digest must be set explicitly; no fallback to appVersion.
 */}}
 {{- define "registry.image" -}}
-{{- $defaultTag := index . 1 -}}
 {{- with index . 0 -}}
+{{- if not (or .digest .tag) -}}{{ fail "Either image.tag or image.digest must be set" }}{{- end -}}
 {{- if .registry -}}{{ printf "%s/%s" .registry .repository }}{{- else -}}{{- .repository -}}{{- end -}}
-{{- if .digest -}}{{ printf "@%s" .digest }}{{- else -}}{{ printf ":%s" (default $defaultTag .tag) }}{{- end -}}
+{{- if .digest -}}{{ printf "@%s" .digest }}{{- else -}}{{ printf ":%s" .tag }}{{- end -}}
 {{- end }}
 {{- end }}

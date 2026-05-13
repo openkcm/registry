@@ -35,9 +35,8 @@ image:
   repository: images/registry
 
   # Override the image tag to deploy by setting this variable.
-  # If no value is set, the chart's appVersion is used.
   # +docs:property
-  # tag: 0.0.1
+  tag: latest
 
   # Setting a digest will override any tag.
   # +docs:property
