@@ -197,7 +197,7 @@ func handleCompositeKey(db *gorm.DB, compositeKey repository.CompositeKey) (*gor
 
 	for field, value := range compositeKey {
 		var err error
-		tx, err = handleQueryField(tx, field, value)
+		tx, err = HandleQueryField(tx, field, value)
 		if err != nil {
 			return nil, err
 		}
@@ -206,8 +206,8 @@ func handleCompositeKey(db *gorm.DB, compositeKey repository.CompositeKey) (*gor
 	return tx, nil
 }
 
-// handleQueryField applies the query field to the query.
-func handleQueryField(tx *gorm.DB, field repository.QueryField, value any) (*gorm.DB, error) {
+// HandleQueryField applies the query field to the query.
+func HandleQueryField(tx *gorm.DB, field repository.QueryField, value any) (*gorm.DB, error) {
 	switch value {
 	case repository.NotEmpty:
 		tx = tx.Where(field+" IS NOT NULL").Where(field+" != ?", "")
@@ -215,8 +215,7 @@ func handleQueryField(tx *gorm.DB, field repository.QueryField, value any) (*gor
 		tx = tx.Where(field+" IS NULL OR "+field+" = ?", "")
 	default:
 		switch reflect.ValueOf(value).Kind() { //nolint:exhaustive
-		case reflect.Slice:
-		case reflect.Array:
+		case reflect.Slice, reflect.Array:
 			tx = tx.Where(field+" IN ?", value)
 		case reflect.Map:
 			labels, ok := value.(map[string]any)
