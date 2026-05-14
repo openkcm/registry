@@ -160,7 +160,7 @@ func (m *Mapping) Get(ctx context.Context, in *mappinggrpc.GetRequest) (*mapping
 }
 
 // validateAndGetSystemForUnmap fetches and returns the system. It also validates
-// that the tenantID matches, that the tenant is active, and checks the regional systems validity.
+// that the tenantID matches, that the tenant is active, and validates the regional systems.
 func validateAndGetSystemForUnmap(ctx context.Context, r repository.Repository, in *mappinggrpc.UnmapSystemFromTenantRequest) (*model.System, error) {
 	tenantID := in.GetTenantId()
 
