@@ -149,7 +149,7 @@ func createAMQPClient(ctx context.Context, cfgTarget config.Target) (*amqp.Clien
 	}
 
 	connInfo := amqp.ConnectionInfo{
-		URL:    cfgTarget.Connection.AMQP.Url,
+		URL:    cfgTarget.Connection.AMQP.URL,
 		Target: cfgTarget.Connection.AMQP.Target,
 		Source: cfgTarget.Connection.AMQP.Source,
 	}

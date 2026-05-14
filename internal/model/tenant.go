@@ -95,20 +95,21 @@ type TenantRoleConstraint struct{}
 
 var validTenantRoles map[string]struct{}
 
+func init() {
+	validTenantRoles = make(map[string]struct{}, len(tenantgrpc.Role_name)-1)
+	for _, v := range tenantgrpc.Role_name {
+		if v != tenantgrpc.Role_ROLE_UNSPECIFIED.String() {
+			validTenantRoles[v] = struct{}{}
+		}
+	}
+}
+
 // Validate checks if the provided value is a valid Tenant role.
 // Tenant role must be one of the defined enum values in tenant proto Role.
 func (t TenantRoleConstraint) Validate(value any) error {
 	roleValue, ok := value.(string)
 	if !ok {
 		return fmt.Errorf("%w: %T", validation.ErrWrongType, value)
-	}
-	if validTenantRoles == nil {
-		validTenantRoles = make(map[string]struct{}, len(tenantgrpc.Role_name)-1)
-		for _, v := range tenantgrpc.Role_name {
-			if v != tenantgrpc.Role_ROLE_UNSPECIFIED.String() {
-				validTenantRoles[v] = struct{}{}
-			}
-		}
 	}
 	if _, ok := validTenantRoles[roleValue]; !ok {
 		return validation.ErrValueNotAllowed
