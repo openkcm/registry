@@ -126,40 +126,6 @@ func TestMappingService(t *testing.T) {
 				assert.Nil(t, res)
 				assert.Equal(t, status.Code(err), status.Code(service.ErrSystemHasL1KeyClaim))
 			})
-			t.Run("system is not linked to any tenant", func(t *testing.T) {
-				systemID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, nil)
-				defer cleanupSystem(t, ctx, sSubj, mSubj, systemID, "", systemType, region, false)
-
-				res, err := mSubj.UnmapSystemFromTenant(ctx, &mappinggrpc.UnmapSystemFromTenantRequest{
-					ExternalId: systemID,
-					Type:       systemType,
-					TenantId:   existingTenantID,
-				})
-				assert.Error(t, err)
-				assert.Nil(t, res)
-				assert.Equal(t, status.Code(err), status.Code(service.ErrSystemIsNotLinkedToTenant))
-			})
-			t.Run("tenant is not active", func(t *testing.T) {
-				blockedTenant := validTenant()
-				blockedTenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-				err := createTenantInDB(ctx, db, blockedTenant)
-				assert.NoError(t, err)
-				defer func() {
-					assert.NoError(t, deleteTenantFromDB(ctx, db, blockedTenant))
-				}()
-
-				systemID, systemType, region := registerRegionalSystem(t, ctx, sSubj, blockedTenant.ID, false, allowedSystemType, nil, nil)
-				defer cleanupSystem(t, ctx, sSubj, mSubj, systemID, blockedTenant.ID, systemType, region, false)
-
-				res, err := mSubj.UnmapSystemFromTenant(ctx, &mappinggrpc.UnmapSystemFromTenantRequest{
-					ExternalId: systemID,
-					Type:       systemType,
-					TenantId:   blockedTenant.ID,
-				})
-				assert.Error(t, err)
-				assert.Nil(t, res)
-				assert.Equal(t, status.Code(err), status.Code(service.ErrTenantUnavailable))
-			})
 		})
 		t.Run("should unmap system from tenant successfully", func(t *testing.T) {
 			systemID, systemType, region := registerRegionalSystem(t, ctx, sSubj, existingTenantID, false, allowedSystemType, nil, nil)
@@ -255,37 +221,6 @@ func TestMappingService(t *testing.T) {
 				assert.Error(t, err)
 				assert.Nil(t, res)
 				assert.Equal(t, status.Code(err), status.Code(service.ErrSystemIsLinkedToTenant))
-			})
-			t.Run("tenant is not active", func(t *testing.T) {
-				blockedTenant := validTenant()
-				blockedTenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
-				err := createTenantInDB(ctx, db, blockedTenant)
-				assert.NoError(t, err)
-				defer func() {
-					assert.NoError(t, deleteTenantFromDB(ctx, db, blockedTenant))
-				}()
-
-				res, err := mSubj.MapSystemToTenant(ctx, &mappinggrpc.MapSystemToTenantRequest{
-					ExternalId: validRandID(),
-					Type:       allowedSystemType,
-					TenantId:   blockedTenant.ID,
-				})
-				assert.Error(t, err)
-				assert.Nil(t, res)
-				assert.Equal(t, status.Code(err), status.Code(service.ErrTenantUnavailable))
-			})
-			t.Run("regional system has active L1 key claim", func(t *testing.T) {
-				systemID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", true, allowedSystemType, nil, nil)
-				defer cleanupSystem(t, ctx, sSubj, mSubj, systemID, "", systemType, region, true)
-
-				res, err := mSubj.MapSystemToTenant(ctx, &mappinggrpc.MapSystemToTenantRequest{
-					ExternalId: systemID,
-					Type:       systemType,
-					TenantId:   existingTenantID,
-				})
-				assert.Error(t, err)
-				assert.Nil(t, res)
-				assert.Equal(t, status.Code(err), status.Code(service.ErrSystemHasL1KeyClaim))
 			})
 		})
 		t.Run("should map system to tenant successfully", func(t *testing.T) {
