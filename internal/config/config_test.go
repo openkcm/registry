@@ -15,7 +15,7 @@ func TestValidateTarget(t *testing.T) {
 		Connection: &config.Connection{
 			Type: config.ConnectionTypeAMQP,
 			AMQP: &config.AMQP{
-				Url:    "amqp://localhost:5672",
+				URL:    "amqp://localhost:5672",
 				Source: "source",
 				Target: "target",
 			},
@@ -90,7 +90,7 @@ func TestValidateTarget(t *testing.T) {
 			name: "missing AMQP URL",
 			patchTarget: func(t config.Target) config.Target {
 				t = deepCopyTarget(t)
-				t.Connection.AMQP.Url = ""
+				t.Connection.AMQP.URL = ""
 				return t
 			},
 			expErr: config.ErrEmptyURL,
@@ -376,7 +376,7 @@ func deepCopyTarget(t config.Target) config.Target {
 		Connection: &config.Connection{
 			Type: t.Connection.Type,
 			AMQP: &config.AMQP{
-				Url:    t.Connection.AMQP.Url,
+				URL:    t.Connection.AMQP.URL,
 				Source: t.Connection.AMQP.Source,
 				Target: t.Connection.AMQP.Target,
 			},

@@ -11,12 +11,25 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
 	"github.com/openkcm/registry/internal/interceptor"
 )
+
+// mockServerStream is a minimal grpc.ServerStream for testing.
+type mockServerStream struct {
+	ctxFunc func() context.Context
+}
+
+func (m *mockServerStream) Context() context.Context     { return m.ctxFunc() }
+func (m *mockServerStream) SetHeader(metadata.MD) error  { return nil }
+func (m *mockServerStream) SendHeader(metadata.MD) error { return nil }
+func (m *mockServerStream) SetTrailer(metadata.MD)       {}
+func (m *mockServerStream) SendMsg(any) error            { return nil }
+func (m *mockServerStream) RecvMsg(any) error            { return nil }
 
 func TestMetricsUnaryInterceptor(t *testing.T) {
 	ctx := t.Context()
@@ -103,7 +116,7 @@ func TestMetricsStreamInterceptor(t *testing.T) {
 
 	err = met.StreamInterceptor(
 		nil,
-		nil,
+		&mockServerStream{ctxFunc: t.Context},
 		&grpc.StreamServerInfo{FullMethod: "/test.method"},
 		handler,
 	)
