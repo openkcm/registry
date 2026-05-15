@@ -46,14 +46,16 @@ func (m *Mapping) UnmapSystemFromTenant(ctx context.Context, in *mappinggrpc.Unm
 	defer cancel()
 
 	err := m.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
-		system, err := validateAndGetSystemForUnmap(ctx, r, in)
-		if err != nil {
-			return err
+		system, validateErr := validateAndGetSystemForUnmap(ctx, r, in)
+		if validateErr != nil {
+			slogctx.Error(ctx, "validateAndGetSystemForUnmap failed", "error", validateErr)
+			return validateErr
 		}
 
 		system.TenantID = &emptyTenantID
-		ok, err := r.Patch(ctx, system)
-		if err != nil {
+		ok, patchErr := r.Patch(ctx, system)
+		if patchErr != nil {
+			slogctx.Error(ctx, "failed to patch system during unmap", "error", patchErr)
 			return ErrSystemUpdate
 		}
 
@@ -61,6 +63,7 @@ func (m *Mapping) UnmapSystemFromTenant(ctx context.Context, in *mappinggrpc.Unm
 			return ErrorWithParams(ErrSystemNotFound, "externalID", in.GetExternalId(), "type", in.GetType())
 		}
 
+		slogctx.Debug(ctx, "system successfully unmapped in transaction")
 		return nil
 	})
 
@@ -70,6 +73,7 @@ func (m *Mapping) UnmapSystemFromTenant(ctx context.Context, in *mappinggrpc.Unm
 		return nil, err
 	}
 
+	slogctx.Info(ctx, "system successfully unmapped from tenant")
 	return &mappinggrpc.UnmapSystemFromTenantResponse{Success: true}, nil
 }
 
@@ -89,22 +93,28 @@ func (m *Mapping) MapSystemToTenant(ctx context.Context, in *mappinggrpc.MapSyst
 	defer cancel()
 
 	err := m.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
-		system, found, err := isSystemTenantMapAllowed(ctx, r, in)
-		if err != nil {
-			return err
+		system, found, validateErr := isSystemTenantMapAllowed(ctx, r, in)
+		if validateErr != nil {
+			slogctx.Error(ctx, "isSystemTenantMapAllowed failed", "error", validateErr)
+			return validateErr
 		}
 
 		if !found {
-			_, err = createSystem(ctx, m.validation, r, in.GetExternalId(), in.GetType(), tenantID)
-			return err
+			_, createErr := createSystem(ctx, m.validation, r, in.GetExternalId(), in.GetType(), tenantID)
+			if createErr != nil {
+				slogctx.Error(ctx, "failed to create system during map", "error", createErr)
+			}
+			return createErr
 		}
 
 		system.TenantID = &tenantID
-		_, err = r.Patch(ctx, system)
-		if err != nil {
+		_, patchErr := r.Patch(ctx, system)
+		if patchErr != nil {
+			slogctx.Error(ctx, "failed to patch system during map", "error", patchErr)
 			return ErrSystemUpdate
 		}
 
+		slogctx.Debug(ctx, "system successfully mapped in transaction")
 		return nil
 	})
 
@@ -114,6 +124,7 @@ func (m *Mapping) MapSystemToTenant(ctx context.Context, in *mappinggrpc.MapSyst
 		return nil, err
 	}
 
+	slogctx.Info(ctx, "system successfully mapped to tenant")
 	return &mappinggrpc.MapSystemToTenantResponse{Success: true}, nil
 }
 
@@ -148,40 +159,45 @@ func (m *Mapping) Get(ctx context.Context, in *mappinggrpc.GetRequest) (*mapping
 	}, nil
 }
 
-// validateAndGetSystemForUnmap fetched and returns the system it also validates
-// iIt checks if the tenantID matches and if the tenant is active and it checks for the regional systems validity.
+// validateAndGetSystemForUnmap fetches and returns the system. It also validates
+// that the tenantID matches, that the tenant is active, and validates the regional systems.
 func validateAndGetSystemForUnmap(ctx context.Context, r repository.Repository, in *mappinggrpc.UnmapSystemFromTenantRequest) (*model.System, error) {
 	tenantID := in.GetTenantId()
 
 	system, found, err := getSystem(ctx, r, in.GetExternalId(), in.GetType())
 	if err != nil {
+		slogctx.Error(ctx, "failed to get system for unmap", "error", err)
 		return nil, ErrSystemSelect
 	}
 	if !found {
+		slogctx.Warn(ctx, "system not found for unmap", "externalId", in.GetExternalId(), "type", in.GetType())
 		return nil, ErrSystemNotFound
 	}
 
 	if !system.IsLinkedToTenant() {
+		slogctx.Warn(ctx, "system is not linked to any tenant", "externalId", system.ExternalID, "type", system.Type)
 		return nil, ErrorWithParams(ErrSystemIsNotLinkedToTenant, "externalID", system.ExternalID, "type", system.Type)
 	}
 
 	if *system.TenantID != tenantID {
+		slogctx.Warn(ctx, "system is linked to a different tenant", "externalId", system.ExternalID, "type", system.Type, "linkedTenantId", *system.TenantID, "requestedTenantId", tenantID)
 		return nil, ErrorWithParams(ErrSystemIsNotLinkedToTenant, "externalID", system.ExternalID, "type", system.Type)
 	}
 
-	tenant, err := getTenant(ctx, r, *system.TenantID)
-	if err != nil {
-		return nil, err
+	tenant, getTenantErr := getTenant(ctx, r, *system.TenantID)
+	if getTenantErr != nil {
+		slogctx.Error(ctx, "failed to get tenant for unmap", "tenantId", *system.TenantID, "error", getTenantErr)
+		return nil, getTenantErr
 	}
 
-	err = checkTenantActive(tenant)
-	if err != nil {
-		return nil, err
+	if activeErr := checkTenantActive(tenant); activeErr != nil {
+		slogctx.Warn(ctx, "tenant is not active for unmap", "tenantId", tenant.ID, "status", tenant.Status, "error", activeErr)
+		return nil, activeErr
 	}
 
-	if err := validateRegionalSystemsForUnmap(ctx, r, system); err != nil {
-		slogctx.Warn(ctx, "validation failed for UnmapSystemFromTenant request", "error", err)
-		return nil, err
+	if regionalErr := validateRegionalSystemsForUnmap(ctx, r, system); regionalErr != nil {
+		slogctx.Warn(ctx, "regional systems validation failed for unmap", "externalId", system.ExternalID, "type", system.Type, "error", regionalErr)
+		return nil, regionalErr
 	}
 
 	return system, nil
@@ -207,34 +223,42 @@ func validateRegionalSystemsForUnmap(ctx context.Context, r repository.Repositor
 }
 
 // isSystemTenantMapAllowed checks whether all conditions are met to map the Tenant.
-// It returns nil if the provided Tenant exist, the System is found and no linked, and HasL1KeyClaim is false.
+// It returns (nil, false, nil) when the Tenant is valid and the System does not exist yet,
+// so the caller can create it. It returns (system, true, nil) when the Tenant is valid,
+// the System is found, is not linked, and has no active L1 key claim. The bool indicates
+// whether the System was found.
 func isSystemTenantMapAllowed(ctx context.Context, r repository.Repository, in *mappinggrpc.MapSystemToTenantRequest) (*model.System, bool, error) {
-	tenant, err := getTenant(ctx, r, in.GetTenantId())
-	if err != nil {
-		return nil, false, err
+	tenant, getTenantErr := getTenant(ctx, r, in.GetTenantId())
+	if getTenantErr != nil {
+		slogctx.Error(ctx, "failed to get tenant for map", "tenantId", in.GetTenantId(), "error", getTenantErr)
+		return nil, false, getTenantErr
 	}
 
-	err = checkTenantActive(tenant)
-	if err != nil {
-		return nil, false, err
+	if activeErr := checkTenantActive(tenant); activeErr != nil {
+		slogctx.Warn(ctx, "tenant is not active for map", "tenantId", tenant.ID, "status", tenant.Status, "error", activeErr)
+		return nil, false, activeErr
 	}
 
-	system, found, err := getSystem(ctx, r, in.GetExternalId(), in.GetType())
-	if err != nil {
-		return nil, false, err
+	system, found, getSystemErr := getSystem(ctx, r, in.GetExternalId(), in.GetType())
+	if getSystemErr != nil {
+		slogctx.Error(ctx, "failed to get system for map", "externalId", in.GetExternalId(), "type", in.GetType(), "error", getSystemErr)
+		return nil, false, getSystemErr
 	}
 
 	if !found {
+		slogctx.Debug(ctx, "system not found - will create new", "externalId", in.GetExternalId(), "type", in.GetType())
 		return nil, false, nil
 	}
 
 	// For linking, each system must not be already linked and must not have an active L1 key claim.
 	if system.IsLinkedToTenant() {
+		slogctx.Warn(ctx, "system is already linked to a tenant", "externalId", system.ExternalID, "type", system.Type, "linkedTenantId", *system.TenantID)
 		return system, found, ErrorWithParams(ErrSystemIsLinkedToTenant, "externalID", system.ExternalID, "type", system.Type)
 	}
 
-	if err := validateRegionalSystemsForLink(ctx, r, system); err != nil {
-		return system, found, err
+	if regionalErr := validateRegionalSystemsForLink(ctx, r, system); regionalErr != nil {
+		slogctx.Warn(ctx, "regional systems validation failed for map", "externalId", system.ExternalID, "type", system.Type, "error", regionalErr)
+		return system, found, regionalErr
 	}
 
 	return system, found, nil
