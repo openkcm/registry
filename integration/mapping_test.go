@@ -129,12 +129,15 @@ func TestMappingService(t *testing.T) {
 				}
 				err := createTenantInDB(ctx, db, inactiveTenant)
 				assert.NoError(t, err)
-				defer func() {
-					assert.NoError(t, deleteTenantFromDB(ctx, db, inactiveTenant))
-				}()
 
 				systemID, systemType, region := registerRegionalSystem(t, ctx, sSubj, inactiveTenant.ID, false, allowedSystemType, nil, nil)
-				defer cleanupSystem(t, ctx, sSubj, mSubj, systemID, inactiveTenant.ID, systemType, region, false)
+				defer func() {
+					// Change tenant to active so cleanup can proceed
+					inactiveTenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String())
+					db.WithContext(ctx).Save(inactiveTenant)
+					cleanupSystem(t, ctx, sSubj, mSubj, systemID, inactiveTenant.ID, systemType, region, false)
+					assert.NoError(t, deleteTenantFromDB(ctx, db, inactiveTenant))
+				}()
 
 				res, err := mSubj.UnmapSystemFromTenant(ctx, &mappinggrpc.UnmapSystemFromTenantRequest{
 					ExternalId: systemID,
