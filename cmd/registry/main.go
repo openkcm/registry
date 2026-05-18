@@ -50,7 +50,7 @@ func main() {
 	initOTLP(ctx, cfg)
 
 	// Status server initialization
-	go startStatusServer(cfg, ctx)
+	go startStatusServer(ctx, cfg)
 
 	db := initDB(ctx, cfg)
 
@@ -185,7 +185,7 @@ func loadConfig() *config.Config {
 	return cfg
 }
 
-func startStatusServer(cfg *config.Config, ctx context.Context) {
+func startStatusServer(ctx context.Context, cfg *config.Config) {
 	liveness := status.WithLiveness(
 		health.NewHandler(
 			health.NewChecker(health.WithDisabledAutostart()),
