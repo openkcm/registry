@@ -12,7 +12,10 @@ import (
 
 	mappinggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/mapping/v1"
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
+	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 
+	"github.com/openkcm/registry/integration/operatortest"
+	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/service"
 )
 
@@ -114,6 +117,34 @@ func TestMappingService(t *testing.T) {
 				assert.Nil(t, res)
 				assert.Equal(t, status.Code(err), status.Code(service.ErrSystemIsNotLinkedToTenant))
 			})
+			t.Run("tenant is not active", func(t *testing.T) {
+				inactiveTenant := &model.Tenant{
+					Name:      "InactiveTenantUnmap",
+					ID:        validRandID(),
+					Region:    operatortest.Region,
+					OwnerID:   "owner123",
+					OwnerType: allowedOwnerType,
+					Status:    model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String()),
+					Role:      tenantgrpc.Role_ROLE_LIVE.String(),
+				}
+				err := createTenantInDB(ctx, db, inactiveTenant)
+				assert.NoError(t, err)
+				defer func() {
+					assert.NoError(t, deleteTenantFromDB(ctx, db, inactiveTenant))
+				}()
+
+				systemID, systemType, region := registerRegionalSystem(t, ctx, sSubj, inactiveTenant.ID, false, allowedSystemType, nil, nil)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, systemID, inactiveTenant.ID, systemType, region, false)
+
+				res, err := mSubj.UnmapSystemFromTenant(ctx, &mappinggrpc.UnmapSystemFromTenantRequest{
+					ExternalId: systemID,
+					Type:       systemType,
+					TenantId:   inactiveTenant.ID,
+				})
+				assert.Error(t, err)
+				assert.Nil(t, res)
+				assert.Equal(t, status.Code(err), status.Code(service.ErrTenantUnavailable))
+			})
 			t.Run("regional system has active L1 key claim", func(t *testing.T) {
 				systemID, systemType, region := registerRegionalSystem(t, ctx, sSubj, existingTenantID, true, allowedSystemType, nil, nil)
 				defer cleanupSystem(t, ctx, sSubj, mSubj, systemID, existingTenantID, systemType, region, true)
@@ -138,6 +169,16 @@ func TestMappingService(t *testing.T) {
 			})
 			assert.NoError(t, err)
 			assert.NotNil(t, res)
+			assert.True(t, res.Success)
+
+			// Verify system is no longer linked via Get
+			getRes, err := mSubj.Get(ctx, &mappinggrpc.GetRequest{
+				ExternalId: systemID,
+				Type:       systemType,
+			})
+			assert.NoError(t, err)
+			assert.NotNil(t, getRes)
+			assert.Empty(t, getRes.TenantId)
 		})
 	})
 
@@ -202,6 +243,45 @@ func TestMappingService(t *testing.T) {
 				assert.Error(t, err)
 				assert.Nil(t, res)
 				assert.ErrorIs(t, err, service.ErrTenantNotFound)
+			})
+			t.Run("tenant is not active", func(t *testing.T) {
+				inactiveTenant := &model.Tenant{
+					Name:      "InactiveTenantMap",
+					ID:        validRandID(),
+					Region:    operatortest.Region,
+					OwnerID:   "owner123",
+					OwnerType: allowedOwnerType,
+					Status:    model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String()),
+					Role:      tenantgrpc.Role_ROLE_LIVE.String(),
+				}
+				err := createTenantInDB(ctx, db, inactiveTenant)
+				assert.NoError(t, err)
+				defer func() {
+					assert.NoError(t, deleteTenantFromDB(ctx, db, inactiveTenant))
+				}()
+
+				res, err := mSubj.MapSystemToTenant(ctx, &mappinggrpc.MapSystemToTenantRequest{
+					ExternalId: validRandID(),
+					Type:       allowedSystemType,
+					TenantId:   inactiveTenant.ID,
+				})
+				assert.Error(t, err)
+				assert.Nil(t, res)
+				assert.Equal(t, status.Code(err), status.Code(service.ErrTenantUnavailable))
+			})
+			t.Run("system has active L1 key claim during map", func(t *testing.T) {
+				// Register system without tenant, then unmap, then set L1 key claim and try to map
+				systemID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", true, allowedSystemType, nil, nil)
+				defer cleanupSystem(t, ctx, sSubj, mSubj, systemID, "", systemType, region, true)
+
+				res, err := mSubj.MapSystemToTenant(ctx, &mappinggrpc.MapSystemToTenantRequest{
+					ExternalId: systemID,
+					Type:       systemType,
+					TenantId:   existingTenantID,
+				})
+				assert.Error(t, err)
+				assert.Nil(t, res)
+				assert.Equal(t, status.Code(err), status.Code(service.ErrSystemHasL1KeyClaim))
 			})
 			t.Run("system is already mapped to another tenant", func(t *testing.T) {
 				tenant := validTenant()
