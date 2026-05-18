@@ -151,9 +151,9 @@ func (o *Orbital) Validate() error {
 }
 
 func (o *Orbital) GetWorker(workerName string) *Worker {
-	for _, worker := range o.Workers {
-		if worker.Name == workerName {
-			return &worker
+	for i := range o.Workers {
+		if o.Workers[i].Name == workerName {
+			return &o.Workers[i]
 		}
 	}
 
@@ -237,13 +237,13 @@ func (c *Connection) validate() error {
 }
 
 type AMQP struct {
-	Url    string `yaml:"url" json:"url"`
+	URL    string `yaml:"url" json:"url"`
 	Source string `yaml:"source" json:"source"`
 	Target string `yaml:"target" json:"target"`
 }
 
 func (a *AMQP) validate() error {
-	if a.Url == "" {
+	if a.URL == "" {
 		return ErrEmptyURL
 	}
 
