@@ -273,9 +273,15 @@ func TestMappingService(t *testing.T) {
 				assert.Equal(t, status.Code(err), status.Code(service.ErrTenantUnavailable))
 			})
 			t.Run("system has active L1 key claim during map", func(t *testing.T) {
-				// Register system without tenant, then unmap, then set L1 key claim and try to map
 				systemID, systemType, region := registerRegionalSystem(t, ctx, sSubj, "", true, allowedSystemType, nil, nil)
-				defer cleanupSystem(t, ctx, sSubj, mSubj, systemID, "", systemType, region, true)
+				defer func() {
+					// System is not linked to any tenant, so UpdateSystemL1KeyClaim would fail.
+					// Delete the regional system via gRPC, then remove the parent system from DB.
+					err := deleteSystem(ctx, sSubj, systemID, systemType, region)
+					assert.NoError(t, err)
+					err = deleteSystemInDB(ctx, db, systemID, systemType)
+					assert.NoError(t, err)
+				}()
 
 				res, err := mSubj.MapSystemToTenant(ctx, &mappinggrpc.MapSystemToTenantRequest{
 					ExternalId: systemID,

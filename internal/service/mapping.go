@@ -224,9 +224,10 @@ func validateRegionalSystemsForUnmap(ctx context.Context, r repository.Repositor
 
 // isSystemTenantMapAllowed checks whether all conditions are met to map the Tenant.
 // It returns (nil, false, nil) when the Tenant is valid and the System does not exist yet,
-// so the caller can create it. It returns (system, true, nil) when the Tenant is valid,
-// the System is found, is not linked, and has no active L1 key claim. The bool indicates
-// whether the System was found.
+// so the caller can create it. It also returns (nil, false, error) when the Tenant is not
+// found or not active. It returns (system, true, nil) when the Tenant is valid, the System
+// is found, is not linked, and has no active L1 key claim. The bool indicates whether the
+// System was found.
 func isSystemTenantMapAllowed(ctx context.Context, r repository.Repository, in *mappinggrpc.MapSystemToTenantRequest) (*model.System, bool, error) {
 	tenant, getTenantErr := getTenant(ctx, r, in.GetTenantId())
 	if getTenantErr != nil {
