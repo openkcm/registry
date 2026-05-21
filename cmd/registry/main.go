@@ -201,9 +201,11 @@ func startStatusServer(ctx context.Context, cfg *config.Config) {
 	)
 
 	// Add gRPC health server checker
-	cfg.GRPCServer.Client.Address = cfg.GRPCServer.Address
+	// Copy the gRPC client config to avoid race condition when modifying Client.Address
+	grpcClientCfg := cfg.GRPCServer.Client
+	grpcClientCfg.Address = cfg.GRPCServer.Address
 	healthOptions = append(healthOptions,
-		health.WithGRPCServerChecker(cfg.GRPCServer.Client),
+		health.WithGRPCServerChecker(grpcClientCfg),
 	)
 
 	// database health check
