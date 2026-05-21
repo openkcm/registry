@@ -50,7 +50,10 @@ func main() {
 	initOTLP(ctx, cfg)
 
 	// Status server initialization
-	go startStatusServer(ctx, cfg)
+	// Copy the gRPC client config to avoid race condition when modifying Client.Address
+	grpcClientCfg := cfg.GRPCServer.Client
+	grpcClientCfg.Address = cfg.GRPCServer.Address
+	go startStatusServer(ctx, cfg.BaseConfig, grpcClientCfg, cfg.Database)
 
 	db := initDB(ctx, cfg)
 
@@ -185,7 +188,7 @@ func loadConfig() *config.Config {
 	return cfg
 }
 
-func startStatusServer(ctx context.Context, cfg *config.Config) {
+func startStatusServer(ctx context.Context, baseCfg commoncfg.BaseConfig, grpcClientCfg commoncfg.GRPCClient, dbCfg config.DB) {
 	liveness := status.WithLiveness(
 		health.NewHandler(
 			health.NewChecker(health.WithDisabledAutostart()),
@@ -201,15 +204,12 @@ func startStatusServer(ctx context.Context, cfg *config.Config) {
 	)
 
 	// Add gRPC health server checker
-	// Copy the gRPC client config to avoid race condition when modifying Client.Address
-	grpcClientCfg := cfg.GRPCServer.Client
-	grpcClientCfg.Address = cfg.GRPCServer.Address
 	healthOptions = append(healthOptions,
 		health.WithGRPCServerChecker(grpcClientCfg),
 	)
 
 	// database health check
-	dsn, err := sql.GetDataSourceName(cfg.Database)
+	dsn, err := sql.GetDataSourceName(dbCfg)
 	handleErr("getting data source name", err)
 
 	healthOptions = append(healthOptions,
@@ -222,7 +222,7 @@ func startStatusServer(ctx context.Context, cfg *config.Config) {
 	)
 
 	// Start the status server
-	err = status.Start(ctx, &cfg.BaseConfig, liveness, readiness)
+	err = status.Start(ctx, &baseCfg, liveness, readiness)
 	if err != nil {
 		slogctx.Error(ctx, "Failure on the status server", "error", err)
 
