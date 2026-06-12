@@ -15,3 +15,4 @@ env:
 jobs:
   release:
     uses: openkcm/build/.github/workflows/chart-release.svc.yaml@7410b3341d4752b66e1b68327f8a9d8ae3ed81c0 # main
+    secrets: inherit # zizmor: ignore[secrets-inherit]
