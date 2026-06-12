@@ -10,6 +10,9 @@ updates:
       - "openkcm/go-maintainers"
     schedule:
       interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "fix"
       include: "scope"
@@ -28,6 +31,9 @@ updates:
       - "openkcm/go-maintainers"
     schedule:
       interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "fix"
       include: "scope"
@@ -46,6 +52,9 @@ updates:
       - "openkcm/go-maintainers"
     schedule:
       interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "fix"
       include: "scope"

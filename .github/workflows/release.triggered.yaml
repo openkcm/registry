@@ -9,6 +9,5 @@ permissions:
 
 jobs:
   release:
-    uses: openkcm/build/.github/workflows/release.manual.yaml@main
-    secrets: inherit
+    uses: openkcm/build/.github/workflows/release.manual.yaml@7410b3341d4752b66e1b68327f8a9d8ae3ed81c0 # main
 

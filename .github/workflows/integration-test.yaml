@@ -24,9 +24,13 @@ jobs:
     steps:
       - name: Init
         id: init
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          echo "internal_pr=$([[ '${{ github.event.pull_request.head.repo.full_name }}' == '${{ github.repository }}' ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+          echo "internal_pr=$([[ "$HEAD_REPO" == "$REPOSITORY" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           else
           echo "internal_pr=true" >> "$GITHUB_OUTPUT"
           fi
@@ -34,10 +38,11 @@ jobs:
       - name: Generate token from GitHub App
         id: generate-token
         if: steps.init.outputs.internal_pr == 'true' && github.actor != 'dependabot[bot]'
-        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
-          app_id: ${{ secrets.APP_PUSH_TAG_ID }}
-          private_key: ${{ secrets.APP_PUSH_TAG_PRIVATE_KEY }}
+          app-id: ${{ secrets.APP_PUSH_TAG_ID }}
+          private-key: ${{ secrets.APP_PUSH_TAG_PRIVATE_KEY }}
+          permission-contents: read
 
       - name: Checkout code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -46,11 +51,13 @@ jobs:
           fetch-tags: true
           fetch-depth: 0
           submodules: recursive
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v5
         with:
           go-version-file: go.mod
+          cache: false
 
       - name: Run integration tests
         run: make integration-test

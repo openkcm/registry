@@ -19,5 +19,8 @@ env:
 
 jobs:
   released:
-    uses: openkcm/build/.github/workflows/publish.svc.yaml@main
-    secrets: inherit
+    uses: openkcm/build/.github/workflows/publish.svc.yaml@7410b3341d4752b66e1b68327f8a9d8ae3ed81c0 # main
+    secrets:
+      OCM_PRIVATE_KEY: ${{ secrets.OCM_PRIVATE_KEY }}
+      COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+      COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
