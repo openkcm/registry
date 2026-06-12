@@ -14,3 +14,4 @@ jobs:
   check:
     uses: openkcm/build/.github/workflows/sonar.yaml@main
     secrets: inherit
+    environment: production

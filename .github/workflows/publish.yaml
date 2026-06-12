@@ -21,3 +21,4 @@ jobs:
   released:
     uses: openkcm/build/.github/workflows/publish.svc.yaml@main
     secrets: inherit
+    environment: production

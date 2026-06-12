@@ -19,3 +19,4 @@ jobs:
   analyze:
     uses: openkcm/build/.github/workflows/codeql.yaml@main
     secrets: inherit
+    environment: production
