@@ -17,4 +17,3 @@ jobs:
   check:
     uses: openkcm/build/.github/workflows/reuse.svc.yaml@main
     secrets: inherit
-    environment: production

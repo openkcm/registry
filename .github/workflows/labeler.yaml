@@ -12,4 +12,3 @@ jobs:
   do:
     uses: openkcm/build/.github/workflows/labeler.yaml@main
     secrets: inherit
-    environment: production

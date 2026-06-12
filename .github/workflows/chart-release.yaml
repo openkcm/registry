@@ -16,4 +16,3 @@ jobs:
   release:
     uses: openkcm/build/.github/workflows/chart-release.svc.yaml@main
     secrets: inherit
-    environment: production
