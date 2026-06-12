@@ -95,15 +95,15 @@ go-build-and-run:
 # Waits for the registry service to be ready by polling the gRPC health endpoint
 wait-for-registry:
 	@echo "Waiting for registry service to be ready..."
-	@for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do \
+	@for i in $$(seq 1 45); do \
 		if go tool github.com/grpc-ecosystem/grpc-health-probe -addr=localhost:9092 2>/dev/null; then \
 			echo "Registry service is ready"; \
 			exit 0; \
 		fi; \
-		echo "Waiting... ($$i/20)"; \
+		echo "Waiting... ($$i/45)"; \
 		sleep 1; \
 	done; \
-	echo "Registry service failed to start within 20 seconds"; \
+	echo "Registry service failed to start within 45 seconds"; \
 	exit 1
 
 go-stop-and-remove:

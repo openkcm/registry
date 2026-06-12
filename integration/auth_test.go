@@ -351,15 +351,21 @@ func TestAuth(t *testing.T) {
 }
 
 func waitForAuthReconciliation(ctx context.Context, subj authgrpc.ServiceClient, externalID, expStatus string) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	timeout := getReconciliationTimeout()
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	var currentAuth *authgrpc.Auth
+	backoff := getInitialPollInterval()
+	startTime := time.Now()
+	attempts := 0
+
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("%w: auth: %s", ctx.Err(), currentAuth)
+			return fmt.Errorf("%w after %v (%d attempts); auth: %s", ctx.Err(), time.Since(startTime), attempts, currentAuth)
 		default:
+			attempts++
 			resp, err := subj.GetAuth(ctx, &authgrpc.GetAuthRequest{
 				ExternalId: externalID,
 			})
@@ -372,7 +378,10 @@ func waitForAuthReconciliation(ctx context.Context, subj authgrpc.ServiceClient,
 
 			currentAuth = resp.Auth
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(backoff)
+		if backoff < maxPollInterval {
+			backoff = min(backoff*2, maxPollInterval)
+		}
 	}
 }
 
