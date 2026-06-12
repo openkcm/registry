@@ -11,4 +11,5 @@ jobs:
   release:
     uses: openkcm/build/.github/workflows/release.manual.yaml@main
     secrets: inherit
+    environment: production
 
