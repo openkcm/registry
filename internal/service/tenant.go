@@ -387,19 +387,23 @@ func (t *Tenant) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobCo
 }
 
 // ResolveTasks creates a task for the job based on the tenant's region.
-func (t *Tenant) ResolveTasks(_ context.Context, job orbital.Job, targetsByRegion map[string]orbital.TargetManager) (orbital.TaskResolverResult, error) {
+func (t *Tenant) ResolveTasks(ctx context.Context, job orbital.Job, targetsByRegion map[string]orbital.TargetManager) (orbital.TaskResolverResult, error) {
 	tenant := &tenantgrpc.Tenant{}
 
 	err := proto.Unmarshal(job.Data, tenant)
 	if err != nil {
+		msg := "failed to unmarshal tenant data"
+		slogctx.Error(ctx, msg, "error", err)
 		return orbital.CancelTaskResolver(
-			fmt.Sprintf("failed to unmarshal tenant data: %v", err)), nil
+			fmt.Sprintf("%s: %v", msg, err)), nil
 	}
 
 	_, ok := targetsByRegion[tenant.GetRegion()]
 	if !ok {
+		msg := "no matching orbital target manager found"
+		slogctx.Error(ctx, msg, "region", tenant.GetRegion())
 		return orbital.CancelTaskResolver(
-			"no orbital initiator found for region: " + tenant.GetRegion()), nil
+			msg + " for region: " + tenant.GetRegion()), nil
 	}
 
 	return orbital.CompleteTaskResolver().WithTaskInfo(
