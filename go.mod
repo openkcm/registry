@@ -10,8 +10,8 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/gofrs/uuid/v5 v5.4.0
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/openkcm/api-sdk v0.17.0
-	github.com/openkcm/common-sdk v1.16.1
+	github.com/openkcm/api-sdk v0.18.1
+	github.com/openkcm/common-sdk v1.17.0
 	github.com/openkcm/orbital v0.5.1
 	github.com/samber/oops v1.22.0
 	github.com/stretchr/testify v1.11.1
