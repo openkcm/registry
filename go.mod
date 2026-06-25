@@ -10,7 +10,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/gofrs/uuid/v5 v5.4.0
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/openkcm/api-sdk v0.18.1
+	github.com/openkcm/api-sdk v0.19.0
 	github.com/openkcm/common-sdk v1.17.0
 	github.com/openkcm/orbital v0.5.1
 	github.com/samber/oops v1.22.0
@@ -22,7 +22,7 @@ require (
 	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
 	gorm.io/driver/postgres v1.6.0
-	gorm.io/gorm v1.31.1
+	gorm.io/gorm v1.31.2
 )
 
 require (
