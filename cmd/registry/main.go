@@ -110,6 +110,11 @@ func startGRPCServer(ctx context.Context, cfg *config.Config, grpcServer *grpc.S
 func setupGRPCServer(ctx context.Context, cfg *config.Config) (*grpc.Server, error) {
 	rec := interceptor.NewRecover()
 
+	pv, err := interceptor.NewProtoValidation()
+	if err != nil {
+		return nil, err
+	}
+
 	meter := otel.Meter(
 		cfg.Application.Name,
 		metric.WithInstrumentationVersion(otel.Version()),
@@ -122,12 +127,15 @@ func setupGRPCServer(ctx context.Context, cfg *config.Config) (*grpc.Server, err
 	}
 
 	// Create a new gRPC server
+	// Interceptor order: validation first, then metrics, then panic recovery last
 	grpcServer := commongrpc.NewServer(ctx, &cfg.GRPCServer.GRPCServer,
 		grpc.ChainUnaryInterceptor(
+			pv.UnaryInterceptor,
 			met.UnaryInterceptor,
 			rec.UnaryInterceptor,
 		),
 		grpc.ChainStreamInterceptor(
+			pv.StreamInterceptor,
 			met.StreamInterceptor,
 			rec.StreamInterceptor,
 		),
