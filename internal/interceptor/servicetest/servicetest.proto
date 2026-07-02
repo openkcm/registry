@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+import "buf/validate/validate.proto";
+
 option go_package = "github.com/openkcm/registry/internal/interceptor/servicetest";
 
 service TestService {
@@ -8,9 +10,12 @@ service TestService {
 }
 
 message TestCallRequest {
-  string id  = 1;
+  string id = 1 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 40
+  ];
 }
 
 message TestCallResponse {
-  string id  = 1;
+  string id = 1;
 }

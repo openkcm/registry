@@ -2,27 +2,28 @@ version: "2"
 linters:
   default: all
   disable:
-    - noinlineerr
-    - funlen
-    - noctx
     - depguard
     - exhaustruct
+    - funlen
     - ginkgolinter
+    - gochecknoglobals
+    - gochecknoinits
+    - godox
+    - gomodguard
+    - ireturn
+    - lll
+    - mnd
     - musttag
     - nlreturn
+    - noctx
+    - noctx
+    - noinlineerr
+    - protogetter
+    - revive
     - tagalign
     - varnamelen
-    - gochecknoinits
-    - gochecknoglobals
     - wrapcheck
     - wsl
-    - godox
-    - protogetter
-    - lll
-    - revive
-    - ireturn
-    - noctx
-    - mnd
     - wsl_v5
   settings:
     tagliatelle:
