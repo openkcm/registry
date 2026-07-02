@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package integration_test
 
@@ -29,7 +28,9 @@ const (
 func TestTenantMetrics(t *testing.T) {
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() {
+		require.NoError(t, conn.Close())
+	}()
 
 	subj := tenantgrpc.NewServiceClient(conn)
 
@@ -195,7 +196,9 @@ func TestTenantMetrics(t *testing.T) {
 func TestSystemMetrics(t *testing.T) {
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() {
+		require.NoError(t, conn.Close())
+	}()
 
 	sSubj := systemgrpc.NewServiceClient(conn)
 	mSub := mappinggrpc.NewServiceClient(conn)
@@ -511,6 +514,7 @@ func TestSystemMetrics(t *testing.T) {
 					Type:       req.Type,
 					Region:     req.Region,
 				})
+				assert.NoError(t, err)
 
 				// Then
 				unlinked, err := getSafeMetric(ctx, scraper, metricUnlinked)

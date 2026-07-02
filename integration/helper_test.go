@@ -238,7 +238,7 @@ func getSystemFromDB(ctx context.Context, db *gorm.DB, externalID, systemType st
 		return nil, err
 	}
 	if !found {
-		return nil, nil
+		return nil, nil //nolint:nilnil // callers distinguish "not found" via nil result
 	}
 
 	return sys, nil
@@ -276,6 +276,7 @@ func deleteSystem(ctx context.Context, s systemgrpc.ServiceClient, externalID, s
 }
 
 func cleanupSystem(t *testing.T, ctx context.Context, sSubj systemgrpc.ServiceClient, mSubj mappinggrpc.ServiceClient, externalID, tenantID, systemType, region string, l1KeyClaim bool) {
+	t.Helper()
 	if l1KeyClaim {
 		_, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
 			ExternalId: externalID,
@@ -300,6 +301,7 @@ func cleanupSystem(t *testing.T, ctx context.Context, sSubj systemgrpc.ServiceCl
 }
 
 func registerRegionalSystem(t *testing.T, ctx context.Context, sSubj systemgrpc.ServiceClient, tenantID string, l1KeyClaim bool, systemType string, region, externalID *string) (string, string, string) {
+	t.Helper()
 	req := validRegisterSystemReq()
 	req.TenantId = tenantID
 	req.HasL1KeyClaim = l1KeyClaim

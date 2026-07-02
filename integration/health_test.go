@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package integration_test
 
@@ -16,7 +15,9 @@ func TestHealth(t *testing.T) {
 	// given
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() {
+		require.NoError(t, conn.Close())
+	}()
 
 	subj := healthgrpc.NewHealthClient(conn)
 

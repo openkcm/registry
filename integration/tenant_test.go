@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package integration_test
 
@@ -49,7 +48,7 @@ func newTenantTestContext(t *testing.T) *TenantTestContext {
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		conn.Close()
+		require.NoError(t, conn.Close())
 	})
 
 	db, err := startDB()
