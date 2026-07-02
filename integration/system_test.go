@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package integration_test
 
@@ -22,7 +21,7 @@ import (
 	"github.com/openkcm/registry/internal/validation"
 )
 
-func TestSystemService(t *testing.T) {
+func TestSystemService(t *testing.T) { //nolint:gocognit // table-driven integration test
 	// given
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
@@ -221,7 +220,6 @@ func TestSystemService(t *testing.T) {
 			regionalSystem, err := getRegionalSystem(t, ctx, sSubj, req2.GetExternalId(), req2.GetRegion(), req2.GetType())
 			assert.NoError(t, err)
 			assert.Equal(t, req2.GetExternalId(), regionalSystem.GetExternalId())
-
 		})
 	})
 
@@ -1644,6 +1642,7 @@ func listSystems(ctx context.Context, subj systemgrpc.ServiceClient, tenantID st
 }
 
 func getRegionalSystem(t *testing.T, ctx context.Context, subj systemgrpc.ServiceClient, externalID, region, systemType string) (*systemgrpc.System, error) {
+	t.Helper()
 	req := &systemgrpc.ListSystemsRequest{
 		ExternalId: externalID,
 		Region:     region,

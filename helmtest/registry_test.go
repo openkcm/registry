@@ -1,6 +1,6 @@
 //go:build helmtest
 
-package helmtest
+package helmtest_test
 
 import (
 	"context"

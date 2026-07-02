@@ -1,7 +1,11 @@
 version: "2"
+run:
+  build-tags: [integration, helmtest]
 linters:
   default: all
   disable:
+    - contextcheck
+    - gomodguard # Replaced by gomodguard_v2, enabled with default: all
     - noinlineerr
     - funlen
     - noctx

@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package integration_test
 
@@ -26,7 +25,9 @@ func TestAuth(t *testing.T) {
 	// given
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() {
+		require.NoError(t, conn.Close())
+	}()
 
 	subj := authgrpc.NewServiceClient(conn)
 
@@ -389,7 +390,9 @@ func TestListAuth(t *testing.T) {
 	// given
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() {
+		require.NoError(t, conn.Close())
+	}()
 
 	db, err := startDB()
 	require.NoError(t, err)
@@ -518,7 +521,9 @@ func TestListAuth(t *testing.T) {
 func TestAuthValidation(t *testing.T) {
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() {
+		require.NoError(t, conn.Close())
+	}()
 
 	subj := authgrpc.NewServiceClient(conn)
 
