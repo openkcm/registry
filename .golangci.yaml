@@ -1,4 +1,6 @@
 version: "2"
+run:
+  build-tags: [integration, helmtest]
 linters:
   default: all
   disable:
