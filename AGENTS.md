@@ -16,23 +16,22 @@ A separate `Auth` and `Mapping` gRPC API live alongside these. All four are regi
 Tests use `gotestsum` (auto-installed via the Makefile target into `$GOPATH/bin`).
 
 ```sh
-# Unit tests + coverage report (writes cover.out, junit.xml)
+# Full test suite: brings up Postgres + RabbitMQ + otel-collector, builds the
+# registry binary with coverage, runs unit + integration tests, merges coverage
+# into cover.out + cover.html, and tears everything down (even on failure/Ctrl-C).
+# Writes junit-unit.xml and junit-integration.xml.
 make test
-make test-cover                       # opens HTML coverage in browser
 
 # Lint (golangci-lint, --fix enabled)
 make lint
 
-# Single test
+# Single unit test
 go test -run TestName ./internal/service/...
 go test -run TestName/subtest ./internal/...
 
-# Integration tests — require Postgres + RabbitMQ + otel-collector + a running registry binary
-make docker-compose-dependencies-up   # bring up deps only
-make int-test-up-and-run              # builds registry, starts it, runs ./integration/... with -tags=integration, tears down
-make integration-test                 # full pipeline: deps up → unit + integration with merged coverage → deps down
-
-# Single integration test (deps and registry must already be up)
+# Single integration test (bring up deps + registry yourself first)
+make docker-compose-dependencies-up
+go run ./cmd/registry/main.go &
 go test -tags=integration -run TestName ./integration/...
 
 # Helm chart tests (needs a running k8s cluster)
@@ -45,7 +44,7 @@ go run ./cmd/registry/main.go         # reads ./config.yaml or /etc/registry/con
 make docker-compose-up
 ```
 
-`make integration-test` is what CI runs end-to-end; reach for it when changes touch service/repository/orbital wiring.
+`make test` is what CI runs end-to-end; reach for it when changes touch service/repository/orbital wiring.
 
 `make compile-servicetest-pb` regenerates the protobuf used only by `internal/interceptor/servicetest`. Domain protos live in the external `github.com/openkcm/api-sdk` module — not in this repo.
 
