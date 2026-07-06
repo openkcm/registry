@@ -21,7 +21,7 @@ import (
 	"github.com/openkcm/registry/internal/validation"
 )
 
-func TestSystemService(t *testing.T) { //nolint:gocognit // table-driven integration test
+func TestSystemService(t *testing.T) { //nolint:gocognit,cyclop // table-driven integration test
 	// given
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
@@ -532,16 +532,17 @@ func TestSystemService(t *testing.T) { //nolint:gocognit // table-driven integra
 	})
 
 	t.Run("ListSystems", func(t *testing.T) {
-		t.Run("should return an error if no entries exist", func(t *testing.T) {
+		t.Run("should return an empty list if no entries exist", func(t *testing.T) {
 			// when
 			resp, err := sSubj.ListSystems(ctx, &systemgrpc.ListSystemsRequest{
 				TenantId: "random-tenant-id",
 			})
 
 			// then
-			assert.Error(t, err)
-			assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
-			assert.Nil(t, resp)
+			assert.NoError(t, err)
+			assert.NotNil(t, resp)
+			assert.Empty(t, resp.GetSystems())
+			assert.Empty(t, resp.GetNextPageToken())
 		})
 
 		t.Run("when entries exist", func(t *testing.T) {
@@ -616,13 +617,6 @@ func TestSystemService(t *testing.T) { //nolint:gocognit // table-driven integra
 					errorCode codes.Code
 				}{
 					{
-						name: "non-existent TenantID is provided",
-						request: &systemgrpc.ListSystemsRequest{
-							TenantId: uuid.Must(uuid.NewV4()).String(),
-						},
-						errorCode: codes.NotFound,
-					},
-					{
 						name:      "no tenantID and no externalID is provided in query",
 						request:   &systemgrpc.ListSystemsRequest{},
 						errorCode: codes.InvalidArgument,
@@ -634,14 +628,6 @@ func TestSystemService(t *testing.T) { //nolint:gocognit // table-driven integra
 						},
 						errorCode: codes.InvalidArgument,
 					},
-					{
-						name: "non-existent system type is provided in query",
-						request: &systemgrpc.ListSystemsRequest{
-							TenantId: existingTenantID,
-							Type:     "non-existent-type",
-						},
-						errorCode: codes.NotFound,
-					},
 				}
 
 				for _, tt := range tests {
@@ -652,6 +638,40 @@ func TestSystemService(t *testing.T) { //nolint:gocognit // table-driven integra
 						assert.Error(t, err)
 						assert.Equal(t, tt.errorCode, status.Code(err), err.Error())
 						assert.Nil(t, resp)
+					})
+				}
+			})
+
+			t.Run("should return an empty list if", func(t *testing.T) {
+				// given
+				tests := []struct {
+					name    string
+					request *systemgrpc.ListSystemsRequest
+				}{
+					{
+						name: "non-existent TenantID is provided",
+						request: &systemgrpc.ListSystemsRequest{
+							TenantId: uuid.Must(uuid.NewV4()).String(),
+						},
+					},
+					{
+						name: "non-existent system type is provided in query",
+						request: &systemgrpc.ListSystemsRequest{
+							TenantId: existingTenantID,
+							Type:     "non-existent-type",
+						},
+					},
+				}
+
+				for _, tt := range tests {
+					t.Run(tt.name, func(t *testing.T) {
+						// when
+						resp, err := sSubj.ListSystems(ctx, tt.request)
+						// then
+						assert.NoError(t, err)
+						assert.NotNil(t, resp)
+						assert.Empty(t, resp.GetSystems())
+						assert.Empty(t, resp.GetNextPageToken())
 					})
 				}
 			})
@@ -1129,9 +1149,9 @@ func TestSystemService(t *testing.T) { //nolint:gocognit // table-driven integra
 					ExternalId: externalID,
 					Region:     region,
 				})
-				assert.Error(t, err)
-				assert.Nil(t, listRes)
-				assert.Equal(t, codes.NotFound, status.Code(err))
+				assert.NoError(t, err)
+				assert.NotNil(t, listRes)
+				assert.Empty(t, listRes.GetSystems())
 			})
 		})
 
