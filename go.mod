@@ -16,7 +16,7 @@ require (
 	github.com/openkcm/api-sdk v0.19.1
 	github.com/openkcm/common-sdk v1.18.0
 	github.com/openkcm/orbital v0.5.1
-	github.com/samber/oops v1.22.0
+	github.com/samber/oops v1.23.0
 	github.com/stretchr/testify v1.11.1
 	github.com/veqryn/slog-context v0.9.0
 	go.opentelemetry.io/otel v1.44.0

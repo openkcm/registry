@@ -178,8 +178,8 @@ github.com/sagikazarmark/locafero v0.12.0 h1:/NQhBAkUb4+fH1jivKHWusDYFjMOOKU88ee
 github.com/sagikazarmark/locafero v0.12.0/go.mod h1:sZh36u/YSZ918v0Io+U9ogLYQJ9tLLBmM4eneO6WwsI=
 github.com/samber/lo v1.53.0 h1:t975lj2py4kJPQ6haz1QMgtId2gtmfktACxIXArw3HM=
 github.com/samber/lo v1.53.0/go.mod h1:4+MXEGsJzbKGaUEQFKBq2xtfuznW9oz/WrgyzMzRoM0=
-github.com/samber/oops v1.22.0 h1:fmWRC3YRUXFzpZ9Vs4nuckrsnCHv1cFV/bEm00Wvm0Y=
-github.com/samber/oops v1.22.0/go.mod h1:8ZDRxwQdphVhmLtEX9I6134LHJe5yeCV8cTfHz3m91Y=
+github.com/samber/oops v1.23.0 h1:27aIZSRreSy4yveT0ZV4s3gLZp7/ra9Zbb84gwWbA9I=
+github.com/samber/oops v1.23.0/go.mod h1:8ZDRxwQdphVhmLtEX9I6134LHJe5yeCV8cTfHz3m91Y=
 github.com/samber/slog-common v0.21.0 h1:Wo2hTly1Br5RjYqX/BTWJJeDnTE85oWk/7vqlpZuAUc=
 github.com/samber/slog-common v0.21.0/go.mod h1:d/6OaSlzdkl9PFpfRLgn8FwY1OW6EFmPtBpsHX4MrU0=
 github.com/samber/slog-formatter v1.3.0 h1:dpvLVSX883WSI222gUtEMLRd5ZOlKkmQlkrovdVZ9uA=
