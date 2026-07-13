@@ -164,10 +164,6 @@ func (s *System) ListSystems(ctx context.Context, in *systemgrpc.ListSystemsRequ
 		pbSystems = append(pbSystems, systemProto)
 	}
 
-	if len(pbSystems) == 0 {
-		return nil, ErrSystemNotFound
-	}
-
 	if len(systems) < query.Limit {
 		return &systemgrpc.ListSystemsResponse{
 			Systems: pbSystems,
