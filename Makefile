@@ -1,13 +1,63 @@
-.PHONY: default test
+.PHONY: default test lint clean helm-test helm-install-dependencies helm-uninstall-dependencies helm-install-registry helm-uninstall-registry
 
 default: test
 
-test: install-gotestsum
-	rm -f cover.* junit.xml
-	env TEST_ENV=make gotestsum --format testname --junitfile junit.xml -- -coverprofile cover.out ./internal/...
-
-test-cover: test
-	go tool cover -html=cover.out
+# Runs unit + integration tests end-to-end:
+#   1. brings up dependencies (postgres, rabbitmq, otel-collector)
+#   2. builds the registry binary with coverage instrumentation and starts it
+#   3. runs unit tests (./internal/...) with coverage into cover/unit
+#   4. runs integration tests (./integration/... -tags=integration) against the running binary
+#   5. stops the registry, merges unit + integration coverage into cover.out + cover.html
+# Everything is torn down (registry process, docker compose stack, temp files) via a trap
+# regardless of whether the recipe succeeded, failed, or was interrupted.
+test: install-gotestsum generate-certs
+	@rm -rf cover cover.out cover.html junit-unit.xml junit-integration.xml registry pid.txt
+	@mkdir -p cover/unit cover/integration
+	@set -u; \
+	cleanup() { \
+	  status=$$?; \
+	  trap - EXIT INT TERM; \
+	  echo "==> Tearing down"; \
+	  if [ -f pid.txt ]; then \
+	    kill -2 "$$(cat pid.txt)" 2>/dev/null || true; \
+	    wait "$$(cat pid.txt)" 2>/dev/null || true; \
+	    rm -f pid.txt; \
+	  fi; \
+	  rm -f registry; \
+	  rm -rf cover; \
+	  docker compose down -v --remove-orphans >/dev/null 2>&1 || true; \
+	  exit $$status; \
+	}; \
+	trap cleanup EXIT INT TERM; \
+	set -e; \
+	echo "==> Bringing up dependencies"; \
+	docker compose up postgres rabbitmq otel-collector -d --wait; \
+	echo "==> Building registry binary (with coverage)"; \
+	go build -cover -o registry ./cmd/registry; \
+	echo "==> Starting registry"; \
+	GOCOVERDIR=$(CURDIR)/cover/integration ./registry >/dev/null 2>&1 & echo $$! > pid.txt; \
+	ready=0; \
+	for i in $$(seq 1 45); do \
+	  if go tool github.com/grpc-ecosystem/grpc-health-probe -addr=localhost:9092 >/dev/null 2>&1; then \
+	    echo "Registry service is ready"; ready=1; break; \
+	  fi; \
+	  echo "Waiting for registry... ($$i/45)"; \
+	  sleep 1; \
+	done; \
+	if [ "$$ready" -ne 1 ]; then echo "Registry service failed to start within 45 seconds"; exit 1; fi; \
+	echo "==> Running unit tests"; \
+	env TEST_ENV=make gotestsum --junitfile=junit-unit.xml --format=testname -- \
+	    -cover ./internal/... -args -test.gocoverdir="$(CURDIR)/cover/unit"; \
+	echo "==> Running integration tests"; \
+	gotestsum --junitfile=junit-integration.xml --format=testname -- \
+	    -v -count=1 -parallel=5 -race -shuffle=on -tags=integration ./integration/...; \
+	echo "==> Stopping registry (to flush coverage)"; \
+	kill -2 "$$(cat pid.txt)"; \
+	wait "$$(cat pid.txt)" 2>/dev/null || true; \
+	rm -f pid.txt; \
+	echo "==> Merging coverage"; \
+	go tool covdata textfmt -i=./cover/unit,./cover/integration -o cover.out; \
+	go tool cover -html=cover.out -o cover.html
 
 # installs gotestsum test helper
 install-gotestsum:
@@ -44,93 +94,9 @@ docker-compose-up-and-log: docker-compose-up
 docker-compose-dependencies-up-and-log: docker-compose-dependencies-up
 	$(MAKE) docker-log
 
-# Prerequisite: PostgreSQL needs to be running
-int-test-up-and-run:
-	# capture the exit status of the tests to ensure we stop and remove the registry service even if tests fail
-	$(MAKE) go-build-and-run; \
-	$(MAKE) int-test-run; status=$$?; \
-	$(MAKE) go-stop-and-remove; exit $$status
-
-# Prerequisite: PostgreSQL and Registry Service need to be running
-int-test-run: install-gotestsum
-	gotestsum --junitfile=junit-integration.xml --format=testname -- -v -count=1 -parallel=5 -race -shuffle=on ./integration/... -tags=integration
-
-# Prerequisite: PostgreSQL needs to be running
-int-test-up-and-run-cover:
-	mkdir -p cover
-
-	# capture the exit status of the tests to ensure we stop and remove the registry service even if tests fail
-	$(MAKE) go-build-and-run cover_flag=-cover cover_dir_env=GOCOVERDIR=cover; \
-	$(MAKE) int-test-run; status=$$?; \
-	$(MAKE) go-stop-and-remove; exit $$status
-
-	go tool covdata textfmt -i=./cover -o cover.out
-	rm -r ./cover
-	go tool cover -html=cover.out
-
-
-# This target is used to run all tests and create a merged coverage report from unit and integration tests
-# Prerequisite: PostgreSQL needs to be running
-all-tests-run-cover: install-gotestsum
-	mkdir -p cover/integration
-	mkdir -p cover/unit
-
-	# capture the exit status of the tests to ensure we stop and remove the registry service even if tests fail
-	$(MAKE) go-build-and-run cover_flag=-cover cover_dir_env=GOCOVERDIR=${CURDIR}/cover/integration; \
-	$(MAKE) int-test-run; status=$$?; \
-	$(MAKE) go-stop-and-remove; exit $$status
-
-	echo "Running unit tests"
-	gotestsum --junitfile=junit-unit.xml --format=testname -- -cover ./internal/... -args -test.gocoverdir="${CURDIR}/cover/unit"
-	echo "Creating coverage report"
-	go tool covdata textfmt -i=./cover/unit,./cover/integration -o cover.out
-	go tool cover --html=cover.out -o cover.html
-	rm -r ./cover
-
-go-build-and-run:
-	go build $(cover_flag) -o registry ./cmd/registry
-	$(cover_dir_env) ./registry 1>/dev/null 2>/dev/null & echo $$! > pid.txt
-	$(MAKE) wait-for-registry
-
-# Waits for the registry service to be ready by polling the gRPC health endpoint
-wait-for-registry:
-	@echo "Waiting for registry service to be ready..."
-	@for i in $$(seq 1 45); do \
-		if go tool github.com/grpc-ecosystem/grpc-health-probe -addr=localhost:9092 2>/dev/null; then \
-			echo "Registry service is ready"; \
-			exit 0; \
-		fi; \
-		echo "Waiting... ($$i/45)"; \
-		sleep 1; \
-	done; \
-	echo "Registry service failed to start within 45 seconds"; \
-	exit 1
-
-go-stop-and-remove:
-	kill -2 `cat pid.txt` || true
-	rm -f pid.txt registry
-
-clean-docker-compose:
-	docker compose down -v && docker compose rm -f -v
-
-.PHONY: clean
-clean:
-	rm -f junit*.xml
-	rm -f cover.out cover.html
-	rm -rf ./cover/
-	rm -f registry
-
-# Runs unit and integration tests with coverage, starts dependency containers, and generates coverage report
-integration-test:
-	# capture the exit status of the tests to ensure we stop and remove the registry service even if tests fail
-	$(MAKE) docker-compose-dependencies-up; \
-	$(MAKE) all-tests-run-cover; status=$$?; \
-	$(MAKE) clean-docker-compose; exit $$status
-
 generate-certs:
 	(cd local/rabbitmq && chmod +x generate-certs.sh && ./generate-certs.sh)
 
-.PHONY: lint
 lint:
 	golangci-lint run -v --fix ./...
 
@@ -153,3 +119,9 @@ helm-install-registry:
 # Uninstalls the registry-service from the local Kubernetes cluster using Helm.
 helm-uninstall-registry:
 	./helm_registry.sh uninstall
+
+clean:
+	rm -f junit-unit.xml junit-integration.xml
+	rm -f cover.out cover.html
+	rm -rf ./cover/
+	rm -f registry pid.txt
