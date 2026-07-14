@@ -348,6 +348,42 @@ func TestAuth(t *testing.T) {
 				assert.NoError(t, err)
 			})
 		}
+
+		t.Run("should be idempotent and allow retrying removal from REMOVING_ERROR", func(t *testing.T) {
+			// given
+			tenant := validTenant()
+			err := repo.Create(ctx, tenant)
+			assert.NoError(t, err)
+			defer func() {
+				_, err := repo.Delete(ctx, tenant)
+				assert.NoError(t, err)
+			}()
+
+			auth := validAuth()
+			auth.ExternalID = operatortest.AuthExternalIDSuccess
+			auth.TenantID = tenant.ID
+			auth.Status = authgrpc.AuthStatus_AUTH_STATUS_REMOVING_ERROR.String()
+			err = repo.Create(ctx, auth)
+			assert.NoError(t, err)
+			defer func() {
+				_, err := repo.Delete(ctx, auth)
+				assert.NoError(t, err)
+			}()
+
+			// when
+			resp, err := subj.RemoveAuth(ctx, &authgrpc.RemoveAuthRequest{
+				ExternalId: auth.ExternalID,
+			})
+
+			// then
+			assert.NoError(t, err)
+			assert.NotNil(t, resp)
+			assert.True(t, resp.Success)
+
+			err = waitForAuthReconciliation(ctx, subj, auth.ExternalID,
+				authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String())
+			assert.NoError(t, err)
+		})
 	})
 }
 

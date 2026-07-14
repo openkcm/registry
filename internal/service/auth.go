@@ -52,6 +52,13 @@ var AuthNonUpdatableState = map[string]struct{}{
 	authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String(): {},
 }
 
+// authRemovable holds the auth statuses from which RemoveAuth may be initiated.
+// AUTH_STATUS_REMOVING_ERROR is included to make removal idempotent and allow retries.
+var authRemovable = map[string]bool{
+	authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String():        true,
+	authgrpc.AuthStatus_AUTH_STATUS_REMOVING_ERROR.String(): true,
+}
+
 // NewAuth creates and return a new instance of Auth.
 // It also registers the job handlers to the Orbital instance.
 func NewAuth(repo repository.Repository, orbital *Orbital, validation *validation.Validation) *Auth {
@@ -225,7 +232,7 @@ func (a *Auth) RemoveAuth(ctx context.Context, req *authgrpc.RemoveAuthRequest) 
 			return err
 		}
 
-		if auth.Status != authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String() {
+		if !authRemovable[auth.Status] {
 			slogctx.Error(ctx, AuthInvalidStatusMsg, "status", auth.Status)
 			return ErrorWithParams(ErrAuthInvalidStatus, "status", auth.Status)
 		}
