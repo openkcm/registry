@@ -16,13 +16,13 @@ require (
 	github.com/openkcm/api-sdk v0.19.1
 	github.com/openkcm/common-sdk v1.18.0
 	github.com/openkcm/orbital v0.5.1
-	github.com/samber/oops v1.22.0
+	github.com/samber/oops v1.23.0
 	github.com/stretchr/testify v1.11.1
 	github.com/veqryn/slog-context v0.9.0
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/metric v1.44.0
 	go.opentelemetry.io/otel/sdk/metric v1.44.0
-	google.golang.org/grpc v1.82.0
+	google.golang.org/grpc v1.82.1
 	google.golang.org/protobuf v1.36.11
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.2
