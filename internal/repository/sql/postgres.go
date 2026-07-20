@@ -22,7 +22,7 @@ func StartDB(ctx context.Context, dbConf config.DB) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	dbCon.WithContext(ctx)
+	dbCon = dbCon.WithContext(ctx)
 	slog.Info("DB connection done")
 
 	if err = Migrate(dbCon); err != nil {

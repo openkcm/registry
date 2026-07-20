@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package integration_test
 
@@ -22,7 +21,7 @@ import (
 	"github.com/openkcm/registry/internal/validation"
 )
 
-func TestSystemService(t *testing.T) {
+func TestSystemService(t *testing.T) { //nolint:gocognit,cyclop // table-driven integration test
 	// given
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
@@ -221,7 +220,6 @@ func TestSystemService(t *testing.T) {
 			regionalSystem, err := getRegionalSystem(t, ctx, sSubj, req2.GetExternalId(), req2.GetRegion(), req2.GetType())
 			assert.NoError(t, err)
 			assert.Equal(t, req2.GetExternalId(), regionalSystem.GetExternalId())
-
 		})
 	})
 
@@ -534,16 +532,17 @@ func TestSystemService(t *testing.T) {
 	})
 
 	t.Run("ListSystems", func(t *testing.T) {
-		t.Run("should return an error if no entries exist", func(t *testing.T) {
+		t.Run("should return an empty list if no entries exist", func(t *testing.T) {
 			// when
 			resp, err := sSubj.ListSystems(ctx, &systemgrpc.ListSystemsRequest{
 				TenantId: "random-tenant-id",
 			})
 
 			// then
-			assert.Error(t, err)
-			assert.Equal(t, codes.NotFound, status.Code(err), err.Error())
-			assert.Nil(t, resp)
+			assert.NoError(t, err)
+			assert.NotNil(t, resp)
+			assert.Empty(t, resp.GetSystems())
+			assert.Empty(t, resp.GetNextPageToken())
 		})
 
 		t.Run("when entries exist", func(t *testing.T) {
@@ -618,13 +617,6 @@ func TestSystemService(t *testing.T) {
 					errorCode codes.Code
 				}{
 					{
-						name: "non-existent TenantID is provided",
-						request: &systemgrpc.ListSystemsRequest{
-							TenantId: uuid.Must(uuid.NewV4()).String(),
-						},
-						errorCode: codes.NotFound,
-					},
-					{
 						name:      "no tenantID and no externalID is provided in query",
 						request:   &systemgrpc.ListSystemsRequest{},
 						errorCode: codes.InvalidArgument,
@@ -636,14 +628,6 @@ func TestSystemService(t *testing.T) {
 						},
 						errorCode: codes.InvalidArgument,
 					},
-					{
-						name: "non-existent system type is provided in query",
-						request: &systemgrpc.ListSystemsRequest{
-							TenantId: existingTenantID,
-							Type:     "non-existent-type",
-						},
-						errorCode: codes.NotFound,
-					},
 				}
 
 				for _, tt := range tests {
@@ -654,6 +638,40 @@ func TestSystemService(t *testing.T) {
 						assert.Error(t, err)
 						assert.Equal(t, tt.errorCode, status.Code(err), err.Error())
 						assert.Nil(t, resp)
+					})
+				}
+			})
+
+			t.Run("should return an empty list if", func(t *testing.T) {
+				// given
+				tests := []struct {
+					name    string
+					request *systemgrpc.ListSystemsRequest
+				}{
+					{
+						name: "non-existent TenantID is provided",
+						request: &systemgrpc.ListSystemsRequest{
+							TenantId: uuid.Must(uuid.NewV4()).String(),
+						},
+					},
+					{
+						name: "non-existent system type is provided in query",
+						request: &systemgrpc.ListSystemsRequest{
+							TenantId: existingTenantID,
+							Type:     "non-existent-type",
+						},
+					},
+				}
+
+				for _, tt := range tests {
+					t.Run(tt.name, func(t *testing.T) {
+						// when
+						resp, err := sSubj.ListSystems(ctx, tt.request)
+						// then
+						assert.NoError(t, err)
+						assert.NotNil(t, resp)
+						assert.Empty(t, resp.GetSystems())
+						assert.Empty(t, resp.GetNextPageToken())
 					})
 				}
 			})
@@ -1131,9 +1149,9 @@ func TestSystemService(t *testing.T) {
 					ExternalId: externalID,
 					Region:     region,
 				})
-				assert.Error(t, err)
-				assert.Nil(t, listRes)
-				assert.Equal(t, codes.NotFound, status.Code(err))
+				assert.NoError(t, err)
+				assert.NotNil(t, listRes)
+				assert.Empty(t, listRes.GetSystems())
 			})
 		})
 
@@ -1644,6 +1662,7 @@ func listSystems(ctx context.Context, subj systemgrpc.ServiceClient, tenantID st
 }
 
 func getRegionalSystem(t *testing.T, ctx context.Context, subj systemgrpc.ServiceClient, externalID, region, systemType string) (*systemgrpc.System, error) {
+	t.Helper()
 	req := &systemgrpc.ListSystemsRequest{
 		ExternalId: externalID,
 		Region:     region,

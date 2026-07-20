@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package integration_test
 
@@ -53,19 +52,19 @@ func TestExecuteTransactionError(t *testing.T) {
 					return err
 				}
 
-				// sleeping for timeout
-				time.Sleep(time.Hour)
+				// wait until context expires
+				<-ctx.Done()
 
 				// Patching the model
 				tenantID := ""
 				_, err = r.Patch(ctx, &model.System{
-					ExternalID: expSys1.ExternalID,
-					TenantID:   &tenantID,
+					ID:       expSys1.ID,
+					TenantID: &tenantID,
 				})
 				return err
 			})
 		// then
-		assert.Equal(t, context.DeadlineExceeded, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 
 	t.Run("should able to do transaction for the same row after a error in first transaction", func(t *testing.T) {

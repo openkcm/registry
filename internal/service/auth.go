@@ -52,6 +52,13 @@ var AuthNonUpdatableState = map[string]struct{}{
 	authgrpc.AuthStatus_AUTH_STATUS_APPLYING_ERROR.String(): {},
 }
 
+// authRemovable holds the auth statuses from which RemoveAuth may be initiated.
+// AUTH_STATUS_REMOVING_ERROR is included to make removal idempotent and allow retries.
+var authRemovable = map[string]bool{
+	authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String():        true,
+	authgrpc.AuthStatus_AUTH_STATUS_REMOVING_ERROR.String(): true,
+}
+
 // NewAuth creates and return a new instance of Auth.
 // It also registers the job handlers to the Orbital instance.
 func NewAuth(repo repository.Repository, orbital *Orbital, validation *validation.Validation) *Auth {
@@ -84,40 +91,48 @@ func (a *Auth) ApplyAuth(ctx context.Context, req *authgrpc.ApplyAuthRequest) (*
 		Status:     authgrpc.AuthStatus_AUTH_STATUS_APPLYING.String(),
 	}
 
-	err := a.validateAuth(auth)
-	if err != nil {
+	if err := a.validateAuth(auth); err != nil {
 		return nil, err
 	}
 
-	err = a.repo.Transaction(ctx, func(ctx context.Context, r repository.Repository) error {
-		err := a.validateActiveTenant(ctx, r, auth.TenantID)
-		if err != nil {
+	err := a.repo.Transaction(ctx, func(ctx context.Context, r repository.Repository) error {
+		if err := a.validateActiveTenant(ctx, r, auth.TenantID); err != nil {
 			slogctx.Error(ctx, "tenant is invalid or not active", "error", err)
 			return err
 		}
 
-		err = r.Create(ctx, auth)
+		existing := &model.Auth{ExternalID: auth.ExternalID}
+		found, err := r.Find(ctx, existing)
 		if err != nil {
-			slogctx.Error(ctx, "failed to create auth", "error", err)
-			var ucErr *repository.UniqueConstraintError
-			if errors.As(err, &ucErr) {
-				slogctx.Info(ctx, AuthAlreadyExistsMsg, "detail", ucErr.Detail)
-				return ErrAuthAlreadyExists
+			slogctx.Error(ctx, SelectAuthErrMsg, "error", err)
+			return ErrAuthSelect
+		}
+
+		if found {
+			slogctx.Info(ctx, "patching an existent auth resource")
+			if _, err := r.Patch(ctx, auth); err != nil {
+				slogctx.Error(ctx, "failed to patch an auth resource", "error", err)
+				return status.Error(codes.Internal, "failed to create auth")
 			}
 
+			return nil
+		}
+
+		if err := r.Create(ctx, auth); err != nil {
+			slogctx.Error(ctx, "failed to create auth", "error", err)
 			return status.Error(codes.Internal, "failed to create auth")
 		}
 
-		err = a.prepareJob(ctx, auth, authgrpc.AuthAction_AUTH_ACTION_APPLY_AUTH.String())
-		if err != nil {
+		if err := a.prepareJob(ctx, auth, authgrpc.AuthAction_AUTH_ACTION_APPLY_AUTH.String()); err != nil {
 			slogctx.Error(ctx, "failed to prepare job", "error", err)
 			return err
 		}
 
 		return nil
 	})
+
 	err = mapError(err)
-	if err != nil && !errors.Is(err, ErrAuthAlreadyExists) {
+	if err != nil {
 		return nil, err
 	}
 
@@ -217,7 +232,7 @@ func (a *Auth) RemoveAuth(ctx context.Context, req *authgrpc.RemoveAuthRequest) 
 			return err
 		}
 
-		if auth.Status != authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String() {
+		if !authRemovable[auth.Status] {
 			slogctx.Error(ctx, AuthInvalidStatusMsg, "status", auth.Status)
 			return ErrorWithParams(ErrAuthInvalidStatus, "status", auth.Status)
 		}

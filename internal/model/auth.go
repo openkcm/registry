@@ -96,21 +96,21 @@ type AuthStatusConstraint struct{}
 
 var validAuthStatuses map[string]struct{}
 
+func init() {
+	validAuthStatuses = make(map[string]struct{}, len(pb.AuthStatus_name)-1)
+	for _, v := range pb.AuthStatus_name {
+		if v != pb.AuthStatus_AUTH_STATUS_UNSPECIFIED.String() {
+			validAuthStatuses[v] = struct{}{}
+		}
+	}
+}
+
 // Validate checks if the provided value is a valid Auth status.
 // Auth status must be one of the defined enum values in pb.AuthStatus.
 func (c AuthStatusConstraint) Validate(value any) error {
 	statusValue, ok := value.(string)
 	if !ok {
 		return fmt.Errorf("%w: %T", validation.ErrWrongType, value)
-	}
-	// lazy initialization of validAuthStatuses
-	if validAuthStatuses == nil {
-		validAuthStatuses = make(map[string]struct{}, len(pb.AuthStatus_name)-1)
-		for _, v := range pb.AuthStatus_name {
-			if v != pb.AuthStatus_AUTH_STATUS_UNSPECIFIED.String() {
-				validAuthStatuses[v] = struct{}{}
-			}
-		}
 	}
 
 	if _, ok := validAuthStatuses[statusValue]; !ok {

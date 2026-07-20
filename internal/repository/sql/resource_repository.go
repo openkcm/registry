@@ -130,25 +130,11 @@ func (r ResourceRepository) PatchAll(ctx context.Context, resource repository.Re
 	return db.RowsAffected, nil
 }
 
-// Transaction will give transaction locking on particular rows.
-// txFunc is a type TransactionFunc where we can define the transactional logic.
-// if txFunc return no error then transaction is committed,
-// else if txFunc return error then transaction is rolled back.
-// Note: please dont use Goroutines inside the txFunc as this might lead to panic.
+// Transaction executes txFunc inside a GORM transaction with SELECT FOR UPDATE locking.
+// Commits on nil return, rolls back on error.
 func (r ResourceRepository) Transaction(ctx context.Context, txFunc repository.TransactionFunc) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		errorChan := make(chan error)
-
-		go func() {
-			errorChan <- txFunc(ctx, NewRepository(tx.Clauses(clause.Locking{Strength: "UPDATE"})))
-		}()
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case err := <-errorChan:
-			return err
-		}
+		return txFunc(ctx, NewRepository(tx.Clauses(clause.Locking{Strength: "UPDATE"})))
 	})
 }
 
@@ -211,7 +197,7 @@ func handleCompositeKey(db *gorm.DB, compositeKey repository.CompositeKey) (*gor
 
 	for field, value := range compositeKey {
 		var err error
-		tx, err = handleQueryField(tx, field, value)
+		tx, err = HandleQueryField(tx, field, value)
 		if err != nil {
 			return nil, err
 		}
@@ -220,8 +206,8 @@ func handleCompositeKey(db *gorm.DB, compositeKey repository.CompositeKey) (*gor
 	return tx, nil
 }
 
-// handleQueryField applies the query field to the query.
-func handleQueryField(tx *gorm.DB, field repository.QueryField, value any) (*gorm.DB, error) {
+// HandleQueryField applies the query field to the query.
+func HandleQueryField(tx *gorm.DB, field repository.QueryField, value any) (*gorm.DB, error) {
 	switch value {
 	case repository.NotEmpty:
 		tx = tx.Where(field+" IS NOT NULL").Where(field+" != ?", "")
@@ -229,8 +215,7 @@ func handleQueryField(tx *gorm.DB, field repository.QueryField, value any) (*gor
 		tx = tx.Where(field+" IS NULL OR "+field+" = ?", "")
 	default:
 		switch reflect.ValueOf(value).Kind() { //nolint:exhaustive
-		case reflect.Slice:
-		case reflect.Array:
+		case reflect.Slice, reflect.Array:
 			tx = tx.Where(field+" IN ?", value)
 		case reflect.Map:
 			labels, ok := value.(map[string]any)

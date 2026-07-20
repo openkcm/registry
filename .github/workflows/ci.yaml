@@ -25,4 +25,4 @@ jobs:
     with:
       run_task_tests: false
       run_makefile_tests: true
-      makefile_test_name: integration-test
+      makefile_test_name: test

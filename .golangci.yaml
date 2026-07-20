@@ -1,28 +1,31 @@
 version: "2"
+run:
+  build-tags: [integration, helmtest]
 linters:
   default: all
   disable:
-    - noinlineerr
-    - funlen
-    - noctx
+    - contextcheck
     - depguard
     - exhaustruct
+    - funlen
     - ginkgolinter
+    - gochecknoglobals
+    - gochecknoinits
+    - godox
+    - gomodguard # Replaced by gomodguard_v2, enabled with default: all
+    - ireturn
+    - lll
+    - mnd
     - musttag
     - nlreturn
+    - noctx
+    - noinlineerr
+    - protogetter
+    - revive
     - tagalign
     - varnamelen
-    - gochecknoinits
-    - gochecknoglobals
     - wrapcheck
     - wsl
-    - godox
-    - protogetter
-    - lll
-    - revive
-    - ireturn
-    - noctx
-    - mnd
     - wsl_v5
   settings:
     tagliatelle:

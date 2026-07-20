@@ -89,8 +89,8 @@ func (m *Meters) StreamInterceptor(srv any, stream grpc.ServerStream, info *grpc
 			attribute.String("status", statusCode),
 		)...,
 	)
-	m.requestDurations.Record(context.Background(), elapsedTime, attrs)
-	m.requestCounts.Add(context.Background(), 1, attrs)
+	m.requestDurations.Record(stream.Context(), elapsedTime, attrs)
+	m.requestCounts.Add(stream.Context(), 1, attrs)
 
 	return err
 }

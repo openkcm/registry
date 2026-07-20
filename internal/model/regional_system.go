@@ -129,21 +129,20 @@ type RegionalSystemStatusConstraint struct{}
 
 var validSystemStatuses map[string]struct{}
 
+func init() {
+	validSystemStatuses = make(map[string]struct{}, len(typespb.Status_name)-1)
+	for _, v := range typespb.Status_name {
+		if v != typespb.Status_STATUS_UNSPECIFIED.String() {
+			validSystemStatuses[v] = struct{}{}
+		}
+	}
+}
+
 // Validate checks if the provided system status is valid.
 func (c RegionalSystemStatusConstraint) Validate(value any) error {
 	status, ok := value.(string)
 	if !ok {
 		return validation.ErrWrongType
-	}
-
-	// lazy initialization of valid system statuses
-	if validSystemStatuses == nil {
-		validSystemStatuses = make(map[string]struct{})
-		for _, v := range typespb.Status_name {
-			if v != typespb.Status_STATUS_UNSPECIFIED.String() {
-				validSystemStatuses[v] = struct{}{}
-			}
-		}
 	}
 
 	if _, exists := validSystemStatuses[status]; !exists {

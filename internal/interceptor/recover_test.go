@@ -54,17 +54,11 @@ func TestServerPanic(t *testing.T) {
 			)
 			// registering server
 			servicetest.RegisterTestServiceServer(srv, serviceTest)
+			t.Cleanup(srv.Stop)
 
-			go func(t *testing.T, srv *grpc.Server, ls *bufconn.Listener) {
-				t.Helper()
-
-				defer srv.Stop()
-
-				err := srv.Serve(ls)
-				if err != nil {
-					assert.NoError(t, err, "server could not be started")
-				}
-			}(t, srv, ls)
+			go func() {
+				_ = srv.Serve(ls)
+			}()
 
 			// creating client connection
 			conn, err := grpc.NewClient("passthrough://bufnet",
@@ -126,17 +120,11 @@ func TestServerPanic(t *testing.T) {
 
 			// registering server
 			servicetest.RegisterTestServiceServer(srv, serviceTest)
+			t.Cleanup(srv.Stop)
 
-			go func(t *testing.T, srv *grpc.Server, ls *bufconn.Listener) {
-				t.Helper()
-
-				defer srv.Stop()
-
-				err := srv.Serve(ls)
-				if err != nil {
-					assert.NoError(t, err, "server could not be started")
-				}
-			}(t, srv, ls)
+			go func() {
+				_ = srv.Serve(ls)
+			}()
 
 			// creating client connection
 			conn, err := grpc.NewClient("passthrough://bufnet",

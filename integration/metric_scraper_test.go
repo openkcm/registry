@@ -59,7 +59,7 @@ func (ms metricScraper) scrape(ctx context.Context, metric metric) (int, error) 
 	if err != nil {
 		return 0, fmt.Errorf("error scraping metrics: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, errMetricsServerStatus
@@ -67,31 +67,10 @@ func (ms metricScraper) scrape(ctx context.Context, metric metric) (int, error) 
 
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
-		if !strings.Contains(scanner.Text(), metric.name) {
+		if !lineMatches(scanner.Text(), metric) {
 			continue
 		}
-		count := 0
-		for _, m := range metric.attribs {
-			if !strings.Contains(scanner.Text(), m) {
-				continue
-			}
-			count++
-		}
-		if count != len(metric.attribs) {
-			continue
-		}
-
-		split := strings.Split(scanner.Text(), " ")
-		if len(split) != 2 {
-			return 0, errMetricWrongFormat
-		}
-
-		num, err := strconv.Atoi(split[1])
-		if err != nil {
-			return 0, err
-		}
-
-		return num, nil
+		return parseMetricValue(scanner.Text())
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -99,6 +78,26 @@ func (ms metricScraper) scrape(ctx context.Context, metric metric) (int, error) 
 	}
 
 	return 0, errMetricNotFound
+}
+
+func lineMatches(line string, m metric) bool {
+	if !strings.Contains(line, m.name) {
+		return false
+	}
+	for _, a := range m.attribs {
+		if !strings.Contains(line, a) {
+			return false
+		}
+	}
+	return true
+}
+
+func parseMetricValue(line string) (int, error) {
+	split := strings.Split(line, " ")
+	if len(split) != 2 {
+		return 0, errMetricWrongFormat
+	}
+	return strconv.Atoi(split[1])
 }
 
 func createMetric(t *testing.T, name string, attr ...string) metric {
@@ -110,7 +109,7 @@ func createMetric(t *testing.T, name string, attr ...string) metric {
 
 	a := make([]string, 0, len(attr)/2)
 	for i := 0; i < len(attr); i += 2 {
-		a = append(a, attr[i]+`="`+attr[i+1]+`"`)
+		a = append(a, attr[i]+`="`+attr[i+1]+`"`) //nolint:gosec // parity of attr is asserted above
 	}
 	metric := metric{
 		name:    name,

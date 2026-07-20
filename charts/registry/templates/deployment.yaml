@@ -48,7 +48,7 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: "{{ template "registry.image" (tuple .Values.image $.Chart.AppVersion) }}"
+          image: "{{ template "registry.image" (tuple .Values.image) }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.image.command }}
           command: ["{{- toYaml . }}"]

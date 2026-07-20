@@ -69,7 +69,7 @@ func New(ctx context.Context) (*orbital.Operator, error) {
 	}
 
 	client, err := amqp.NewClient(ctx, codec.Proto{}, amqp.ConnectionInfo{
-		URL:    target.Connection.AMQP.Url,
+		URL:    target.Connection.AMQP.URL,
 		Target: target.Connection.AMQP.Source,
 		Source: target.Connection.AMQP.Target,
 	}, option)

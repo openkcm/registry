@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package integration_test
 
@@ -26,7 +25,9 @@ func TestAuth(t *testing.T) {
 	// given
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() {
+		require.NoError(t, conn.Close())
+	}()
 
 	subj := authgrpc.NewServiceClient(conn)
 
@@ -347,19 +348,61 @@ func TestAuth(t *testing.T) {
 				assert.NoError(t, err)
 			})
 		}
+
+		t.Run("should be idempotent and allow retrying removal from REMOVING_ERROR", func(t *testing.T) {
+			// given
+			tenant := validTenant()
+			err := repo.Create(ctx, tenant)
+			assert.NoError(t, err)
+			defer func() {
+				_, err := repo.Delete(ctx, tenant)
+				assert.NoError(t, err)
+			}()
+
+			auth := validAuth()
+			auth.ExternalID = operatortest.AuthExternalIDSuccess
+			auth.TenantID = tenant.ID
+			auth.Status = authgrpc.AuthStatus_AUTH_STATUS_REMOVING_ERROR.String()
+			err = repo.Create(ctx, auth)
+			assert.NoError(t, err)
+			defer func() {
+				_, err := repo.Delete(ctx, auth)
+				assert.NoError(t, err)
+			}()
+
+			// when
+			resp, err := subj.RemoveAuth(ctx, &authgrpc.RemoveAuthRequest{
+				ExternalId: auth.ExternalID,
+			})
+
+			// then
+			assert.NoError(t, err)
+			assert.NotNil(t, resp)
+			assert.True(t, resp.Success)
+
+			err = waitForAuthReconciliation(ctx, subj, auth.ExternalID,
+				authgrpc.AuthStatus_AUTH_STATUS_REMOVED.String())
+			assert.NoError(t, err)
+		})
 	})
 }
 
 func waitForAuthReconciliation(ctx context.Context, subj authgrpc.ServiceClient, externalID, expStatus string) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	timeout := getReconciliationTimeout()
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	var currentAuth *authgrpc.Auth
+	backoff := getInitialPollInterval()
+	startTime := time.Now()
+	attempts := 0
+
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("%w: auth: %s", ctx.Err(), currentAuth)
+			return fmt.Errorf("%w after %v (%d attempts); auth: %s", ctx.Err(), time.Since(startTime), attempts, currentAuth)
 		default:
+			attempts++
 			resp, err := subj.GetAuth(ctx, &authgrpc.GetAuthRequest{
 				ExternalId: externalID,
 			})
@@ -372,7 +415,10 @@ func waitForAuthReconciliation(ctx context.Context, subj authgrpc.ServiceClient,
 
 			currentAuth = resp.Auth
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(backoff)
+		if backoff < maxPollInterval {
+			backoff = min(backoff*2, maxPollInterval)
+		}
 	}
 }
 
@@ -380,7 +426,9 @@ func TestListAuth(t *testing.T) {
 	// given
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() {
+		require.NoError(t, conn.Close())
+	}()
 
 	db, err := startDB()
 	require.NoError(t, err)
@@ -509,7 +557,9 @@ func TestListAuth(t *testing.T) {
 func TestAuthValidation(t *testing.T) {
 	conn, err := newGRPCClientConn()
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() {
+		require.NoError(t, conn.Close())
+	}()
 
 	subj := authgrpc.NewServiceClient(conn)
 

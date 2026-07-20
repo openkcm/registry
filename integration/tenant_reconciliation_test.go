@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package integration_test
 
@@ -265,15 +264,21 @@ func TestTenantReconciliation(t *testing.T) {
 }
 
 func waitForTenantReconciliation(ctx context.Context, tSubj tenantgrpc.ServiceClient, tenantID string, expState expStateFunc) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	timeout := getReconciliationTimeout()
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	var currentTenant *tenantgrpc.Tenant
+	backoff := getInitialPollInterval()
+	startTime := time.Now()
+	attempts := 0
+
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("%w; tenant: %s", ctx.Err(), currentTenant)
+			return fmt.Errorf("%w after %v (%d attempts); tenant: %s", ctx.Err(), time.Since(startTime), attempts, currentTenant)
 		default:
+			attempts++
 			resp, err := tSubj.GetTenant(ctx, &tenantgrpc.GetTenantRequest{
 				Id: tenantID,
 			})
@@ -286,6 +291,9 @@ func waitForTenantReconciliation(ctx context.Context, tSubj tenantgrpc.ServiceCl
 
 			currentTenant = resp.GetTenant()
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(backoff)
+		if backoff < maxPollInterval {
+			backoff = min(backoff*2, maxPollInterval)
+		}
 	}
 }
