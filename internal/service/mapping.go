@@ -48,7 +48,6 @@ func (m *Mapping) UnmapSystemFromTenant(ctx context.Context, in *mappinggrpc.Unm
 	err := m.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
 		system, validateErr := validateAndGetSystemForUnmap(ctx, r, in)
 		if validateErr != nil {
-			slogctx.Error(ctx, "validateAndGetSystemForUnmap failed", "error", validateErr)
 			return validateErr
 		}
 
@@ -95,7 +94,6 @@ func (m *Mapping) MapSystemToTenant(ctx context.Context, in *mappinggrpc.MapSyst
 	err := m.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
 		system, found, validateErr := isSystemTenantMapAllowed(ctx, r, in)
 		if validateErr != nil {
-			slogctx.Error(ctx, "isSystemTenantMapAllowed failed", "error", validateErr)
 			return validateErr
 		}
 

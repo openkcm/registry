@@ -133,7 +133,7 @@ func TestMappingService(t *testing.T) {
 				defer func() {
 					// Change tenant to active so cleanup can proceed
 					inactiveTenant.Status = model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String())
-					db.WithContext(ctx).Save(inactiveTenant)
+					assert.NoError(t, db.WithContext(ctx).Save(inactiveTenant).Error)
 					cleanupSystem(t, ctx, sSubj, mSubj, systemID, inactiveTenant.ID, systemType, region, false)
 					assert.NoError(t, deleteTenantFromDB(ctx, db, inactiveTenant))
 				}()
