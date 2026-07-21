@@ -251,6 +251,9 @@ func deleteSystemInDB(ctx context.Context, db *gorm.DB, externalID, systemType s
 	if err != nil {
 		return err
 	}
+	if sys == nil {
+		return nil
+	}
 
 	_, err = repo.Delete(ctx, sys)
 	return err
