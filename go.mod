@@ -2,7 +2,7 @@ module github.com/openkcm/registry
 
 go 1.26.1
 
-toolchain go1.26.4
+toolchain go1.26.5
 
 tool github.com/grpc-ecosystem/grpc-health-probe
 
