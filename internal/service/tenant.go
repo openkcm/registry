@@ -34,16 +34,16 @@ type Tenant struct {
 }
 
 type (
-	tenantUpdateFunc   func(tenant *model.Tenant)
-	tenantValidateFunc func(tenant *model.Tenant) error
-	orbitalJobFunc     func(ctx context.Context, tenant *model.Tenant) error
+	tenantUpdateFn   func(tenant *model.Tenant)
+	tenantValidateFn func(tenant *model.Tenant) error
+	orbitalJobFn     func(ctx context.Context, tenant *model.Tenant) error
 
 	patchTenantOpts struct {
 		id            string
-		updateFunc    tenantUpdateFunc
-		validateFunc  tenantValidateFunc
+		updateFn      tenantUpdateFn
+		validateFn    tenantValidateFn
 		patchAuthOpts patchAuthOpts
-		jobFunc       orbitalJobFunc
+		jobFn         orbitalJobFn
 	}
 )
 
@@ -180,12 +180,12 @@ func (t *Tenant) BlockTenant(ctx context.Context, in *tenantgrpc.BlockTenantRequ
 
 	err = t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
-		updateFunc: func(tenant *model.Tenant) {
+		updateFn: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKING.String()))
 		},
-		validateFunc:  validateTransition(tenantgrpc.Status_STATUS_BLOCKING),
+		validateFn:    validateTransition(tenantgrpc.Status_STATUS_BLOCKING),
 		patchAuthOpts: newPatchAuthOptsWith(authgrpc.AuthStatus_AUTH_STATUS_BLOCKING),
-		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
+		jobFn: func(ctx context.Context, tenant *model.Tenant) error {
 			data, err := proto.Marshal(tenant.ToProto())
 			if err != nil {
 				slogctx.Error(ctx, "failed to encode tenant data", "error", err)
@@ -215,12 +215,12 @@ func (t *Tenant) UnblockTenant(ctx context.Context, in *tenantgrpc.UnblockTenant
 
 	err = t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
-		updateFunc: func(tenant *model.Tenant) {
+		updateFn: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_UNBLOCKING.String()))
 		},
-		validateFunc:  validateTransition(tenantgrpc.Status_STATUS_UNBLOCKING),
+		validateFn:    validateTransition(tenantgrpc.Status_STATUS_UNBLOCKING),
 		patchAuthOpts: newPatchAuthOptsWith(authgrpc.AuthStatus_AUTH_STATUS_UNBLOCKING),
-		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
+		jobFn: func(ctx context.Context, tenant *model.Tenant) error {
 			data, err := proto.Marshal(tenant.ToProto())
 			if err != nil {
 				slogctx.Error(ctx, "failed to encode tenant data", "error", err)
@@ -252,11 +252,11 @@ func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTe
 
 	err = t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
-		updateFunc: func(tenant *model.Tenant) {
+		updateFn: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATING.String()))
 		},
-		validateFunc: validateTransition(tenantgrpc.Status_STATUS_TERMINATING),
-		jobFunc: func(ctx context.Context, tenant *model.Tenant) error {
+		validateFn: validateTransition(tenantgrpc.Status_STATUS_TERMINATING),
+		jobFn: func(ctx context.Context, tenant *model.Tenant) error {
 			data, err := proto.Marshal(tenant.ToProto())
 			if err != nil {
 				slogctx.Error(ctx, "failed to encode tenant data", "error", err)
@@ -285,13 +285,13 @@ func (t *Tenant) SetTenantLabels(ctx context.Context, in *tenantgrpc.SetTenantLa
 
 	err := t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
-		updateFunc: func(tenant *model.Tenant) {
+		updateFn: func(tenant *model.Tenant) {
 			if tenant.Labels == nil {
 				tenant.Labels = make(map[string]string)
 			}
 			maps.Copy(tenant.Labels, in.GetLabels())
 		},
-		validateFunc: checkTenantActive,
+		validateFn: checkTenantActive,
 	})
 	if err != nil {
 		return nil, err
@@ -314,7 +314,7 @@ func (t *Tenant) RemoveTenantLabels(ctx context.Context, in *tenantgrpc.RemoveTe
 
 	err := t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
-		updateFunc: func(tenant *model.Tenant) {
+		updateFn: func(tenant *model.Tenant) {
 			if tenant.Labels == nil {
 				return
 			}
@@ -322,7 +322,7 @@ func (t *Tenant) RemoveTenantLabels(ctx context.Context, in *tenantgrpc.RemoveTe
 				delete(tenant.Labels, k)
 			}
 		},
-		validateFunc: checkTenantActive,
+		validateFn: checkTenantActive,
 	})
 	if err != nil {
 		return nil, err
@@ -431,7 +431,7 @@ func (t *Tenant) HandleJobCanceled(ctx context.Context, job orbital.Job) error {
 //
 //nolint:dupl
 func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
-	var tenantUpdateFn tenantUpdateFunc
+	var tenantUpdateFn tenantUpdateFn
 	var authUpdateFn authUpdateFunc
 	switch job.Type {
 	case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String():
@@ -451,8 +451,8 @@ func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 	}
 
 	return t.patchTenant(ctx, patchTenantOpts{
-		id:         job.ExternalID,
-		updateFunc: tenantUpdateFn,
+		id:       job.ExternalID,
+		updateFn: tenantUpdateFn,
 		patchAuthOpts: patchAuthOpts{
 			skipUpdateFn: func(auth *model.Auth) bool {
 				_, ok := AuthNonUpdatableState[auth.Status]
@@ -484,7 +484,7 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 
 	err = t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
-		updateFunc: func(tenant *model.Tenant) {
+		updateFn: func(tenant *model.Tenant) {
 			tenant.UserGroups = in.GetUserGroups()
 		},
 	})
@@ -497,7 +497,7 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 
 //nolint:dupl
 func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
-	var tenantUpdateFn tenantUpdateFunc
+	var tenantUpdateFn tenantUpdateFn
 	var authUpdateFn authUpdateFunc
 
 	switch job.Type {
@@ -517,8 +517,8 @@ func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
 		return nil
 	}
 	return t.patchTenant(ctx, patchTenantOpts{
-		id:         job.ExternalID,
-		updateFunc: tenantUpdateFn,
+		id:       job.ExternalID,
+		updateFn: tenantUpdateFn,
 		patchAuthOpts: patchAuthOpts{
 			skipUpdateFn: func(auth *model.Auth) bool {
 				_, ok := AuthNonUpdatableState[auth.Status]
@@ -615,8 +615,8 @@ func (t *Tenant) patchTenant(ctx context.Context, opts patchTenantOpts) error {
 			return err
 		}
 
-		if opts.validateFunc != nil {
-			err = opts.validateFunc(tenant)
+		if opts.validateFn != nil {
+			err = opts.validateFn(tenant)
 			if err != nil {
 				return err
 			}
@@ -627,8 +627,8 @@ func (t *Tenant) patchTenant(ctx context.Context, opts patchTenantOpts) error {
 			return err
 		}
 
-		if opts.updateFunc != nil {
-			opts.updateFunc(tenant)
+		if opts.updateFn != nil {
+			opts.updateFn(tenant)
 			err = t.validateTenantWithoutID(tenant)
 			if err != nil {
 				return err
@@ -644,8 +644,8 @@ func (t *Tenant) patchTenant(ctx context.Context, opts patchTenantOpts) error {
 			}
 		}
 
-		if opts.jobFunc != nil {
-			err = opts.jobFunc(ctx, tenant)
+		if opts.jobFn != nil {
+			err = opts.jobFn(ctx, tenant)
 			if err != nil {
 				return status.Errorf(codes.Internal, "failed to start orbital job: %v", err)
 			}
@@ -780,7 +780,7 @@ func assertNoSystemLinks(ctx context.Context, r repository.Repository, tenantID 
 }
 
 // validateTransition checks if a tenant can transition to the given status.
-func validateTransition(targetStatus tenantgrpc.Status) tenantValidateFunc {
+func validateTransition(targetStatus tenantgrpc.Status) tenantValidateFn {
 	return func(tenant *model.Tenant) error {
 		err := tenant.Status.ValidateTransition(targetStatus)
 		if err != nil {
@@ -850,7 +850,7 @@ func (t *Tenant) validateTenantBase(tenant *model.Tenant, validateId bool) error
 	return nil
 }
 
-func newTenantUpdateFn(status tenantgrpc.Status) tenantUpdateFunc {
+func newTenantUpdateFn(status tenantgrpc.Status) tenantUpdateFn {
 	return func(tenant *model.Tenant) {
 		tenant.SetStatus(model.TenantStatus(status.String()))
 	}
