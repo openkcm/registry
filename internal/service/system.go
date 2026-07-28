@@ -58,10 +58,7 @@ func (s *System) RegisterSystem(ctx context.Context, in *systemgrpc.RegisterSyst
 
 	tenantID := in.GetTenantId()
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
-	defer cancel()
-
-	if err := s.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
+	if err := transact(ctx, s.repo, func(ctx context.Context, r repository.Repository) error {
 		system, found, err := getSystem(ctx, r, in.GetExternalId(), in.GetType())
 		if err != nil {
 			return ErrSystemSelect
@@ -200,9 +197,7 @@ func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRe
 	var systemFound bool
 	var region string
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
-	defer cancel()
-	err := s.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
+	err := transact(ctx, s.repo, func(ctx context.Context, r repository.Repository) error {
 		regionalSystem, err := getRegionalSystem(ctx, r, in.GetExternalId(), in.GetType(), in.GetRegion())
 		if err != nil && errors.Is(err, ErrSystemNotFound) {
 			return nil
@@ -244,7 +239,6 @@ func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRe
 		return err
 	})
 
-	err = mapError(err)
 	if err != nil {
 		return nil, err
 	}
@@ -267,10 +261,7 @@ func (s *System) UpdateSystemL1KeyClaim(ctx context.Context, in *systemgrpc.Upda
 
 	desiredClaim := in.GetL1KeyClaim()
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
-	defer cancel()
-
-	err := s.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
+	err := transact(ctx, s.repo, func(ctx context.Context, r repository.Repository) error {
 		regionalSystem, err := getRegionalSystem(ctx, r, in.GetExternalId(), in.GetType(), in.GetRegion())
 		if err != nil {
 			return err
@@ -292,7 +283,6 @@ func (s *System) UpdateSystemL1KeyClaim(ctx context.Context, in *systemgrpc.Upda
 		return nil
 	})
 
-	err = mapError(err)
 	if err != nil {
 		return nil, err
 	}
@@ -315,10 +305,7 @@ func (s *System) UpdateSystemStatus(ctx context.Context, in *systemgrpc.UpdateSy
 		return nil, err
 	}
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
-	defer cancel()
-
-	err := s.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
+	err := transact(ctx, s.repo, func(ctx context.Context, r repository.Repository) error {
 		regionalSystem, err := getRegionalSystem(ctx, r, in.GetExternalId(), in.GetType(), in.GetRegion())
 		if err != nil {
 			return err
@@ -340,7 +327,6 @@ func (s *System) UpdateSystemStatus(ctx context.Context, in *systemgrpc.UpdateSy
 		return nil
 	})
 
-	err = mapError(err)
 	if err != nil {
 		return nil, err
 	}
@@ -359,10 +345,7 @@ func (s *System) SetSystemLabels(ctx context.Context, in *systemgrpc.SetSystemLa
 		return nil, err
 	}
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
-	defer cancel()
-
-	err := s.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
+	err := transact(ctx, s.repo, func(ctx context.Context, r repository.Repository) error {
 		regionalSystem, err := getRegionalSystem(ctx, r, in.GetExternalId(), in.GetType(), in.GetRegion())
 		if err != nil {
 			return err
@@ -396,7 +379,6 @@ func (s *System) SetSystemLabels(ctx context.Context, in *systemgrpc.SetSystemLa
 		return nil
 	})
 
-	err = mapError(err)
 	if err != nil {
 		return nil, err
 	}
@@ -417,10 +399,7 @@ func (s *System) RemoveSystemLabels(ctx context.Context, in *systemgrpc.RemoveSy
 		return nil, err
 	}
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
-	defer cancel()
-
-	err := s.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
+	err := transact(ctx, s.repo, func(ctx context.Context, r repository.Repository) error {
 		regionalSystem, err := getRegionalSystem(ctx, r, in.GetExternalId(), in.GetType(), in.GetRegion())
 		if err != nil {
 			return err
@@ -452,7 +431,6 @@ func (s *System) RemoveSystemLabels(ctx context.Context, in *systemgrpc.RemoveSy
 		return nil
 	})
 
-	err = mapError(err)
 	if err != nil {
 		return nil, err
 	}

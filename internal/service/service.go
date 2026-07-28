@@ -11,6 +11,15 @@ import (
 
 const defaultTranTimeout = time.Second * 10
 
+// transact executes fn within a transaction with the default timeout.
+// It maps context.DeadlineExceeded to ErrTranCtxTimeout.
+func transact(ctx context.Context, repo repository.Repository, fn func(ctx context.Context, r repository.Repository) error) error {
+	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
+	defer cancel()
+
+	return mapError(repo.Transaction(ctxTimeout, fn))
+}
+
 // assertTenantExist checks if a tenant exists in the database by tenant_id.
 // It returns an error if the tenant does not exist.
 func assertTenantExist(ctx context.Context, r repository.Repository, tenantID string) error {

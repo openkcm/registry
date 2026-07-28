@@ -90,10 +90,7 @@ func (t *Tenant) RegisterTenant(ctx context.Context, in *tenantgrpc.RegisterTena
 		return nil, err
 	}
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
-	defer cancel()
-
-	err := t.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
+	err := transact(ctx, t.repo, func(ctx context.Context, r repository.Repository) error {
 		err := createOrPatchTenant(ctx, r, tenant)
 		if err != nil {
 			return err
@@ -113,7 +110,6 @@ func (t *Tenant) RegisterTenant(ctx context.Context, in *tenantgrpc.RegisterTena
 		return nil
 	})
 
-	err = mapError(err)
 	if err != nil {
 		return nil, err
 	}
@@ -607,10 +603,7 @@ func createOrPatchTenant(ctx context.Context, r repository.Repository, tenant *m
 //
 //nolint:cyclop
 func (t *Tenant) patchTenant(ctx context.Context, opts patchTenantOpts) error {
-	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
-	defer cancel()
-
-	err := t.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
+	return transact(ctx, t.repo, func(ctx context.Context, r repository.Repository) error {
 		tenant, err := getTenant(ctx, r, opts.id)
 		if err != nil {
 			return err
@@ -659,8 +652,6 @@ func (t *Tenant) patchTenant(ctx context.Context, opts patchTenantOpts) error {
 
 		return nil
 	})
-
-	return mapError(err)
 }
 
 // getTenant queries the Tenant by its ID.
