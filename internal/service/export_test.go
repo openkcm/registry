@@ -18,3 +18,12 @@ func NewAuthForTest(repo repository.Repository, orbital *Orbital, validation *va
 		validation: validation,
 	}
 }
+
+// NewTenantForTest builds a Tenant without registering orbital job handlers,
+// so that unit tests can drive its behaviour against a fake repository.
+func NewTenantForTest(repo repository.Repository, validation *validation.Validation) *Tenant {
+	return &Tenant{
+		repo:       repo,
+		validation: validation,
+	}
+}
