@@ -19,6 +19,11 @@ import (
 	"github.com/openkcm/registry/internal/validation"
 )
 
+var (
+	errListFailed  = errors.New("db down")
+	errPatchFailed = errors.New("patch failed")
+)
+
 // --- helpers -----------------------------------------------------------------
 
 func newTenantTestValidation(t *testing.T) *validation.Validation {
@@ -40,6 +45,7 @@ func linkedSystem(tenantID string) model.System {
 
 type fakeUnlinkRepo struct {
 	service.NoopRepo
+
 	systems  []model.System
 	listErr  error
 	patchErr error
@@ -90,7 +96,7 @@ func TestUnlinkAllSystems(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("returns ErrSystemSelect when listing systems fails", func(t *testing.T) {
-		repo := &fakeUnlinkRepo{listErr: errors.New("db down")}
+		repo := &fakeUnlinkRepo{listErr: errListFailed}
 
 		err := service.UnlinkAllSystems(ctx, repo, "t-1")
 
@@ -101,7 +107,7 @@ func TestUnlinkAllSystems(t *testing.T) {
 	t.Run("returns ErrSystemUpdate when patching a system fails", func(t *testing.T) {
 		repo := &fakeUnlinkRepo{
 			systems:  []model.System{linkedSystem("t-1")},
-			patchErr: errors.New("patch failed"),
+			patchErr: errPatchFailed,
 		}
 
 		err := service.UnlinkAllSystems(ctx, repo, "t-1")
