@@ -13,7 +13,6 @@ import (
 const (
 	SelectTenantErrMsg      = "could not select tenant"
 	UpdateTenantErrMsg      = "could not update tenant"
-	DeleteTenantErrMsg      = "could not delete tenant"
 	TenantNotFoundMsg       = "tenant not found"
 	TenantUnavailableErrMsg = "tenant is unavailable"
 )
@@ -47,8 +46,6 @@ const (
 var (
 	ErrTenantSelect                     = status.Error(codes.Internal, SelectTenantErrMsg)
 	ErrTenantUpdate                     = status.Error(codes.Internal, UpdateTenantErrMsg)
-	ErrTenantDelete                     = status.Error(codes.Internal, DeleteTenantErrMsg)
-	ErrTenantIDFormat                   = status.Error(codes.InvalidArgument, "tenant ID is not valid")
 	ErrTenantNotFound                   = status.Error(codes.NotFound, TenantNotFoundMsg)
 	ErrTenantUnavailable                = status.Error(codes.FailedPrecondition, TenantUnavailableErrMsg)
 	ErrTenantEncoding                   = status.Error(codes.Internal, "failed to encode tenant data")
@@ -61,12 +58,9 @@ var (
 	ErrSystemSelect                         = status.Error(codes.Internal, SelectSystemErrMsg)
 	ErrSystemUpdate                         = status.Error(codes.Internal, UpdateSystemErrMsg)
 	ErrSystemDelete                         = status.Error(codes.Internal, DeleteSystemErrMsg)
-	ErrExternalIDIsEmpty                    = status.Error(codes.InvalidArgument, "external ID cannot be empty")
-	ErrRegionIsEmpty                        = status.Error(codes.InvalidArgument, "region cannot be empty")
 	ErrSystemNotFound                       = status.Error(codes.NotFound, SystemNotFoundMsg)
 	ErrSystemIsLinkedToTenant               = status.Error(codes.FailedPrecondition, "system is linked to the tenant")
 	ErrSystemIsNotLinkedToTenant            = status.Error(codes.FailedPrecondition, "system is not linked to the tenant")
-	ErrSystemLinkedToDifferentTenant        = status.Error(codes.FailedPrecondition, "system is linked to a different tenant")
 	ErrSystemHasL1KeyClaim                  = status.Error(codes.FailedPrecondition, "system has active l1 key claim")
 	ErrSystemUnavailable                    = status.Error(codes.FailedPrecondition, SystemUnavailableErrMsg)
 	ErrNoTenantID                           = status.Error(codes.InvalidArgument, "no tenantID provided")
