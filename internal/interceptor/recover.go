@@ -28,15 +28,10 @@ func NewRecover() *Recover {
 // UnaryInterceptor intercepts for any panics, and helps our server to recover.
 // Note: It is better to add this as the last interceptor.
 func (r *Recover) UnaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (_ any, err error) {
-	// following defer will recover from panics from the handler
 	defer func() {
-		rec := recover()
-		if rec != nil {
+		if recover() != nil {
+			r.logError(info.FullMethod)
 			err = service.ErrPanic
-			// NOTE this is to make checkmark pass
-			if err != nil {
-				r.logError(info.FullMethod)
-			}
 		}
 	}()
 
@@ -46,15 +41,10 @@ func (r *Recover) UnaryInterceptor(ctx context.Context, req any, info *grpc.Unar
 // StreamInterceptor intercepts for any panics, and helps our server to recover.
 // Note: It is better to add this as the last interceptor.
 func (r *Recover) StreamInterceptor(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
-	// following defer will recover from panics from the handler
 	defer func() {
-		rec := recover()
-		if rec != nil {
+		if recover() != nil {
+			r.logError(info.FullMethod)
 			err = service.ErrPanic
-			// NOTE this is to make checkmark pass
-			if err != nil {
-				r.logError(info.FullMethod)
-			}
 		}
 	}()
 
