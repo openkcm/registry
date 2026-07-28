@@ -171,6 +171,48 @@ func TestTenantTerminate(t *testing.T) {
 				assert.Len(t, ltResp.Tenants, 1)
 				assert.Equal(t, expStatus, ltResp.Tenants[0].Status)
 			})
+
+			t.Run("tenant is blocked and has linked systems, systems are unlinked", func(t *testing.T) {
+				// given
+				state := model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String())
+				tenant, err := persistTenant(ctx, db, validRandID(), state, time.Now())
+				assert.NoError(t, err)
+				t.Cleanup(func() {
+					err = deleteTenantFromDB(ctx, db, tenant)
+					assert.NoError(t, err)
+				})
+
+				sys := &model.System{
+					ExternalID: validRandID(),
+					Type:       allowedSystemType,
+				}
+				sys.LinkTenant(tenant.ID)
+				err = createSystemInDB(ctx, db, sys)
+				assert.NoError(t, err)
+				t.Cleanup(func() {
+					err = deleteSystemInDB(ctx, db, sys.ExternalID, sys.Type)
+					assert.NoError(t, err)
+				})
+
+				// when
+				actResp, err := subj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
+					Id: tenant.ID,
+				})
+
+				// then
+				assert.NoError(t, err)
+				assert.NotNil(t, actResp)
+
+				ltResp, err := listTenants(ctx, subj)
+				assert.NoError(t, err)
+				assert.Len(t, ltResp.Tenants, 1)
+				assert.Equal(t, tenantgrpc.Status_STATUS_TERMINATING, ltResp.Tenants[0].Status)
+
+				actual, err := getSystemFromDB(ctx, db, sys.ExternalID, sys.Type)
+				assert.NoError(t, err)
+				assert.NotNil(t, actual)
+				assert.False(t, actual.IsLinkedToTenant())
+			})
 		})
 	})
 }

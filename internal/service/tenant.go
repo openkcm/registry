@@ -37,11 +37,13 @@ type (
 	tenantUpdateFn   func(tenant *model.Tenant)
 	tenantValidateFn func(tenant *model.Tenant) error
 	orbitalJobFn     func(ctx context.Context, tenant *model.Tenant) error
+	tenantPreFn      func(ctx context.Context, r repository.Repository, tenant *model.Tenant) error
 
 	patchTenantOpts struct {
 		id            string
 		updateFn      tenantUpdateFn
 		validateFn    tenantValidateFn
+		preFn         tenantPreFn
 		patchAuthOpts patchAuthOpts
 		jobFn         orbitalJobFn
 	}
@@ -246,12 +248,11 @@ func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTe
 		return nil, err
 	}
 
-	if err := assertNoSystemLinks(ctx, t.repo, in.GetId()); err != nil {
-		return nil, err
-	}
-
 	err = t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
+		preFn: func(ctx context.Context, r repository.Repository, _ *model.Tenant) error {
+			return unlinkAllSystems(ctx, r, in.GetId())
+		},
 		updateFn: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATING.String()))
 		},
@@ -617,7 +618,10 @@ func (t *Tenant) patchTenant(ctx context.Context, opts patchTenantOpts) error {
 
 		if opts.validateFn != nil {
 			err = opts.validateFn(tenant)
-			if err != nil {
+		}
+
+		if opts.preFn != nil {
+			if err = opts.preFn(ctx, r, tenant); err != nil {
 				return err
 			}
 		}
@@ -756,24 +760,24 @@ func addLabelsCondition(cond *repository.CompositeKey, validation *validation.Va
 	return nil
 }
 
-// assertNoSystemLinks checks if there are any Systems linked with the Tenant.
-// If records are found for the provided tenantID, it returns an error.
-// Here repository r is passed as a variable to address the scenarios where we will
-// create a new repository from the existing repository for e.g. in the case of transaction.
-func assertNoSystemLinks(ctx context.Context, r repository.Repository, tenantID string) error {
+// unlinkAllSystems sets TenantID to empty on all Systems linked to the given tenant.
+func unlinkAllSystems(ctx context.Context, r repository.Repository, tenantID string) error {
 	query := repository.NewQuery(&model.System{}).Where(
 		repository.NewCompositeKey().Where(repository.TenantIDField, tenantID),
 	)
 
 	var systems []model.System
-
-	err := r.List(ctx, &systems, *query)
-	if err != nil {
+	if err := r.List(ctx, &systems, *query); err != nil {
 		return ErrSystemSelect
 	}
 
-	if len(systems) > 0 {
-		return ErrSystemIsLinkedToTenant
+	emptyTenantID := ""
+	for i := range systems {
+		systems[i].TenantID = &emptyTenantID
+		if _, err := r.Patch(ctx, &systems[i]); err != nil {
+			slogctx.Error(ctx, "failed to patch system during unlink", "systemID", systems[i].ID, "error", err)
+			return ErrSystemUpdate
+		}
 	}
 
 	return nil
