@@ -617,7 +617,9 @@ func (t *Tenant) patchTenant(ctx context.Context, opts patchTenantOpts) error {
 		}
 
 		if opts.validateFn != nil {
-			err = opts.validateFn(tenant)
+			if err = opts.validateFn(tenant); err != nil {
+				return err
+			}
 		}
 
 		if opts.preFn != nil {
