@@ -250,8 +250,8 @@ func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTe
 
 	err = t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
-		preFn: func(ctx context.Context, r repository.Repository, _ *model.Tenant) error {
-			return detachAllSystems(ctx, r, in.GetId())
+		preFn: func(ctx context.Context, r repository.Repository, tenant *model.Tenant) error {
+			return detachAllSystems(ctx, r, tenant.ID)
 		},
 		updateFn: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATING.String()))
