@@ -36,7 +36,8 @@ func newTenantTestValidation(t *testing.T) *validation.Validation {
 	return v
 }
 
-func linkedSystem(tenantID string) model.System {
+func linkedSystem() model.System {
+	const tenantID = "t-1"
 	id, _ := uuid.NewV4()
 	tid := tenantID
 	return model.System{ID: id, ExternalID: "sys-1", Type: "application", TenantID: &tid}
@@ -110,7 +111,7 @@ func TestDetachAllSystems(t *testing.T) {
 
 	t.Run("returns ErrSystemUpdate when PatchAll fails", func(t *testing.T) {
 		repo := &fakeDetachRepo{
-			systems:     []model.System{linkedSystem("t-1")},
+			systems:     []model.System{linkedSystem()},
 			patchAllErr: errPatchAllFailed,
 		}
 
@@ -131,7 +132,7 @@ func TestDetachAllSystems(t *testing.T) {
 
 	t.Run("returns ErrSystemUpdate when patching a system fails", func(t *testing.T) {
 		repo := &fakeDetachRepo{
-			systems:  []model.System{linkedSystem("t-1")},
+			systems:  []model.System{linkedSystem()},
 			patchErr: errPatchFailed,
 		}
 
@@ -142,7 +143,7 @@ func TestDetachAllSystems(t *testing.T) {
 	})
 
 	t.Run("calls PatchAll with HasL1KeyClaim=false before unlinking systems", func(t *testing.T) {
-		sys := linkedSystem("t-1")
+		sys := linkedSystem()
 		repo := &fakeDetachRepo{
 			systems: []model.System{sys},
 		}
@@ -158,7 +159,7 @@ func TestDetachAllSystems(t *testing.T) {
 	})
 
 	t.Run("clears TenantID on all linked systems", func(t *testing.T) {
-		sys := linkedSystem("t-1")
+		sys := linkedSystem()
 		repo := &fakeDetachRepo{
 			systems: []model.System{sys},
 		}
