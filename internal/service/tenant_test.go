@@ -20,8 +20,9 @@ import (
 )
 
 var (
-	errListFailed  = errors.New("db down")
-	errPatchFailed = errors.New("patch failed")
+	errListFailed     = errors.New("db down")
+	errPatchFailed    = errors.New("patch failed")
+	errPatchAllFailed = errors.New("patch all failed")
 )
 
 // --- helpers -----------------------------------------------------------------
@@ -41,19 +42,22 @@ func linkedSystem(tenantID string) model.System {
 	return model.System{ID: id, ExternalID: "sys-1", Type: "application", TenantID: &tid}
 }
 
-// --- fake repo for unlinkAllSystems ------------------------------------------
+// --- fake repo for detachAllSystems ------------------------------------------
 
-type fakeUnlinkRepo struct {
+type fakeDetachRepo struct {
 	service.NoopRepo
 
-	systems  []model.System
-	listErr  error
-	patchErr error
+	systems     []model.System
+	listErr     error
+	patchErr    error
+	patchAllErr error
 
-	patchedSystems []*model.System
+	patchedSystems    []*model.System
+	patchAllResource  repository.Resource
+	patchAllCallCount int
 }
 
-func (f *fakeUnlinkRepo) List(_ context.Context, dest any, _ repository.Query) error {
+func (f *fakeDetachRepo) List(_ context.Context, dest any, _ repository.Query) error {
 	if f.listErr != nil {
 		return f.listErr
 	}
@@ -63,7 +67,7 @@ func (f *fakeUnlinkRepo) List(_ context.Context, dest any, _ repository.Query) e
 	return nil
 }
 
-func (f *fakeUnlinkRepo) Patch(_ context.Context, resource repository.Resource) (bool, error) {
+func (f *fakeDetachRepo) Patch(_ context.Context, resource repository.Resource) (bool, error) {
 	if f.patchErr != nil {
 		return false, f.patchErr
 	}
@@ -72,6 +76,15 @@ func (f *fakeUnlinkRepo) Patch(_ context.Context, resource repository.Resource) 
 		f.patchedSystems = append(f.patchedSystems, &copied)
 	}
 	return true, nil
+}
+
+func (f *fakeDetachRepo) PatchAll(_ context.Context, resource repository.Resource, _ any, _ repository.Query) (int64, error) {
+	f.patchAllCallCount++
+	f.patchAllResource = resource
+	if f.patchAllErr != nil {
+		return 0, f.patchAllErr
+	}
+	return 0, nil
 }
 
 // --- TestTerminateTenant -----------------------------------------------------
@@ -90,39 +103,64 @@ func TestTerminateTenant(t *testing.T) {
 	})
 }
 
-// --- TestUnlinkAllSystems ----------------------------------------------------
+// --- TestDetachAllSystems ----------------------------------------------------
 
-func TestUnlinkAllSystems(t *testing.T) {
+func TestDetachAllSystems(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("returns ErrSystemSelect when listing systems fails", func(t *testing.T) {
-		repo := &fakeUnlinkRepo{listErr: errListFailed}
+	t.Run("returns ErrSystemUpdate when PatchAll fails", func(t *testing.T) {
+		repo := &fakeDetachRepo{patchAllErr: errPatchAllFailed}
 
-		err := service.UnlinkAllSystems(ctx, repo, "t-1")
+		err := service.DetachAllSystems(ctx, repo, "t-1")
+
+		require.Error(t, err)
+		assert.Equal(t, codes.Internal, status.Code(err))
+	})
+
+	t.Run("returns ErrSystemSelect when listing systems fails", func(t *testing.T) {
+		repo := &fakeDetachRepo{listErr: errListFailed}
+
+		err := service.DetachAllSystems(ctx, repo, "t-1")
 
 		require.Error(t, err)
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 
 	t.Run("returns ErrSystemUpdate when patching a system fails", func(t *testing.T) {
-		repo := &fakeUnlinkRepo{
+		repo := &fakeDetachRepo{
 			systems:  []model.System{linkedSystem("t-1")},
 			patchErr: errPatchFailed,
 		}
 
-		err := service.UnlinkAllSystems(ctx, repo, "t-1")
+		err := service.DetachAllSystems(ctx, repo, "t-1")
 
 		require.Error(t, err)
 		assert.Equal(t, codes.Internal, status.Code(err))
 	})
 
-	t.Run("clears TenantID on all linked systems", func(t *testing.T) {
+	t.Run("calls PatchAll with HasL1KeyClaim=false before unlinking systems", func(t *testing.T) {
 		sys := linkedSystem("t-1")
-		repo := &fakeUnlinkRepo{
+		repo := &fakeDetachRepo{
 			systems: []model.System{sys},
 		}
 
-		err := service.UnlinkAllSystems(ctx, repo, "t-1")
+		err := service.DetachAllSystems(ctx, repo, "t-1")
+
+		require.NoError(t, err)
+		assert.Equal(t, 1, repo.patchAllCallCount)
+		rs, ok := repo.patchAllResource.(*model.RegionalSystem)
+		require.True(t, ok, "PatchAll resource should be *model.RegionalSystem")
+		require.NotNil(t, rs.HasL1KeyClaim)
+		assert.False(t, *rs.HasL1KeyClaim)
+	})
+
+	t.Run("clears TenantID on all linked systems", func(t *testing.T) {
+		sys := linkedSystem("t-1")
+		repo := &fakeDetachRepo{
+			systems: []model.System{sys},
+		}
+
+		err := service.DetachAllSystems(ctx, repo, "t-1")
 
 		require.NoError(t, err)
 		require.Len(t, repo.patchedSystems, 1)
@@ -131,11 +169,12 @@ func TestUnlinkAllSystems(t *testing.T) {
 	})
 
 	t.Run("succeeds with no-op when no systems are linked", func(t *testing.T) {
-		repo := &fakeUnlinkRepo{}
+		repo := &fakeDetachRepo{}
 
-		err := service.UnlinkAllSystems(ctx, repo, "t-1")
+		err := service.DetachAllSystems(ctx, repo, "t-1")
 
 		require.NoError(t, err)
 		assert.Empty(t, repo.patchedSystems)
+		assert.Equal(t, 1, repo.patchAllCallCount)
 	})
 }

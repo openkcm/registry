@@ -251,7 +251,7 @@ func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTe
 	err = t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
 		preFn: func(ctx context.Context, r repository.Repository, _ *model.Tenant) error {
-			return unlinkAllSystems(ctx, r, in.GetId())
+			return detachAllSystems(ctx, r, in.GetId())
 		},
 		updateFn: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATING.String()))
@@ -762,14 +762,34 @@ func addLabelsCondition(cond *repository.CompositeKey, validation *validation.Va
 	return nil
 }
 
-// unlinkAllSystems sets TenantID to empty on all Systems linked to the given tenant.
-func unlinkAllSystems(ctx context.Context, r repository.Repository, tenantID string) error {
-	query := repository.NewQuery(&model.System{}).Where(
-		repository.NewCompositeKey().Where(repository.TenantIDField, tenantID),
-	)
+// detachAllSystems releases L1 key claims on all regional systems linked to the given tenant,
+// then clears TenantID on all systems linked to that tenant.
+func detachAllSystems(ctx context.Context, r repository.Repository, tenantID string) error {
+	falseVal := false
+	joinQuery := repository.NewQuery(&model.RegionalSystem{})
+	joinQuery.Joins = []repository.Join{
+		{
+			Resource: &model.System{},
+			OnColumn: repository.IDField,
+			Column:   repository.SystemIDField,
+		},
+	}
+	tenantField := fmt.Sprintf("%s.%s", (&model.System{}).TableName(), repository.TenantIDField)
+	joinQuery.Where(repository.NewCompositeKey().Where(tenantField, tenantID))
+
+	if _, err := r.PatchAll(ctx,
+		&model.RegionalSystem{HasL1KeyClaim: &falseVal},
+		&[]model.RegionalSystem{},
+		*joinQuery,
+	); err != nil {
+		slogctx.Error(ctx, "failed to release L1 key claims during detach", "tenantID", tenantID, "error", err)
+		return ErrSystemUpdate
+	}
 
 	var systems []model.System
-	if err := r.List(ctx, &systems, *query); err != nil {
+	if err := r.List(ctx, &systems, *repository.NewQuery(&model.System{}).Where(
+		repository.NewCompositeKey().Where(repository.TenantIDField, tenantID),
+	)); err != nil {
 		return ErrSystemSelect
 	}
 
@@ -777,7 +797,7 @@ func unlinkAllSystems(ctx context.Context, r repository.Repository, tenantID str
 	for i := range systems {
 		systems[i].TenantID = &emptyTenantID
 		if _, err := r.Patch(ctx, &systems[i]); err != nil {
-			slogctx.Error(ctx, "failed to patch system during unlink", "systemID", systems[i].ID, "error", err)
+			slogctx.Error(ctx, "failed to unlink system during detach", "systemID", systems[i].ID, "error", err)
 			return ErrSystemUpdate
 		}
 	}

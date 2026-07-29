@@ -9,7 +9,7 @@ import (
 
 var (
 	MapError         = mapError
-	UnlinkAllSystems = unlinkAllSystems
+	DetachAllSystems = detachAllSystems
 )
 
 // NewAuthForTest builds an Auth without touching orbital, so that unit tests
