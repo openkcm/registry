@@ -109,7 +109,10 @@ func TestDetachAllSystems(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("returns ErrSystemUpdate when PatchAll fails", func(t *testing.T) {
-		repo := &fakeDetachRepo{patchAllErr: errPatchAllFailed}
+		repo := &fakeDetachRepo{
+			systems:     []model.System{linkedSystem("t-1")},
+			patchAllErr: errPatchAllFailed,
+		}
 
 		err := service.DetachAllSystems(ctx, repo, "t-1")
 
@@ -175,6 +178,6 @@ func TestDetachAllSystems(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Empty(t, repo.patchedSystems)
-		assert.Equal(t, 1, repo.patchAllCallCount)
+		assert.Equal(t, 0, repo.patchAllCallCount)
 	})
 }

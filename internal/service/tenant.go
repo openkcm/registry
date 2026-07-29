@@ -765,32 +765,30 @@ func addLabelsCondition(cond *repository.CompositeKey, validation *validation.Va
 // detachAllSystems releases L1 key claims on all regional systems linked to the given tenant,
 // then clears TenantID on all systems linked to that tenant.
 func detachAllSystems(ctx context.Context, r repository.Repository, tenantID string) error {
-	falseVal := false
-	joinQuery := repository.NewQuery(&model.RegionalSystem{})
-	joinQuery.Joins = []repository.Join{
-		{
-			Resource: &model.System{},
-			OnColumn: repository.IDField,
-			Column:   repository.SystemIDField,
-		},
-	}
-	tenantField := fmt.Sprintf("%s.%s", (&model.System{}).TableName(), repository.TenantIDField)
-	joinQuery.Where(repository.NewCompositeKey().Where(tenantField, tenantID))
-
-	if _, err := r.PatchAll(ctx,
-		&model.RegionalSystem{HasL1KeyClaim: &falseVal},
-		&[]model.RegionalSystem{},
-		*joinQuery,
-	); err != nil {
-		slogctx.Error(ctx, "failed to release L1 key claims during detach", "tenantID", tenantID, "error", err)
-		return ErrSystemUpdate
-	}
-
 	var systems []model.System
 	if err := r.List(ctx, &systems, *repository.NewQuery(&model.System{}).Where(
 		repository.NewCompositeKey().Where(repository.TenantIDField, tenantID),
 	)); err != nil {
 		return ErrSystemSelect
+	}
+
+	if len(systems) > 0 {
+		systemIDs := make([]string, len(systems))
+		for i, s := range systems {
+			systemIDs[i] = s.ID.String()
+		}
+
+		falseVal := false
+		if _, err := r.PatchAll(ctx,
+			&model.RegionalSystem{HasL1KeyClaim: &falseVal},
+			&[]model.RegionalSystem{},
+			*repository.NewQuery(&model.RegionalSystem{}).Where(
+				repository.NewCompositeKey().Where(repository.SystemIDField, systemIDs),
+			),
+		); err != nil {
+			slogctx.Error(ctx, "failed to release L1 key claims during detach", "tenantID", tenantID, "error", err)
+			return ErrSystemUpdate
+		}
 	}
 
 	emptyTenantID := ""
