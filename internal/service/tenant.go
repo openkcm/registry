@@ -37,11 +37,13 @@ type (
 	tenantUpdateFn   func(tenant *model.Tenant)
 	tenantValidateFn func(tenant *model.Tenant) error
 	orbitalJobFn     func(ctx context.Context, tenant *model.Tenant) error
+	tenantPreFn      func(ctx context.Context, r repository.Repository, tenant *model.Tenant) error
 
 	patchTenantOpts struct {
 		id            string
 		updateFn      tenantUpdateFn
 		validateFn    tenantValidateFn
+		preFn         tenantPreFn
 		patchAuthOpts patchAuthOpts
 		jobFn         orbitalJobFn
 	}
@@ -246,12 +248,11 @@ func (t *Tenant) TerminateTenant(ctx context.Context, in *tenantgrpc.TerminateTe
 		return nil, err
 	}
 
-	if err := assertNoSystemLinks(ctx, t.repo, in.GetId()); err != nil {
-		return nil, err
-	}
-
 	err = t.patchTenant(ctx, patchTenantOpts{
 		id: in.GetId(),
+		preFn: func(ctx context.Context, r repository.Repository, tenant *model.Tenant) error {
+			return detachAllSystems(ctx, r, tenant.ID)
+		},
 		updateFn: func(tenant *model.Tenant) {
 			tenant.SetStatus(model.TenantStatus(tenantgrpc.Status_STATUS_TERMINATING.String()))
 		},
@@ -616,8 +617,13 @@ func (t *Tenant) patchTenant(ctx context.Context, opts patchTenantOpts) error {
 		}
 
 		if opts.validateFn != nil {
-			err = opts.validateFn(tenant)
-			if err != nil {
+			if err = opts.validateFn(tenant); err != nil {
+				return err
+			}
+		}
+
+		if opts.preFn != nil {
+			if err = opts.preFn(ctx, r, tenant); err != nil {
 				return err
 			}
 		}
@@ -756,24 +762,42 @@ func addLabelsCondition(cond *repository.CompositeKey, validation *validation.Va
 	return nil
 }
 
-// assertNoSystemLinks checks if there are any Systems linked with the Tenant.
-// If records are found for the provided tenantID, it returns an error.
-// Here repository r is passed as a variable to address the scenarios where we will
-// create a new repository from the existing repository for e.g. in the case of transaction.
-func assertNoSystemLinks(ctx context.Context, r repository.Repository, tenantID string) error {
-	query := repository.NewQuery(&model.System{}).Where(
-		repository.NewCompositeKey().Where(repository.TenantIDField, tenantID),
-	)
-
+// detachAllSystems releases L1 key claims on all regional systems linked to the given tenant,
+// then clears TenantID on all systems linked to that tenant.
+func detachAllSystems(ctx context.Context, r repository.Repository, tenantID string) error {
 	var systems []model.System
-
-	err := r.List(ctx, &systems, *query)
-	if err != nil {
+	if err := r.List(ctx, &systems, *repository.NewQuery(&model.System{}).Where(
+		repository.NewCompositeKey().Where(repository.TenantIDField, tenantID),
+	)); err != nil {
 		return ErrSystemSelect
 	}
 
 	if len(systems) > 0 {
-		return ErrSystemIsLinkedToTenant
+		systemIDs := make([]string, len(systems))
+		for i, s := range systems {
+			systemIDs[i] = s.ID.String()
+		}
+
+		falseVal := false
+		if _, err := r.PatchAll(ctx,
+			&model.RegionalSystem{HasL1KeyClaim: &falseVal},
+			&[]model.RegionalSystem{},
+			*repository.NewQuery(&model.RegionalSystem{}).Where(
+				repository.NewCompositeKey().Where(repository.SystemIDField, systemIDs),
+			),
+		); err != nil {
+			slogctx.Error(ctx, "failed to release L1 key claims during detach", "tenantID", tenantID, "error", err)
+			return ErrSystemUpdate
+		}
+	}
+
+	emptyTenantID := ""
+	for i := range systems {
+		systems[i].TenantID = &emptyTenantID
+		if _, err := r.Patch(ctx, &systems[i]); err != nil {
+			slogctx.Error(ctx, "failed to unlink system during detach", "systemID", systems[i].ID, "error", err)
+			return ErrSystemUpdate
+		}
 	}
 
 	return nil
