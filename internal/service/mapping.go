@@ -42,10 +42,7 @@ func (m *Mapping) UnmapSystemFromTenant(ctx context.Context, in *mappinggrpc.Unm
 
 	emptyTenantID := ""
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
-	defer cancel()
-
-	err := m.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
+	err := transact(ctx, m.repo, func(ctx context.Context, r repository.Repository) error {
 		system, validateErr := validateAndGetSystemForUnmap(ctx, r, in)
 		if validateErr != nil {
 			return validateErr
@@ -66,7 +63,6 @@ func (m *Mapping) UnmapSystemFromTenant(ctx context.Context, in *mappinggrpc.Unm
 		return nil
 	})
 
-	err = mapError(err)
 	if err != nil {
 		slogctx.Error(ctx, "failed to unmap system from tenant", "error", err)
 		return nil, err
@@ -88,10 +84,7 @@ func (m *Mapping) MapSystemToTenant(ctx context.Context, in *mappinggrpc.MapSyst
 		return nil, err
 	}
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, defaultTranTimeout)
-	defer cancel()
-
-	err := m.repo.Transaction(ctxTimeout, func(ctx context.Context, r repository.Repository) error {
+	err := transact(ctx, m.repo, func(ctx context.Context, r repository.Repository) error {
 		system, found, validateErr := isSystemTenantMapAllowed(ctx, r, in)
 		if validateErr != nil {
 			return validateErr
@@ -116,7 +109,6 @@ func (m *Mapping) MapSystemToTenant(ctx context.Context, in *mappinggrpc.MapSyst
 		return nil
 	})
 
-	err = mapError(err)
 	if err != nil {
 		slogctx.Error(ctx, "failed to map system to tenant", "error", err)
 		return nil, err
