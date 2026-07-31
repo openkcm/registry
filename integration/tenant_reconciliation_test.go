@@ -32,6 +32,7 @@ func TestTenantReconciliation(t *testing.T) {
 	operator, err := operatortest.New(ctx)
 	require.NoError(t, err)
 
+	//nolint:errcheck
 	go operator.ListenAndRespond(ctx)
 
 	t.Run("ProvisionTenant", func(t *testing.T) {
