@@ -2,6 +2,8 @@ module github.com/openkcm/registry
 
 go 1.26.5
 
+toolchain go1.26.5
+
 tool github.com/grpc-ecosystem/grpc-health-probe
 
 require (
