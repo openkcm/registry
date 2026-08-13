@@ -28,15 +28,10 @@ func NewRecover() *Recover {
 // UnaryInterceptor intercepts for any panics, and helps our server to recover.
 // Note: It is better to add this as the last interceptor.
 func (r *Recover) UnaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (_ any, err error) {
-	// following defer will recover from panics from the handler
 	defer func() {
-		rec := recover()
-		if rec != nil {
+		if p := recover(); p != nil {
+			r.logError(info.FullMethod, p)
 			err = service.ErrPanic
-			// NOTE this is to make checkmark pass
-			if err != nil {
-				r.logError(info.FullMethod)
-			}
 		}
 	}()
 
@@ -46,29 +41,25 @@ func (r *Recover) UnaryInterceptor(ctx context.Context, req any, info *grpc.Unar
 // StreamInterceptor intercepts for any panics, and helps our server to recover.
 // Note: It is better to add this as the last interceptor.
 func (r *Recover) StreamInterceptor(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
-	// following defer will recover from panics from the handler
 	defer func() {
-		rec := recover()
-		if rec != nil {
+		if p := recover(); p != nil {
+			r.logError(info.FullMethod, p)
 			err = service.ErrPanic
-			// NOTE this is to make checkmark pass
-			if err != nil {
-				r.logError(info.FullMethod)
-			}
 		}
 	}()
 
 	return handler(srv, stream)
 }
 
-// logError prints stacktrace.
-func (r *Recover) logError(methodName string) {
+// logError prints the panic value and stacktrace.
+func (r *Recover) logError(methodName string, panicValue any) {
 	// we could also notify this to some notification mechanism in the future
 	stackBuf := make([]byte, stackBufSize)
 	stackSize := runtime.Stack(stackBuf, true)
 	slog.Error(fmt.Sprintf(
-		"------------------------------- \n method:[%s] \n Trace:\n %s \n--------------------------------",
+		"------------------------------- \n method:[%s] \n panic: %v \n Trace:\n %s \n--------------------------------",
 		methodName,
+		panicValue,
 		string(stackBuf[:stackSize])),
 	)
 }
