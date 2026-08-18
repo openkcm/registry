@@ -32,7 +32,7 @@ func TestTenantReconciliation(t *testing.T) {
 	operator, err := operatortest.New(ctx)
 	require.NoError(t, err)
 
-	go operator.ListenAndRespond(ctx)
+	go func() { _ = operator.ListenAndRespond(ctx) }()
 
 	t.Run("ProvisionTenant", func(t *testing.T) {
 		tests := []struct {

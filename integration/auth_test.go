@@ -38,7 +38,7 @@ func TestAuth(t *testing.T) {
 
 	operator, err := operatortest.New(ctx)
 	require.NoError(t, err)
-	go operator.ListenAndRespond(ctx)
+	go func() { _ = operator.ListenAndRespond(ctx) }()
 
 	t.Run("ApplyAuth", func(t *testing.T) {
 		t.Run("should return error if", func(t *testing.T) {
