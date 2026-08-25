@@ -170,6 +170,7 @@ func TestTenantValidation(t *testing.T) {
 				{
 					name: "only id filter is provided",
 					request: &tenantgrpc.ListTenantsRequest{
+						//nolint:staticcheck
 						Id: validRandID(),
 					},
 				},
@@ -208,6 +209,7 @@ func TestTenantValidation(t *testing.T) {
 				{
 					name: "all filter are provided",
 					request: &tenantgrpc.ListTenantsRequest{
+						//nolint:staticcheck
 						Id:        validRandID(),
 						Name:      "some-name",
 						Region:    "region",
