@@ -20,6 +20,8 @@ const (
 	AttrRegion       = "region"
 	AttrTenantLinked = "tenant_linked"
 	AttrStatus       = "status"
+	AttrType         = "type"
+	AttrRole         = "role"
 	ErrDomainMetrics = "metrics"
 )
 
@@ -99,6 +101,13 @@ func initGauges(ctx context.Context, meter metric.Meter, db *gorm.DB) error {
 		return err
 	}
 
+	if err := createObservableGauge(ctx, meter, "system.connections.total", "Gauge of L2-to-L1 connections, partitioned by system type and role",
+		func(ctx context.Context, observer metric.Int64Observer) error {
+			return measureConnections(ctx, observer, db)
+		}); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -163,6 +172,34 @@ func measureTenants(ctx context.Context, observer metric.Int64Observer, db *gorm
 		observer.Observe(status.Count, metric.WithAttributes(
 			attribute.String(AttrRegion, status.Region),
 			attribute.String(AttrStatus, status.Status)))
+	}
+
+	return nil
+}
+
+func measureConnections(ctx context.Context, observer metric.Int64Observer, db *gorm.DB) error {
+	var connectionCounts []struct {
+		Type  string
+		Role  string
+		Count int64
+	}
+
+	err := db.WithContext(ctx).
+		Model(&model.RegionalSystem{}).
+		Joins("JOIN systems ON systems.id = regional_systems.system_id").
+		Joins("LEFT JOIN tenants ON tenants.id = systems.tenant_id").
+		Where("regional_systems.has_l1_key_claim = true").
+		Select("systems.type, coalesce(tenants.role, '') as role, count(*) as count").
+		Group("systems.type, tenants.role").
+		Scan(&connectionCounts).Error
+	if err != nil {
+		return err
+	}
+
+	for _, c := range connectionCounts {
+		observer.Observe(c.Count, metric.WithAttributes(
+			attribute.String(AttrType, c.Type),
+			attribute.String(AttrRole, c.Role)))
 	}
 
 	return nil
