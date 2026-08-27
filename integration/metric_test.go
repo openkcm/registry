@@ -622,6 +622,115 @@ func TestSystemMetrics(t *testing.T) {
 			})
 		})
 	})
+
+	t.Run("Connection created counter", func(t *testing.T) {
+		metricConnections := createMetric(t, "systems_connections_created",
+			service.AttrType, allowedSystemType,
+			service.AttrRole, tenantgrpc.Role_ROLE_LIVE.String(),
+		)
+
+		t.Run("increase", func(t *testing.T) {
+			t.Run("should happen when L1 key claim is set", func(t *testing.T) {
+				// Given — register a system linked to a tenant
+				tenantInDB := validTenant()
+				err = createTenantInDB(ctx, db, tenantInDB)
+				assert.NoError(t, err)
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenantInDB)
+					assert.NoError(t, err)
+				}()
+
+				req := validRegisterSystemReq()
+				req.Region = systemMetricsRegion
+				req.TenantId = tenantInDB.ID
+				_, err := sSubj.RegisterSystem(ctx, req)
+				assert.NoError(t, err)
+				defer cleanupSystem(t, ctx, sSubj, mSub, req.ExternalId, req.TenantId, req.Type, req.Region, true)
+
+				connectionsBefore, err := getSafeMetric(ctx, scraper, metricConnections)
+				assert.NoError(t, err)
+
+				// When
+				_, err = sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
+					ExternalId: req.ExternalId,
+					Type:       req.Type,
+					Region:     req.Region,
+					TenantId:   req.TenantId,
+					L1KeyClaim: true,
+				})
+				assert.NoError(t, err)
+
+				// Then
+				assertCounterInc(t, scraper, ctx, metricConnections, connectionsBefore)
+			})
+
+			t.Run("should not happen if error occurs", func(t *testing.T) {
+				// Given
+				connectionsBefore, err := getSafeMetric(ctx, scraper, metricConnections)
+				assert.NoError(t, err)
+
+				// When
+				_, err = sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{})
+				assert.Error(t, err)
+
+				// Then
+				assertCounterEqual(t, scraper, ctx, metricConnections, connectionsBefore)
+			})
+		})
+	})
+
+	t.Run("Mapping created counter", func(t *testing.T) {
+		metricMappings := createMetric(t, "systems_mappings_created",
+			service.AttrType, allowedSystemType,
+			service.AttrRole, tenantgrpc.Role_ROLE_LIVE.String(),
+		)
+
+		t.Run("increase", func(t *testing.T) {
+			t.Run("should happen when system is mapped to tenant", func(t *testing.T) {
+				// Given
+				tenantInDB := validTenant()
+				err = createTenantInDB(ctx, db, tenantInDB)
+				assert.NoError(t, err)
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, tenantInDB)
+					assert.NoError(t, err)
+				}()
+
+				req := validRegisterSystemReq()
+				req.Region = systemMetricsRegion
+				_, err := sSubj.RegisterSystem(ctx, req)
+				assert.NoError(t, err)
+				defer cleanupSystem(t, ctx, sSubj, mSub, req.ExternalId, tenantInDB.ID, req.Type, req.Region, false)
+
+				mappingsBefore, err := getSafeMetric(ctx, scraper, metricMappings)
+				assert.NoError(t, err)
+
+				// When
+				_, err = mSub.MapSystemToTenant(ctx, &mappinggrpc.MapSystemToTenantRequest{
+					ExternalId: req.ExternalId,
+					Type:       req.Type,
+					TenantId:   tenantInDB.ID,
+				})
+				assert.NoError(t, err)
+
+				// Then
+				assertCounterInc(t, scraper, ctx, metricMappings, mappingsBefore)
+			})
+
+			t.Run("should not happen if error occurs", func(t *testing.T) {
+				// Given
+				mappingsBefore, err := getSafeMetric(ctx, scraper, metricMappings)
+				assert.NoError(t, err)
+
+				// When
+				_, err = mSub.MapSystemToTenant(ctx, &mappinggrpc.MapSystemToTenantRequest{})
+				assert.Error(t, err)
+
+				// Then
+				assertCounterEqual(t, scraper, ctx, metricMappings, mappingsBefore)
+			})
+		})
+	})
 }
 
 // initTenantMetrics initializes metrics specific to tenants,
