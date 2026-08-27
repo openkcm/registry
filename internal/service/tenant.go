@@ -114,8 +114,6 @@ func (t *Tenant) RegisterTenant(ctx context.Context, in *tenantgrpc.RegisterTena
 		return nil, err
 	}
 
-	t.meters.handleTenantRegistration(ctx, tenant.Region)
-
 	return &tenantgrpc.RegisterTenantResponse{
 		Id: tenant.ID,
 	}, nil
@@ -425,8 +423,6 @@ func (t *Tenant) HandleJobCanceled(ctx context.Context, job orbital.Job) error {
 }
 
 // HandleJobDone applies the changes to the tenant based on the job type when the job is done.
-//
-//nolint:dupl
 func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 	var tenantUpdateFn tenantUpdateFn
 	var authUpdateFn authUpdateFunc
@@ -447,7 +443,7 @@ func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 		return nil
 	}
 
-	return t.patchTenant(ctx, patchTenantOpts{
+	err := t.patchTenant(ctx, patchTenantOpts{
 		id:       job.ExternalID,
 		updateFn: tenantUpdateFn,
 		patchAuthOpts: patchAuthOpts{
@@ -458,6 +454,25 @@ func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 			updateFn: authUpdateFn,
 		},
 	})
+	if err != nil {
+		return err
+	}
+
+	tenant := &tenantgrpc.Tenant{}
+	if err := proto.Unmarshal(job.Data, tenant); err != nil {
+		slogctx.Warn(ctx, "failed to unmarshal tenant data for metrics", "error", err)
+		return nil
+	}
+
+	if job.Type == tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String() {
+		t.meters.handleTenantRegistration(ctx, tenant.GetRegion())
+	}
+
+	if job.Type == tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String() {
+		t.meters.handleTenantTermination(ctx, tenant.GetRegion())
+	}
+
+	return nil
 }
 
 func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTenantUserGroupsRequest) (*tenantgrpc.SetTenantUserGroupsResponse, error) {
@@ -492,7 +507,6 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 	return &tenantgrpc.SetTenantUserGroupsResponse{Success: true}, nil
 }
 
-//nolint:dupl
 func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
 	var tenantUpdateFn tenantUpdateFn
 	var authUpdateFn authUpdateFunc

@@ -11,6 +11,8 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"gorm.io/gorm"
 
+	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
+
 	"github.com/openkcm/registry/internal/model"
 )
 
@@ -28,45 +30,76 @@ func InitMeters(ctx context.Context, cfgApp *commoncfg.Application, db *gorm.DB)
 		metric.WithInstrumentationAttributes(otlp.CreateAttributesFrom(*cfgApp)...),
 	)
 
-	var err error
-
-	systemRegistrationCtr, err := createCounter(ctx, meter, "systems.registered", "Counter of system registrations, partitioned by region")
+	ctrs, err := initCounters(ctx, meter)
 	if err != nil {
 		return nil, err
 	}
 
-	systemDeletionCtr, err := createCounter(ctx, meter, "systems.deleted", "Counter of system deletions, partitioned by region")
-	if err != nil {
-		return nil, err
-	}
-
-	err = createObservableGauge(ctx, meter, "systems.count", "Gauge of systems, partitioned by region and tenant link status",
-		func(ctx context.Context, observer metric.Int64Observer) error {
-			return measureSystems(ctx, observer, db)
-		})
-	if err != nil {
-		return nil, err
-	}
-
-	tenantRegistrationCtr, err := createCounter(ctx, meter, "tenants.registered", "Counter of tenant registrations, partitioned by region")
-	if err != nil {
-		return nil, err
-	}
-
-	err = createObservableGauge(ctx, meter, "tenants.count", "Gauge of tenants, partitioned by status and region",
-		func(ctx context.Context, observer metric.Int64Observer) error {
-			return measureTenants(ctx, observer, db)
-		})
-	if err != nil {
+	if err := initGauges(ctx, meter, db); err != nil {
 		return nil, err
 	}
 
 	return &Meters{
 		application:           cfgApp,
-		systemRegistrationCtr: systemRegistrationCtr,
-		tenantRegistrationCtr: tenantRegistrationCtr,
-		systemDeletionCtr:     systemDeletionCtr,
+		systemRegistrationCtr: ctrs.systemRegistrationCtr,
+		tenantRegistrationCtr: ctrs.tenantRegistrationCtr,
+		tenantRemovalCtr:      ctrs.tenantRemovalCtr,
+		systemDeletionCtr:     ctrs.systemDeletionCtr,
 	}, nil
+}
+
+type meterCounters struct {
+	systemRegistrationCtr metric.Int64Counter
+	systemDeletionCtr     metric.Int64Counter
+	tenantRegistrationCtr metric.Int64Counter
+	tenantRemovalCtr      metric.Int64Counter
+}
+
+func initCounters(ctx context.Context, meter metric.Meter) (meterCounters, error) {
+	systemRegistrationCtr, err := createCounter(ctx, meter, "systems.registered", "Counter of system registrations, partitioned by region")
+	if err != nil {
+		return meterCounters{}, err
+	}
+
+	systemDeletionCtr, err := createCounter(ctx, meter, "systems.deleted", "Counter of system deletions, partitioned by region")
+	if err != nil {
+		return meterCounters{}, err
+	}
+
+	tenantRegistrationCtr, err := createCounter(ctx, meter, "tenants.registered", "Counter of tenant registrations, partitioned by region")
+	if err != nil {
+		return meterCounters{}, err
+	}
+
+	tenantRemovalCtr, err := createCounter(ctx, meter, "tenants.terminated", "Counter of tenant terminations, partitioned by region")
+	if err != nil {
+		return meterCounters{}, err
+	}
+
+	return meterCounters{
+		systemRegistrationCtr: systemRegistrationCtr,
+		systemDeletionCtr:     systemDeletionCtr,
+		tenantRegistrationCtr: tenantRegistrationCtr,
+		tenantRemovalCtr:      tenantRemovalCtr,
+	}, nil
+}
+
+func initGauges(ctx context.Context, meter metric.Meter, db *gorm.DB) error {
+	if err := createObservableGauge(ctx, meter, "systems.total", "Gauge of systems, partitioned by region and tenant link status",
+		func(ctx context.Context, observer metric.Int64Observer) error {
+			return measureSystems(ctx, observer, db)
+		}); err != nil {
+		return err
+	}
+
+	if err := createObservableGauge(ctx, meter, "tenants.total", "Gauge of tenants, partitioned by status and region",
+		func(ctx context.Context, observer metric.Int64Observer) error {
+			return measureTenants(ctx, observer, db)
+		}); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func createCounter(ctx context.Context, meter metric.Meter, name string, description string) (metric.Int64Counter, error) {
@@ -105,9 +138,21 @@ func measureTenants(ctx context.Context, observer metric.Int64Observer, db *gorm
 		Count  int64
 	}
 
+	activeStatuses := []string{
+		tenantgrpc.Status_STATUS_ACTIVE.String(),
+		tenantgrpc.Status_STATUS_BLOCKING.String(),
+		tenantgrpc.Status_STATUS_BLOCKING_ERROR.String(),
+		tenantgrpc.Status_STATUS_BLOCKED.String(),
+		tenantgrpc.Status_STATUS_UNBLOCKING.String(),
+		tenantgrpc.Status_STATUS_UNBLOCKING_ERROR.String(),
+		tenantgrpc.Status_STATUS_TERMINATING.String(),
+		tenantgrpc.Status_STATUS_TERMINATION_ERROR.String(),
+	}
+
 	err := db.WithContext(ctx).
 		Model(&model.Tenant{}).
 		Select("status, region, count(*) as count").
+		Where("status IN ?", activeStatuses).
 		Group("status, region").
 		Scan(&tenantStatus).Error
 	if err != nil {
@@ -150,6 +195,7 @@ type Meters struct {
 	application           *commoncfg.Application
 	systemRegistrationCtr metric.Int64Counter
 	tenantRegistrationCtr metric.Int64Counter
+	tenantRemovalCtr      metric.Int64Counter
 	systemDeletionCtr     metric.Int64Counter
 }
 
@@ -163,6 +209,10 @@ func (m *Meters) handleSystemDeletion(ctx context.Context, region string) {
 
 func (m *Meters) handleTenantRegistration(ctx context.Context, region string) {
 	m.handleCtrInc(ctx, m.tenantRegistrationCtr, region)
+}
+
+func (m *Meters) handleTenantTermination(ctx context.Context, region string) {
+	m.handleCtrInc(ctx, m.tenantRemovalCtr, region)
 }
 
 func (m *Meters) handleCtrInc(ctx context.Context, ctr metric.Int64Counter, region string) {
