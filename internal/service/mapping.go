@@ -84,11 +84,19 @@ func (m *Mapping) MapSystemToTenant(ctx context.Context, in *mappinggrpc.MapSyst
 		return nil, err
 	}
 
+	var tenantRole string
+
 	err := transact(ctx, m.repo, func(ctx context.Context, r repository.Repository) error {
 		system, found, validateErr := isSystemTenantMapAllowed(ctx, r, in)
 		if validateErr != nil {
 			return validateErr
 		}
+
+		tenant, getTenantErr := getTenant(ctx, r, tenantID)
+		if getTenantErr != nil {
+			return getTenantErr
+		}
+		tenantRole = tenant.Role
 
 		if !found {
 			_, createErr := createSystem(ctx, m.validation, r, in.GetExternalId(), in.GetType(), tenantID)
@@ -115,6 +123,8 @@ func (m *Mapping) MapSystemToTenant(ctx context.Context, in *mappinggrpc.MapSyst
 	}
 
 	slogctx.Info(ctx, "system successfully mapped to tenant")
+
+	m.meters.handleMappingCreated(ctx, in.GetType(), tenantRole)
 	return &mappinggrpc.MapSystemToTenantResponse{Success: true}, nil
 }
 

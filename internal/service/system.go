@@ -260,6 +260,7 @@ func (s *System) UpdateSystemL1KeyClaim(ctx context.Context, in *systemgrpc.Upda
 	}
 
 	desiredClaim := in.GetL1KeyClaim()
+	var systemType, tenantRole string
 
 	err := transact(ctx, s.repo, func(ctx context.Context, r repository.Repository) error {
 		regionalSystem, err := getRegionalSystem(ctx, r, in.GetExternalId(), in.GetType(), in.GetRegion())
@@ -280,11 +281,24 @@ func (s *System) UpdateSystemL1KeyClaim(ctx context.Context, in *systemgrpc.Upda
 			return ErrSystemUpdate
 		}
 
+		if desiredClaim {
+			systemType = regionalSystem.System.Type
+			tenant, err := getTenant(ctx, r, *regionalSystem.System.TenantID)
+			if err != nil {
+				return err
+			}
+			tenantRole = tenant.Role
+		}
+
 		return nil
 	})
 
 	if err != nil {
 		return nil, err
+	}
+
+	if desiredClaim {
+		s.meters.handleConnectionCreated(ctx, systemType, tenantRole)
 	}
 
 	return &systemgrpc.UpdateSystemL1KeyClaimResponse{Success: true}, nil

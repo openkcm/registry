@@ -20,6 +20,8 @@ const (
 	AttrRegion       = "region"
 	AttrTenantLinked = "tenant_linked"
 	AttrStatus       = "status"
+	AttrType         = "type"
+	AttrRole         = "role"
 	ErrDomainMetrics = "metrics"
 )
 
@@ -42,15 +44,19 @@ func InitMeters(ctx context.Context, cfgApp *commoncfg.Application, db *gorm.DB)
 	return &Meters{
 		application:           cfgApp,
 		systemRegistrationCtr: ctrs.systemRegistrationCtr,
+		systemDeletionCtr:     ctrs.systemDeletionCtr,
+		connectionCreatedCtr:  ctrs.connectionCreatedCtr,
+		mappingCreatedCtr:     ctrs.mappingCreatedCtr,
 		tenantRegistrationCtr: ctrs.tenantRegistrationCtr,
 		tenantRemovalCtr:      ctrs.tenantRemovalCtr,
-		systemDeletionCtr:     ctrs.systemDeletionCtr,
 	}, nil
 }
 
 type meterCounters struct {
 	systemRegistrationCtr metric.Int64Counter
 	systemDeletionCtr     metric.Int64Counter
+	connectionCreatedCtr  metric.Int64Counter
+	mappingCreatedCtr     metric.Int64Counter
 	tenantRegistrationCtr metric.Int64Counter
 	tenantRemovalCtr      metric.Int64Counter
 }
@@ -62,6 +68,16 @@ func initCounters(ctx context.Context, meter metric.Meter) (meterCounters, error
 	}
 
 	systemDeletionCtr, err := createCounter(ctx, meter, "systems.deleted", "Counter of system deletions, partitioned by region")
+	if err != nil {
+		return meterCounters{}, err
+	}
+
+	connectionCreatedCtr, err := createCounter(ctx, meter, "systems.connections.created", "Counter of L2-to-L1 connections created, partitioned by system type and role")
+	if err != nil {
+		return meterCounters{}, err
+	}
+
+	mappingCreatedCtr, err := createCounter(ctx, meter, "systems.mappings.created", "Counter of system-to-tenant mappings created, partitioned by system type and role")
 	if err != nil {
 		return meterCounters{}, err
 	}
@@ -79,6 +95,8 @@ func initCounters(ctx context.Context, meter metric.Meter) (meterCounters, error
 	return meterCounters{
 		systemRegistrationCtr: systemRegistrationCtr,
 		systemDeletionCtr:     systemDeletionCtr,
+		connectionCreatedCtr:  connectionCreatedCtr,
+		mappingCreatedCtr:     mappingCreatedCtr,
 		tenantRegistrationCtr: tenantRegistrationCtr,
 		tenantRemovalCtr:      tenantRemovalCtr,
 	}, nil
@@ -88,6 +106,20 @@ func initGauges(ctx context.Context, meter metric.Meter, db *gorm.DB) error {
 	if err := createObservableGauge(ctx, meter, "systems.total", "Gauge of systems, partitioned by region and tenant link status",
 		func(ctx context.Context, observer metric.Int64Observer) error {
 			return measureSystems(ctx, observer, db)
+		}); err != nil {
+		return err
+	}
+
+	if err := createObservableGauge(ctx, meter, "systems.connections.total", "Gauge of L2-to-L1 connections, partitioned by system type and role",
+		func(ctx context.Context, observer metric.Int64Observer) error {
+			return measureConnections(ctx, observer, db)
+		}); err != nil {
+		return err
+	}
+
+	if err := createObservableGauge(ctx, meter, "systems.mappings.total", "Gauge of system-to-tenant mappings, partitioned by system type and role",
+		func(ctx context.Context, observer metric.Int64Observer) error {
+			return measureMappings(ctx, observer, db)
 		}); err != nil {
 		return err
 	}
@@ -131,6 +163,84 @@ func createObservableGauge(ctx context.Context, meter metric.Meter, name string,
 	return nil
 }
 
+func measureSystems(ctx context.Context, observer metric.Int64Observer, db *gorm.DB) error {
+	var systemLinkStatus []struct {
+		Linked string
+		Count  int64
+	}
+
+	err := db.WithContext(ctx).
+		Model(&model.System{}).
+		Select("count(*) as count, case when tenant_id IS NULL OR tenant_id = '' then 'false' else 'true' end as linked").
+		Group("case when tenant_id IS NULL OR tenant_id = '' then 'false' else 'true' end").
+		Scan(&systemLinkStatus).Error
+	if err != nil {
+		return err
+	}
+
+	for _, status := range systemLinkStatus {
+		observer.Observe(status.Count, metric.WithAttributes(
+			attribute.String(AttrTenantLinked, status.Linked)))
+	}
+
+	return nil
+}
+
+func measureConnections(ctx context.Context, observer metric.Int64Observer, db *gorm.DB) error {
+	var connectionCounts []struct {
+		Type  string
+		Role  string
+		Count int64
+	}
+
+	err := db.WithContext(ctx).
+		Model(&model.RegionalSystem{}).
+		Joins("JOIN systems ON systems.id = regional_systems.system_id").
+		Joins("LEFT JOIN tenants ON tenants.id = systems.tenant_id").
+		Where("regional_systems.has_l1_key_claim = true").
+		Select("systems.type, coalesce(tenants.role, '') as role, count(*) as count").
+		Group("systems.type, tenants.role").
+		Scan(&connectionCounts).Error
+	if err != nil {
+		return err
+	}
+
+	for _, c := range connectionCounts {
+		observer.Observe(c.Count, metric.WithAttributes(
+			attribute.String(AttrType, c.Type),
+			attribute.String(AttrRole, c.Role)))
+	}
+
+	return nil
+}
+
+func measureMappings(ctx context.Context, observer metric.Int64Observer, db *gorm.DB) error {
+	var mappingCounts []struct {
+		Type  string
+		Role  string
+		Count int64
+	}
+
+	err := db.WithContext(ctx).
+		Model(&model.System{}).
+		Joins("LEFT JOIN tenants ON tenants.id = systems.tenant_id").
+		Where("systems.tenant_id IS NOT NULL AND systems.tenant_id != ''").
+		Select("systems.type, coalesce(tenants.role, '') as role, count(*) as count").
+		Group("systems.type, tenants.role").
+		Scan(&mappingCounts).Error
+	if err != nil {
+		return err
+	}
+
+	for _, m := range mappingCounts {
+		observer.Observe(m.Count, metric.WithAttributes(
+			attribute.String(AttrType, m.Type),
+			attribute.String(AttrRole, m.Role)))
+	}
+
+	return nil
+}
+
 func measureTenants(ctx context.Context, observer metric.Int64Observer, db *gorm.DB) error {
 	var tenantStatus []struct {
 		Status string
@@ -168,35 +278,14 @@ func measureTenants(ctx context.Context, observer metric.Int64Observer, db *gorm
 	return nil
 }
 
-func measureSystems(ctx context.Context, observer metric.Int64Observer, db *gorm.DB) error {
-	var systemLinkStatus []struct {
-		Linked string
-		Count  int64
-	}
-
-	err := db.WithContext(ctx).
-		Model(&model.System{}).
-		Select("count(*) as count, case when tenant_id IS NULL OR tenant_id = '' then 'false' else 'true' end as linked").
-		Group("case when tenant_id IS NULL OR tenant_id = '' then 'false' else 'true' end").
-		Scan(&systemLinkStatus).Error
-	if err != nil {
-		return err
-	}
-
-	for _, status := range systemLinkStatus {
-		observer.Observe(status.Count, metric.WithAttributes(
-			attribute.String(AttrTenantLinked, status.Linked)))
-	}
-
-	return nil
-}
-
 type Meters struct {
 	application           *commoncfg.Application
 	systemRegistrationCtr metric.Int64Counter
+	systemDeletionCtr     metric.Int64Counter
+	connectionCreatedCtr  metric.Int64Counter
+	mappingCreatedCtr     metric.Int64Counter
 	tenantRegistrationCtr metric.Int64Counter
 	tenantRemovalCtr      metric.Int64Counter
-	systemDeletionCtr     metric.Int64Counter
 }
 
 func (m *Meters) handleSystemRegistration(ctx context.Context, region string) {
@@ -205,6 +294,20 @@ func (m *Meters) handleSystemRegistration(ctx context.Context, region string) {
 
 func (m *Meters) handleSystemDeletion(ctx context.Context, region string) {
 	m.handleCtrInc(ctx, m.systemDeletionCtr, region)
+}
+
+func (m *Meters) handleConnectionCreated(ctx context.Context, systemType, role string) {
+	m.connectionCreatedCtr.Add(ctx, 1, metric.WithAttributes(
+		attribute.String(AttrType, systemType),
+		attribute.String(AttrRole, role),
+	))
+}
+
+func (m *Meters) handleMappingCreated(ctx context.Context, systemType, role string) {
+	m.mappingCreatedCtr.Add(ctx, 1, metric.WithAttributes(
+		attribute.String(AttrType, systemType),
+		attribute.String(AttrRole, role),
+	))
 }
 
 func (m *Meters) handleTenantRegistration(ctx context.Context, region string) {
