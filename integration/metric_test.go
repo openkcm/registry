@@ -15,6 +15,7 @@ import (
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 
+	"github.com/openkcm/registry/integration/operatortest"
 	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/service"
 )
@@ -41,11 +42,15 @@ func TestTenantMetrics(t *testing.T) {
 	db, err := startDB()
 	require.NoError(t, err)
 
+	operator, err := operatortest.New(ctx)
+	require.NoError(t, err)
+	go func() { _ = operator.ListenAndRespond(ctx) }()
+
 	err = initTenantMetrics(ctx, subj, db)
 	assert.NoError(t, err)
 
 	t.Run("Register counter", func(t *testing.T) {
-		metric := createMetric(t, "tenants_registered", "region", tenantMetricsRegion)
+		metric := createMetric(t, "tenants_registered", "region", operatortest.Region)
 
 		t.Run("increase", func(t *testing.T) {
 			t.Run("should happen for registered tenants", func(t *testing.T) {
@@ -53,7 +58,8 @@ func TestTenantMetrics(t *testing.T) {
 				totalBefore, err := getSafeMetric(ctx, scraper, metric)
 				assert.NoError(t, err)
 				req := validRegisterTenantReq()
-				req.Region = tenantMetricsRegion
+				req.Id = operatortest.TenantIDSuccess
+				req.Region = operatortest.Region
 
 				// When
 				_, err = subj.RegisterTenant(ctx, req)
@@ -63,6 +69,11 @@ func TestTenantMetrics(t *testing.T) {
 					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
 					assert.NoError(t, err)
 				}()
+
+				err = waitForTenantReconciliation(ctx, subj, req.GetId(), func(t *tenantgrpc.Tenant) bool {
+					return t.GetStatus() == tenantgrpc.Status_STATUS_ACTIVE
+				})
+				assert.NoError(t, err)
 
 				// Then
 				totalAfter, err := getSafeMetric(ctx, scraper, metric)
@@ -91,15 +102,16 @@ func TestTenantMetrics(t *testing.T) {
 	})
 
 	t.Run("Status gauge", func(t *testing.T) {
-		metricProvisioningTenants := createMetric(t, "tenants_count", "region", tenantMetricsRegion, "status", tenantgrpc.Status_STATUS_PROVISIONING.String())
+		metricActiveTenants := createMetric(t, "tenants_total", "region", operatortest.Region, "status", tenantgrpc.Status_STATUS_ACTIVE.String())
 
 		t.Run("increase", func(t *testing.T) {
 			t.Run("should happen for registered tenants", func(t *testing.T) {
 				// Given
-				activeBefore, err := getSafeMetric(ctx, scraper, metricProvisioningTenants)
+				activeBefore, err := getSafeMetric(ctx, scraper, metricActiveTenants)
 				assert.NoError(t, err)
 				req := validRegisterTenantReq()
-				req.Region = tenantMetricsRegion
+				req.Id = operatortest.TenantIDSuccess
+				req.Region = operatortest.Region
 
 				// When
 				_, err = subj.RegisterTenant(ctx, req)
@@ -110,14 +122,18 @@ func TestTenantMetrics(t *testing.T) {
 					assert.NoError(t, err)
 				}()
 
-				// Then
+				err = waitForTenantReconciliation(ctx, subj, req.GetId(), func(t *tenantgrpc.Tenant) bool {
+					return t.GetStatus() == tenantgrpc.Status_STATUS_ACTIVE
+				})
 				assert.NoError(t, err)
-				assertCounterInc(t, scraper, ctx, metricProvisioningTenants, activeBefore)
+
+				// Then
+				assertCounterInc(t, scraper, ctx, metricActiveTenants, activeBefore)
 			})
 
 			t.Run("should not happen if error occurs", func(t *testing.T) {
 				// Given
-				activeBefore, err := getSafeMetric(ctx, scraper, metricProvisioningTenants)
+				activeBefore, err := getSafeMetric(ctx, scraper, metricActiveTenants)
 				assert.NoError(t, err)
 				req := validRegisterTenantReq()
 				req.OwnerId = ""
@@ -128,13 +144,13 @@ func TestTenantMetrics(t *testing.T) {
 				assert.Error(t, err)
 
 				// Then
-				assertCounterEqual(t, scraper, ctx, metricProvisioningTenants, activeBefore)
+				assertCounterEqual(t, scraper, ctx, metricActiveTenants, activeBefore)
 			})
 		})
 
 		t.Run("update", func(t *testing.T) {
-			metricActiveTenants := createMetric(t, "tenants_count", "region", tenantMetricsRegion, "status", tenantgrpc.Status_STATUS_ACTIVE.String())
-			metricBlockingTenants := createMetric(t, "tenants_count", "region", tenantMetricsRegion, "status", tenantgrpc.Status_STATUS_BLOCKING.String())
+			metricActiveTenants := createMetric(t, "tenants_total", "region", tenantMetricsRegion, "status", tenantgrpc.Status_STATUS_ACTIVE.String())
+			metricBlockingTenants := createMetric(t, "tenants_total", "region", tenantMetricsRegion, "status", tenantgrpc.Status_STATUS_BLOCKING.String())
 
 			t.Run("should happen if status changes", func(t *testing.T) {
 				// Given
@@ -188,6 +204,78 @@ func TestTenantMetrics(t *testing.T) {
 				// Then
 				assertCounterEqual(t, scraper, ctx, metricActiveTenants, activeBefore)
 				assertCounterEqual(t, scraper, ctx, metricBlockingTenants, blockingBefore)
+			})
+		})
+	})
+
+	t.Run("Terminate counter", func(t *testing.T) {
+		metric := createMetric(t, "tenants_terminated", "region", operatortest.Region)
+
+		t.Run("increase", func(t *testing.T) {
+			t.Run("should happen for terminated tenants", func(t *testing.T) {
+				// Given — clean up any leftover state from a previous run
+				_ = deleteTenantFromDB(ctx, db, &model.Tenant{ID: operatortest.TenantIDSuccess})
+
+				req := validRegisterTenantReq()
+				req.Id = operatortest.TenantIDSuccess
+				req.Region = operatortest.Region
+				_, err := subj.RegisterTenant(ctx, req)
+				assert.NoError(t, err)
+
+				defer func() {
+					err = deleteTenantFromDB(ctx, db, &model.Tenant{ID: req.GetId()})
+					assert.NoError(t, err)
+				}()
+
+				err = waitForTenantReconciliation(ctx, subj, req.GetId(), func(t *tenantgrpc.Tenant) bool {
+					return t.GetStatus() == tenantgrpc.Status_STATUS_ACTIVE
+				})
+				assert.NoError(t, err)
+
+				// Block tenant first (ACTIVE → BLOCKING → BLOCKED is required before TERMINATING)
+				_, err = subj.BlockTenant(ctx, &tenantgrpc.BlockTenantRequest{Id: req.GetId()})
+				assert.NoError(t, err)
+
+				err = waitForTenantReconciliation(ctx, subj, req.GetId(), func(t *tenantgrpc.Tenant) bool {
+					return t.GetStatus() == tenantgrpc.Status_STATUS_BLOCKED
+				})
+				assert.NoError(t, err)
+
+				totalBefore, err := getSafeMetric(ctx, scraper, metric)
+				assert.NoError(t, err)
+
+				// When
+				_, err = subj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
+					Id: req.GetId(),
+				})
+				assert.NoError(t, err)
+
+				err = waitForTenantReconciliation(ctx, subj, req.GetId(), func(t *tenantgrpc.Tenant) bool {
+					return t.GetStatus() == tenantgrpc.Status_STATUS_TERMINATED
+				})
+				assert.NoError(t, err)
+
+				// Then
+				totalAfter, err := getSafeMetric(ctx, scraper, metric)
+				assert.NoError(t, err)
+				assert.Equal(t, totalBefore+1, totalAfter)
+			})
+
+			t.Run("should not happen if error occurs", func(t *testing.T) {
+				// Given
+				totalBefore, err := getSafeMetric(ctx, scraper, metric)
+				assert.NoError(t, err)
+
+				// When
+				_, err = subj.TerminateTenant(ctx, &tenantgrpc.TerminateTenantRequest{
+					Id: "",
+				})
+				assert.Error(t, err)
+
+				// Then
+				totalAfter, err := getSafeMetric(ctx, scraper, metric)
+				assert.NoError(t, err)
+				assert.Equal(t, totalBefore, totalAfter)
 			})
 		})
 	})
@@ -299,13 +387,13 @@ func TestSystemMetrics(t *testing.T) {
 		// Given
 		metricLinked := createMetric(
 			t,
-			"systems_count",
+			"systems_total",
 			service.AttrTenantLinked, "true",
 		)
 
 		metricUnlinked := createMetric(
 			t,
-			"systems_count",
+			"systems_total",
 			service.AttrTenantLinked, "false",
 		)
 
