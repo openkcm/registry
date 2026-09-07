@@ -5,7 +5,7 @@ go 1.26.5
 tool github.com/grpc-ecosystem/grpc-health-probe
 
 require (
-	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260709200747-435963d16310.1
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
 	buf.build/go/protovalidate v1.3.0
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/gofrs/uuid/v5 v5.5.1
