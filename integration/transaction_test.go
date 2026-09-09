@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -83,8 +83,7 @@ func TestExecuteTransactionError(t *testing.T) {
 		assert.Error(t, err)
 
 		// given
-		newTenantIDUUID, err := uuid.NewV4()
-		require.NoError(t, err)
+		newTenantIDUUID := uuid.New()
 		newTenantID := newTenantIDUUID.String()
 
 		// when
@@ -145,8 +144,7 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 		wg := sync.WaitGroup{}
 		wg.Add(2)
 
-		newTenantIDUUID, err := uuid.NewV4()
-		require.NoError(t, err)
+		newTenantIDUUID := uuid.New()
 		newTenantID := newTenantIDUUID.String()
 		go func() {
 			assert.Equal(t, "1st transaction start", <-transactor1)
@@ -215,8 +213,7 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 		wg.Add(2)
 
 		// when
-		newTenantID1UUID, err := uuid.NewV4()
-		require.NoError(t, err)
+		newTenantID1UUID := uuid.New()
 		newTenantID1 := newTenantID1UUID.String()
 		go func() {
 			assert.Equal(t, "1st transaction start", <-transactor1)
@@ -243,8 +240,7 @@ func TestExecuteTransactionRaceConditions(t *testing.T) {
 			assert.NoError(t, err)
 		}()
 
-		newTenantID2UUID, err := uuid.NewV4()
-		require.NoError(t, err)
+		newTenantID2UUID := uuid.New()
 		newTenantID2 := newTenantID2UUID.String()
 		go func() {
 			assert.Equal(t, "2nd transaction start", <-transactor2)
@@ -325,8 +321,7 @@ func TestExecuteTransactionWithoutRaceConditions(t *testing.T) {
 		wg.Add(2)
 
 		// when
-		newTenantID1UUID, err := uuid.NewV4()
-		require.NoError(t, err)
+		newTenantID1UUID := uuid.New()
 		newTenantID1 := newTenantID1UUID.String()
 		go func() {
 			assert.Equal(t, "1st transaction start", <-transactor1)
@@ -353,8 +348,7 @@ func TestExecuteTransactionWithoutRaceConditions(t *testing.T) {
 			transactor1 <- "1st transaction finish"
 		}()
 
-		newTenantID2UUID, err := uuid.NewV4()
-		require.NoError(t, err)
+		newTenantID2UUID := uuid.New()
 		newTenantID2 := newTenantID2UUID.String()
 		go func() {
 			assert.Equal(t, "2nd transaction start", <-transactor2)

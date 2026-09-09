@@ -7,8 +7,8 @@ import (
 	"sort"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -588,8 +588,7 @@ func TestTenantValidation(t *testing.T) {
 			})
 			t.Run("tenant to update is not present in the database", func(t *testing.T) {
 				// when
-				idUUID, err := uuid.NewV4()
-				require.NoError(t, err)
+				idUUID := uuid.New()
 				id := idUUID.String()
 				res, err := tSubj.SetTenantLabels(ctx, &tenantgrpc.SetTenantLabelsRequest{
 					Id: id,
@@ -705,8 +704,7 @@ func TestTenantValidation(t *testing.T) {
 			})
 			t.Run("tenant to update is not present in the database", func(t *testing.T) {
 				// when
-				idUUID, err := uuid.NewV4()
-				require.NoError(t, err)
+				idUUID := uuid.New()
 				id := idUUID.String()
 				res, err := tSubj.RemoveTenantLabels(ctx, &tenantgrpc.RemoveTenantLabelsRequest{
 					Id:        id,

@@ -3,8 +3,7 @@ package model
 import (
 	"errors"
 	"time"
-
-	"github.com/gofrs/uuid/v5"
+	"uuid"
 
 	"github.com/openkcm/registry/internal/repository"
 	"github.com/openkcm/registry/internal/validation"
