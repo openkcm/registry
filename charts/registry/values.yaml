@@ -311,7 +311,7 @@ config:
   status:
     enabled: true
     address: :8888
-    profiling: true
+    profiling: false
 
   logger:
     level: debug # one of: trace, debug, info, warn, error
