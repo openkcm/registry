@@ -3,8 +3,8 @@ package repository_test
 import (
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openkcm/registry/internal/repository"
@@ -74,7 +74,7 @@ func TestPaginator(t *testing.T) {
 	t.Run("should succeed with valid token", func(t *testing.T) {
 		// given
 		lastKey := repository.CompositeKey{
-			repository.IDField:         uuid.Must(uuid.NewV4()).String(),
+			repository.IDField:         uuid.New().String(),
 			repository.RegionField:     "region",
 			repository.ExternalIDField: "external-id",
 		}

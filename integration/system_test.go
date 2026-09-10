@@ -5,8 +5,8 @@ package integration_test
 import (
 	"context"
 	"testing"
+	"uuid"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -310,7 +310,7 @@ func TestSystemService(t *testing.T) { //nolint:gocognit,cyclop // table-driven 
 			t.Run("system cannot be found", func(t *testing.T) {
 				// when
 				res, err := sSubj.DeleteSystem(ctx, &systemgrpc.DeleteSystemRequest{
-					ExternalId: uuid.Must(uuid.NewV4()).String(),
+					ExternalId: uuid.New().String(),
 					Type:       allowedSystemType,
 					Region:     allowedSystemRegion,
 				})
@@ -323,8 +323,7 @@ func TestSystemService(t *testing.T) { //nolint:gocognit,cyclop // table-driven 
 
 		t.Run("should not delete system when ", func(t *testing.T) {
 			t.Run("other regional systems exist", func(t *testing.T) {
-				externalIDUUID, err := uuid.NewV4()
-				require.NoError(t, err)
+				externalIDUUID := uuid.New()
 				externalID := externalIDUUID.String()
 				region := "region-system"
 				externalID, systemType, systemRegion := registerRegionalSystem(t, ctx, sSubj, "", false, allowedSystemType, nil, &externalID)
@@ -379,7 +378,7 @@ func TestSystemService(t *testing.T) { //nolint:gocognit,cyclop // table-driven 
 				// when
 				res, err := sSubj.UpdateSystemL1KeyClaim(ctx, &systemgrpc.UpdateSystemL1KeyClaimRequest{
 					Type:       allowedSystemType,
-					ExternalId: uuid.Must(uuid.NewV4()).String(),
+					ExternalId: uuid.New().String(),
 					Region:     allowedSystemRegion,
 					TenantId:   existingTenantID,
 					L1KeyClaim: true,
@@ -651,7 +650,7 @@ func TestSystemService(t *testing.T) { //nolint:gocognit,cyclop // table-driven 
 					{
 						name: "non-existent TenantID is provided",
 						request: &systemgrpc.ListSystemsRequest{
-							TenantId: uuid.Must(uuid.NewV4()).String(),
+							TenantId: uuid.New().String(),
 						},
 					},
 					{
@@ -788,7 +787,7 @@ func TestSystemService(t *testing.T) { //nolint:gocognit,cyclop // table-driven 
 			t.Run("system to update is not present in the database", func(t *testing.T) {
 				// when
 				res, err := sSubj.UpdateSystemStatus(ctx, &systemgrpc.UpdateSystemStatusRequest{
-					ExternalId: uuid.Must(uuid.NewV4()).String(),
+					ExternalId: uuid.New().String(),
 					Type:       allowedSystemType,
 					Region:     allowedSystemRegion,
 					Status:     typespb.Status_STATUS_AVAILABLE,

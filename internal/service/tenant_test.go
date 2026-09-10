@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -38,7 +38,7 @@ func newTenantTestValidation(t *testing.T) *validation.Validation {
 
 func linkedSystem() model.System {
 	const tenantID = "t-1"
-	id, _ := uuid.NewV4()
+	id := uuid.New()
 	tid := tenantID
 	return model.System{ID: id, ExternalID: "sys-1", Type: "application", TenantID: &tid}
 }

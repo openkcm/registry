@@ -2,8 +2,7 @@ package model
 
 import (
 	"time"
-
-	"github.com/gofrs/uuid/v5"
+	"uuid"
 
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	typespb "github.com/openkcm/api-sdk/proto/kms/api/cmk/types/v1"
