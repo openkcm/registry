@@ -6,13 +6,13 @@ tool github.com/grpc-ecosystem/grpc-health-probe
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
-	buf.build/go/protovalidate v1.3.0
+	buf.build/go/protovalidate v1.4.0
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.4
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/openkcm/api-sdk v0.19.3
 	github.com/openkcm/common-sdk v1.19.1
-	github.com/openkcm/orbital v0.6.1
+	github.com/openkcm/orbital v0.6.2
 	github.com/samber/oops v1.23.1
 	github.com/stretchr/testify v1.12.1
 	github.com/veqryn/slog-context v0.9.0
@@ -26,8 +26,9 @@ require (
 )
 
 require (
-	cel.dev/expr v0.25.2 // indirect
-	github.com/Azure/go-amqp v1.5.1 // indirect
+	cel.dev/cel-go v0.32.0 // indirect
+	cel.dev/expr v0.25.3 // indirect
+	github.com/Azure/go-amqp v1.7.0 // indirect
 	github.com/Dynatrace/OneAgent-SDK-for-Go v1.1.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/XSAM/otelsql v0.43.0 // indirect
@@ -41,7 +42,6 @@ require (
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
-	github.com/google/cel-go v0.30.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/grpc-ecosystem/grpc-health-probe v0.4.52 // indirect
@@ -90,12 +90,12 @@ require (
 	go.opentelemetry.io/otel/trace v1.46.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/exp v0.0.0-20250813145105-42675adae3e6 // indirect
+	golang.org/x/exp v0.0.0-20260820142414-ca536658362e // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260803160001-6ac0973c030d // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
 )
