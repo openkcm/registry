@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
@@ -64,6 +65,7 @@ func NewTenant(repo repository.Repository, orbital *Orbital, meters *Meters, val
 		tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String(),
 		tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String(),
 		tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String(),
+		tenantgrpc.ACTION_ACTION_UPDATE_TENANT_CONFIG.String(),
 	} {
 		orbital.RegisterJobHandler(jobType, t)
 	}
@@ -348,6 +350,89 @@ func (t *Tenant) GetTenant(ctx context.Context, in *tenantgrpc.GetTenantRequest)
 	}, nil
 }
 
+// GetTenantConfig retrieves the configuration overrides for a Tenant by its ID.
+func (t *Tenant) GetTenantConfig(ctx context.Context, in *tenantgrpc.GetTenantConfigRequest) (*tenantgrpc.GetTenantConfigResponse, error) {
+	slogctx.Debug(ctx, "GetTenantConfig called", "tenantId", in.GetId())
+
+	if err := t.validateIDNonEmpty(in.GetId()); err != nil {
+		return nil, err
+	}
+
+	tenant, err := getTenant(ctx, t.repo, in.GetId())
+	if err != nil {
+		return nil, err
+	}
+
+	return &tenantgrpc.GetTenantConfigResponse{Config: tenant.ConfigToProto()}, nil
+}
+
+// UpdateTenantConfig updates the configuration overrides for a Tenant.
+// Only paths listed in update_mask are applied; an empty mask is rejected.
+// To clear a field, include its path in the mask but leave it unset in config.
+func (t *Tenant) UpdateTenantConfig(ctx context.Context, in *tenantgrpc.UpdateTenantConfigRequest) (*tenantgrpc.UpdateTenantConfigResponse, error) {
+	slogctx.Debug(ctx, "UpdateTenantConfig called", "tenantId", in.GetId())
+
+	if err := t.validateIDNonEmpty(in.GetId()); err != nil {
+		return nil, err
+	}
+
+	if len(in.GetUpdateMask().GetPaths()) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "update_mask must not be empty")
+	}
+
+	for _, path := range in.GetUpdateMask().GetPaths() {
+		switch path {
+		case "system_limit":
+			cfg := in.GetConfig()
+			if cfg != nil && cfg.SystemLimit != nil && *cfg.SystemLimit <= 0 {
+				return nil, status.Error(codes.InvalidArgument, "system_limit must be greater than 0")
+			}
+		default:
+			return nil, status.Errorf(codes.InvalidArgument, "unknown field mask path: %s", path)
+		}
+	}
+
+	var result *tenantgrpc.TenantConfiguration
+	err := t.patchTenant(ctx, patchTenantOpts{
+		id:         in.GetId(),
+		validateFn: checkTenantActive,
+		updateFn: func(tenant *model.Tenant) {
+			applyConfigMask(tenant, in.GetConfig(), in.GetUpdateMask())
+			result = tenant.ConfigToProto()
+		},
+		jobFn: func(ctx context.Context, tenant *model.Tenant) error {
+			data, err := proto.Marshal(tenant.ToProto())
+			if err != nil {
+				slogctx.Error(ctx, "failed to encode tenant data", "error", err)
+				return ErrTenantEncoding
+			}
+			return t.orbital.PrepareJob(ctx, data, tenant.ID, tenantgrpc.ACTION_ACTION_UPDATE_TENANT_CONFIG.String())
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &tenantgrpc.UpdateTenantConfigResponse{Config: result}, nil
+}
+
+// applyConfigMask applies the fields listed in mask from cfg onto the tenant's Config.
+func applyConfigMask(tenant *model.Tenant, cfg *tenantgrpc.TenantConfiguration, mask *fieldmaskpb.FieldMask) {
+	if tenant.Config == nil {
+		tenant.Config = &model.TenantConfigModel{}
+	}
+	for _, path := range mask.GetPaths() {
+		switch path {
+		case "system_limit":
+			if cfg != nil {
+				tenant.Config.SystemLimit = cfg.SystemLimit
+			} else {
+				tenant.Config.SystemLimit = nil
+			}
+		}
+	}
+}
+
 // ConfirmJob checks if a job can be confirmed based on tenant existence and tenant status.
 func (t *Tenant) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConfirmerResult, error) {
 	tenant, err := getTenant(ctx, t.repo, job.ExternalID)
@@ -361,6 +446,8 @@ func (t *Tenant) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobCo
 
 	switch job.Type {
 	case tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String():
+		return orbital.CompleteJobConfirmer(), nil
+	case tenantgrpc.ACTION_ACTION_UPDATE_TENANT_CONFIG.String():
 		return orbital.CompleteJobConfirmer(), nil
 	case tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String(), tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String(), tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String():
 		status, err := jobTypeToStatus(job.Type)
@@ -438,6 +525,9 @@ func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 	case tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String():
 		tenantUpdateFn = newTenantUpdateFn(tenantgrpc.Status_STATUS_TERMINATED)
 		authUpdateFn = newAuthUpdateFn(authgrpc.AuthStatus_AUTH_STATUS_REMOVED)
+	case tenantgrpc.ACTION_ACTION_UPDATE_TENANT_CONFIG.String():
+		slogctx.Info(ctx, "tenant config update job completed", "tenantId", job.ExternalID)
+		return nil
 	default:
 		slogctx.Error(ctx, "unexpected job type in handleJobDone")
 		return nil
@@ -523,6 +613,9 @@ func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
 	case tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String():
 		tenantUpdateFn = newTenantUpdateFn(tenantgrpc.Status_STATUS_TERMINATION_ERROR)
 		authUpdateFn = newAuthUpdateFn(authgrpc.AuthStatus_AUTH_STATUS_REMOVING_ERROR)
+	case tenantgrpc.ACTION_ACTION_UPDATE_TENANT_CONFIG.String():
+		slogctx.Error(ctx, "tenant config update job aborted", "tenantId", job.ExternalID)
+		return nil
 	default:
 		slogctx.Error(ctx, "unexpected job type in handleJobAborted")
 		return nil
