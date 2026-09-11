@@ -10,6 +10,7 @@ import (
 var (
 	MapError         = mapError
 	DetachAllSystems = detachAllSystems
+	ApplyConfigMask  = applyConfigMask
 )
 
 // NewAuthForTest builds an Auth without touching orbital, so that unit tests

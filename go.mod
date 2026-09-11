@@ -10,7 +10,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.4
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/openkcm/api-sdk v0.19.3
+	github.com/openkcm/api-sdk v0.20.0
 	github.com/openkcm/common-sdk v1.19.1
 	github.com/openkcm/orbital v0.6.2
 	github.com/samber/oops v1.23.1
