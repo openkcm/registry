@@ -560,15 +560,18 @@ func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 		return nil
 	}
 
-	if job.Type == tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String() {
-		t.meters.handleTenantRegistration(ctx, tenant.GetRegion())
-	}
-
-	if job.Type == tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String() {
-		t.meters.handleTenantTermination(ctx, tenant.GetRegion())
-	}
+	t.recordJobDoneMetrics(ctx, job.Type, tenant.GetRegion())
 
 	return nil
+}
+
+func (t *Tenant) recordJobDoneMetrics(ctx context.Context, jobType, region string) {
+	if jobType == tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String() {
+		t.meters.handleTenantRegistration(ctx, region)
+	}
+	if jobType == tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String() {
+		t.meters.handleTenantTermination(ctx, region)
+	}
 }
 
 func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTenantUserGroupsRequest) (*tenantgrpc.SetTenantUserGroupsResponse, error) {
@@ -620,7 +623,10 @@ func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
 		tenantUpdateFn = newTenantUpdateFn(tenantgrpc.Status_STATUS_TERMINATION_ERROR)
 		authUpdateFn = newAuthUpdateFn(authgrpc.AuthStatus_AUTH_STATUS_REMOVING_ERROR)
 	case tenantgrpc.ACTION_ACTION_UPDATE_TENANT_CONFIG.String():
-		slogctx.Error(ctx, "tenant config update job aborted", "tenantId", job.ExternalID)
+		slogctx.Error(ctx, "tenant config update job aborted — registry config may differ from CMK; verify via GetTenantConfig and retry if needed",
+			"tenantId", job.ExternalID,
+			"jobId", job.ID.String(),
+		)
 		return nil
 	default:
 		slogctx.Error(ctx, "unexpected job type in handleJobAborted")
