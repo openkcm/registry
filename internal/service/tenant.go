@@ -380,16 +380,8 @@ func (t *Tenant) UpdateTenantConfig(ctx context.Context, in *tenantgrpc.UpdateTe
 		return nil, status.Error(codes.InvalidArgument, "update_mask must not be empty")
 	}
 
-	for _, path := range in.GetUpdateMask().GetPaths() {
-		switch path {
-		case "system_limit":
-			cfg := in.GetConfig()
-			if cfg != nil && cfg.SystemLimit != nil && *cfg.SystemLimit <= 0 {
-				return nil, status.Error(codes.InvalidArgument, "system_limit must be greater than 0")
-			}
-		default:
-			return nil, status.Errorf(codes.InvalidArgument, "unknown field mask path: %s", path)
-		}
+	if err := validateConfigMaskPaths(in.GetConfig(), in.GetUpdateMask().GetPaths()); err != nil {
+		return nil, err
 	}
 
 	var result *tenantgrpc.TenantConfiguration
@@ -416,14 +408,26 @@ func (t *Tenant) UpdateTenantConfig(ctx context.Context, in *tenantgrpc.UpdateTe
 	return &tenantgrpc.UpdateTenantConfigResponse{Config: result}, nil
 }
 
+// validateConfigMaskPaths checks each path in the update mask and validates any supplied values.
+func validateConfigMaskPaths(cfg *tenantgrpc.TenantConfiguration, paths []string) error {
+	for _, path := range paths {
+		if path != "system_limit" {
+			return status.Errorf(codes.InvalidArgument, "unknown field mask path: %s", path)
+		}
+		if cfg != nil && cfg.SystemLimit != nil && *cfg.SystemLimit <= 0 {
+			return status.Error(codes.InvalidArgument, "system_limit must be greater than 0")
+		}
+	}
+	return nil
+}
+
 // applyConfigMask applies the fields listed in mask from cfg onto the tenant's Config.
 func applyConfigMask(tenant *model.Tenant, cfg *tenantgrpc.TenantConfiguration, mask *fieldmaskpb.FieldMask) {
 	if tenant.Config == nil {
 		tenant.Config = &model.TenantConfigModel{}
 	}
 	for _, path := range mask.GetPaths() {
-		switch path {
-		case "system_limit":
+		if path == "system_limit" {
 			if cfg != nil {
 				tenant.Config.SystemLimit = cfg.SystemLimit
 			} else {
@@ -511,6 +515,11 @@ func (t *Tenant) HandleJobCanceled(ctx context.Context, job orbital.Job) error {
 
 // HandleJobDone applies the changes to the tenant based on the job type when the job is done.
 func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
+	if job.Type == tenantgrpc.ACTION_ACTION_UPDATE_TENANT_CONFIG.String() {
+		slogctx.Info(ctx, "tenant config update job completed", "tenantId", job.ExternalID)
+		return nil
+	}
+
 	var tenantUpdateFn tenantUpdateFn
 	var authUpdateFn authUpdateFunc
 	switch job.Type {
@@ -525,9 +534,6 @@ func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 	case tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String():
 		tenantUpdateFn = newTenantUpdateFn(tenantgrpc.Status_STATUS_TERMINATED)
 		authUpdateFn = newAuthUpdateFn(authgrpc.AuthStatus_AUTH_STATUS_REMOVED)
-	case tenantgrpc.ACTION_ACTION_UPDATE_TENANT_CONFIG.String():
-		slogctx.Info(ctx, "tenant config update job completed", "tenantId", job.ExternalID)
-		return nil
 	default:
 		slogctx.Error(ctx, "unexpected job type in handleJobDone")
 		return nil

@@ -19,7 +19,7 @@ const (
 
 // TenantConfigModel mirrors TenantConfiguration proto; pointer fields = optional overrides.
 type TenantConfigModel struct {
-	SystemLimit *int32 `json:"system_limit,omitempty"`
+	SystemLimit *int32 `json:"systemLimit,omitempty"`
 }
 
 // Tenant represents the customer-managed key (CMK) tenant entity.
