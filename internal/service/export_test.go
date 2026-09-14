@@ -10,6 +10,7 @@ import (
 var (
 	MapError         = mapError
 	DetachAllSystems = detachAllSystems
+	ApplyConfigMask  = applyConfigMask
 )
 
 // NewAuthForTest builds an Auth without touching orbital, so that unit tests
@@ -27,6 +28,16 @@ func NewAuthForTest(repo repository.Repository, orbital *Orbital, validation *va
 func NewTenantForTest(repo repository.Repository, validation *validation.Validation) *Tenant {
 	return &Tenant{
 		repo:       repo,
+		validation: validation,
+	}
+}
+
+// NewTenantWithOrbitalForTest builds a Tenant with a custom JobPreparer so that
+// tests can exercise code paths that enqueue orbital jobs without a real orbital manager.
+func NewTenantWithOrbitalForTest(repo repository.Repository, orbital JobPreparer, validation *validation.Validation) *Tenant {
+	return &Tenant{
+		repo:       repo,
+		orbital:    orbital,
 		validation: validation,
 	}
 }
