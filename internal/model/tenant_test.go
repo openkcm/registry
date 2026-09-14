@@ -150,6 +150,29 @@ func TestTenantValidation(t *testing.T) {
 	}
 }
 
+func TestConfigToProto(t *testing.T) {
+	t.Run("returns empty proto when Config is nil", func(t *testing.T) {
+		tenant := model.Tenant{}
+		cfg := tenant.ConfigToProto()
+		assert.NotNil(t, cfg)
+		assert.Nil(t, cfg.SystemLimit)
+	})
+
+	t.Run("returns SystemLimit from Config", func(t *testing.T) {
+		limit := int32(10)
+		tenant := model.Tenant{Config: &model.TenantConfigModel{SystemLimit: &limit}}
+		cfg := tenant.ConfigToProto()
+		assert.NotNil(t, cfg.SystemLimit)
+		assert.Equal(t, limit, *cfg.SystemLimit)
+	})
+
+	t.Run("returns nil SystemLimit when Config has no SystemLimit set", func(t *testing.T) {
+		tenant := model.Tenant{Config: &model.TenantConfigModel{}}
+		cfg := tenant.ConfigToProto()
+		assert.Nil(t, cfg.SystemLimit)
+	})
+}
+
 func TestTenantToProto(t *testing.T) {
 	labelKey := "key1"
 	tenant := model.Tenant{

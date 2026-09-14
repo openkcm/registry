@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 
@@ -180,5 +181,144 @@ func TestDetachAllSystems(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, repo.patchedSystems)
 		assert.Equal(t, 0, repo.patchAllCallCount)
+	})
+}
+
+// --- TestApplyConfigMask -----------------------------------------------------
+
+func TestApplyConfigMask(t *testing.T) {
+	mask := func(paths ...string) *fieldmaskpb.FieldMask {
+		return &fieldmaskpb.FieldMask{Paths: paths}
+	}
+	ptr := func(v int32) *int32 { return &v }
+
+	t.Run("initialises Config and sets system_limit when Config is nil", func(t *testing.T) {
+		tenant := &model.Tenant{}
+		cfg := &tenantgrpc.TenantConfiguration{SystemLimit: ptr(5)}
+
+		service.ApplyConfigMask(tenant, cfg, mask("system_limit"))
+
+		require.NotNil(t, tenant.Config)
+		require.NotNil(t, tenant.Config.SystemLimit)
+		assert.Equal(t, int32(5), *tenant.Config.SystemLimit)
+	})
+
+	t.Run("overwrites existing system_limit", func(t *testing.T) {
+		old := int32(3)
+		tenant := &model.Tenant{Config: &model.TenantConfigModel{SystemLimit: &old}}
+		cfg := &tenantgrpc.TenantConfiguration{SystemLimit: ptr(99)}
+
+		service.ApplyConfigMask(tenant, cfg, mask("system_limit"))
+
+		require.NotNil(t, tenant.Config.SystemLimit)
+		assert.Equal(t, int32(99), *tenant.Config.SystemLimit)
+	})
+
+	t.Run("clears system_limit when cfg is nil", func(t *testing.T) {
+		limit := int32(7)
+		tenant := &model.Tenant{Config: &model.TenantConfigModel{SystemLimit: &limit}}
+
+		service.ApplyConfigMask(tenant, nil, mask("system_limit"))
+
+		require.NotNil(t, tenant.Config)
+		assert.Nil(t, tenant.Config.SystemLimit)
+	})
+
+	t.Run("clears system_limit when cfg has no SystemLimit set", func(t *testing.T) {
+		limit := int32(7)
+		tenant := &model.Tenant{Config: &model.TenantConfigModel{SystemLimit: &limit}}
+
+		service.ApplyConfigMask(tenant, &tenantgrpc.TenantConfiguration{}, mask("system_limit"))
+
+		require.NotNil(t, tenant.Config)
+		assert.Nil(t, tenant.Config.SystemLimit)
+	})
+
+	t.Run("unknown path is silently ignored", func(t *testing.T) {
+		tenant := &model.Tenant{}
+
+		service.ApplyConfigMask(tenant, &tenantgrpc.TenantConfiguration{SystemLimit: ptr(1)}, mask("unknown_field"))
+
+		// Config was initialised but no known field was written.
+		require.NotNil(t, tenant.Config)
+		assert.Nil(t, tenant.Config.SystemLimit)
+	})
+}
+
+// --- TestGetTenantConfig -----------------------------------------------------
+
+func TestGetTenantConfig(t *testing.T) {
+	t.Run("returns InvalidArgument when tenant ID is empty", func(t *testing.T) {
+		subj := service.NewTenantForTest(nil, newTenantTestValidation(t))
+
+		resp, err := subj.GetTenantConfig(context.Background(), &tenantgrpc.GetTenantConfigRequest{Id: ""})
+
+		assert.Nil(t, resp)
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+}
+
+// --- TestUpdateTenantConfig --------------------------------------------------
+
+func TestUpdateTenantConfig(t *testing.T) {
+	subj := func() *service.Tenant { return service.NewTenantForTest(nil, newTenantTestValidation(t)) }
+
+	t.Run("returns InvalidArgument when tenant ID is empty", func(t *testing.T) {
+		resp, err := subj().UpdateTenantConfig(context.Background(), &tenantgrpc.UpdateTenantConfigRequest{
+			Id: "",
+		})
+
+		assert.Nil(t, resp)
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("returns InvalidArgument when update_mask is empty", func(t *testing.T) {
+		resp, err := subj().UpdateTenantConfig(context.Background(), &tenantgrpc.UpdateTenantConfigRequest{
+			Id:         "tenant-1",
+			UpdateMask: &fieldmaskpb.FieldMask{},
+		})
+
+		assert.Nil(t, resp)
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("returns InvalidArgument for unknown field mask path", func(t *testing.T) {
+		resp, err := subj().UpdateTenantConfig(context.Background(), &tenantgrpc.UpdateTenantConfigRequest{
+			Id:         "tenant-1",
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"nonexistent_field"}},
+		})
+
+		assert.Nil(t, resp)
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("returns InvalidArgument when system_limit is zero", func(t *testing.T) {
+		zero := int32(0)
+		resp, err := subj().UpdateTenantConfig(context.Background(), &tenantgrpc.UpdateTenantConfigRequest{
+			Id:         "tenant-1",
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"system_limit"}},
+			Config:     &tenantgrpc.TenantConfiguration{SystemLimit: &zero},
+		})
+
+		assert.Nil(t, resp)
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("returns InvalidArgument when system_limit is negative", func(t *testing.T) {
+		neg := int32(-1)
+		resp, err := subj().UpdateTenantConfig(context.Background(), &tenantgrpc.UpdateTenantConfigRequest{
+			Id:         "tenant-1",
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"system_limit"}},
+			Config:     &tenantgrpc.TenantConfiguration{SystemLimit: &neg},
+		})
+
+		assert.Nil(t, resp)
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 }
