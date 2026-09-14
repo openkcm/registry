@@ -565,15 +565,6 @@ func (t *Tenant) HandleJobDone(ctx context.Context, job orbital.Job) error {
 	return nil
 }
 
-func (t *Tenant) recordJobDoneMetrics(ctx context.Context, jobType, region string) {
-	if jobType == tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String() {
-		t.meters.handleTenantRegistration(ctx, region)
-	}
-	if jobType == tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String() {
-		t.meters.handleTenantTermination(ctx, region)
-	}
-}
-
 func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTenantUserGroupsRequest) (*tenantgrpc.SetTenantUserGroupsResponse, error) {
 	slogctx.Debug(ctx, "SetTenantUserGroups called", "tenantId", in.GetId())
 
@@ -604,6 +595,15 @@ func (t *Tenant) SetTenantUserGroups(ctx context.Context, in *tenantgrpc.SetTena
 	}
 
 	return &tenantgrpc.SetTenantUserGroupsResponse{Success: true}, nil
+}
+
+func (t *Tenant) recordJobDoneMetrics(ctx context.Context, jobType, region string) {
+	if jobType == tenantgrpc.ACTION_ACTION_PROVISION_TENANT.String() {
+		t.meters.handleTenantRegistration(ctx, region)
+	}
+	if jobType == tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String() {
+		t.meters.handleTenantTermination(ctx, region)
+	}
 }
 
 func (t *Tenant) handleJobAborted(ctx context.Context, job orbital.Job) error {
