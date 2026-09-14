@@ -65,6 +65,7 @@ func (noopJobPreparer) PrepareJob(_ context.Context, _ []byte, _, _ string) erro
 // fakeTenantRepo supports Find / Transaction / Patch for tenant unit tests.
 type fakeTenantRepo struct {
 	service.NoopRepo
+
 	tenant   *model.Tenant
 	findErr  error
 	patchErr error
@@ -310,7 +311,7 @@ func TestGetTenantConfig(t *testing.T) {
 	})
 
 	t.Run("returns Internal when repo.Find fails", func(t *testing.T) {
-		repo := &fakeTenantRepo{findErr: errors.New("db down")}
+		repo := &fakeTenantRepo{findErr: errListFailed}
 		subj := service.NewTenantForTest(repo, newTenantTestValidation(t))
 
 		resp, err := subj.GetTenantConfig(context.Background(), &tenantgrpc.GetTenantConfigRequest{Id: "t-1"})
