@@ -44,6 +44,55 @@ func linkedSystem() model.System {
 	return model.System{ID: id, ExternalID: "sys-1", Type: "application", TenantID: &tid}
 }
 
+// activeTenant returns a Tenant with STATUS_ACTIVE and all fields required by validation.
+func activeTenant(id string) *model.Tenant {
+	return &model.Tenant{
+		ID:        id,
+		Name:      "test-tenant",
+		Region:    "eu-west-1",
+		OwnerID:   "owner-1",
+		OwnerType: "account",
+		Role:      tenantgrpc.Role_ROLE_LIVE.String(),
+		Status:    model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()),
+	}
+}
+
+// noopJobPreparer satisfies service.JobPreparer and always returns nil.
+type noopJobPreparer struct{}
+
+func (noopJobPreparer) PrepareJob(_ context.Context, _ []byte, _, _ string) error { return nil }
+
+// fakeTenantRepo supports Find / Transaction / Patch for tenant unit tests.
+type fakeTenantRepo struct {
+	service.NoopRepo
+	tenant   *model.Tenant
+	findErr  error
+	patchErr error
+}
+
+func (f *fakeTenantRepo) Find(_ context.Context, resource repository.Resource) (bool, error) {
+	if f.findErr != nil {
+		return false, f.findErr
+	}
+	t, ok := resource.(*model.Tenant)
+	if !ok || f.tenant == nil {
+		return false, nil
+	}
+	*t = *f.tenant
+	return true, nil
+}
+
+func (f *fakeTenantRepo) Transaction(_ context.Context, fn repository.TransactionFunc) error {
+	return fn(context.Background(), f)
+}
+
+func (f *fakeTenantRepo) Patch(_ context.Context, _ repository.Resource) (bool, error) {
+	if f.patchErr != nil {
+		return false, f.patchErr
+	}
+	return true, nil
+}
+
 // --- fake repo for detachAllSystems ------------------------------------------
 
 type fakeDetachRepo struct {
@@ -248,6 +297,8 @@ func TestApplyConfigMask(t *testing.T) {
 // --- TestGetTenantConfig -----------------------------------------------------
 
 func TestGetTenantConfig(t *testing.T) {
+	ptr := func(v int32) *int32 { return &v }
+
 	t.Run("returns InvalidArgument when tenant ID is empty", func(t *testing.T) {
 		subj := service.NewTenantForTest(nil, newTenantTestValidation(t))
 
@@ -257,11 +308,62 @@ func TestGetTenantConfig(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
+
+	t.Run("returns Internal when repo.Find fails", func(t *testing.T) {
+		repo := &fakeTenantRepo{findErr: errors.New("db down")}
+		subj := service.NewTenantForTest(repo, newTenantTestValidation(t))
+
+		resp, err := subj.GetTenantConfig(context.Background(), &tenantgrpc.GetTenantConfigRequest{Id: "t-1"})
+
+		assert.Nil(t, resp)
+		require.Error(t, err)
+		assert.Equal(t, codes.Internal, status.Code(err))
+	})
+
+	t.Run("returns NotFound when tenant does not exist", func(t *testing.T) {
+		repo := &fakeTenantRepo{}
+		subj := service.NewTenantForTest(repo, newTenantTestValidation(t))
+
+		resp, err := subj.GetTenantConfig(context.Background(), &tenantgrpc.GetTenantConfigRequest{Id: "t-1"})
+
+		assert.Nil(t, resp)
+		require.Error(t, err)
+		assert.Equal(t, codes.NotFound, status.Code(err))
+	})
+
+	t.Run("returns empty config when tenant has no overrides", func(t *testing.T) {
+		repo := &fakeTenantRepo{tenant: &model.Tenant{ID: "t-1"}}
+		subj := service.NewTenantForTest(repo, newTenantTestValidation(t))
+
+		resp, err := subj.GetTenantConfig(context.Background(), &tenantgrpc.GetTenantConfigRequest{Id: "t-1"})
+
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		assert.Nil(t, resp.Config.SystemLimit)
+	})
+
+	t.Run("returns system_limit when tenant has a config override", func(t *testing.T) {
+		repo := &fakeTenantRepo{
+			tenant: &model.Tenant{
+				ID:     "t-1",
+				Config: &model.TenantConfigModel{SystemLimit: ptr(42)},
+			},
+		}
+		subj := service.NewTenantForTest(repo, newTenantTestValidation(t))
+
+		resp, err := subj.GetTenantConfig(context.Background(), &tenantgrpc.GetTenantConfigRequest{Id: "t-1"})
+
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.NotNil(t, resp.Config.SystemLimit)
+		assert.Equal(t, int32(42), *resp.Config.SystemLimit)
+	})
 }
 
 // --- TestUpdateTenantConfig --------------------------------------------------
 
 func TestUpdateTenantConfig(t *testing.T) {
+	ptr := func(v int32) *int32 { return &v }
 	subj := func() *service.Tenant { return service.NewTenantForTest(nil, newTenantTestValidation(t)) }
 
 	t.Run("returns InvalidArgument when tenant ID is empty", func(t *testing.T) {
@@ -320,5 +422,74 @@ func TestUpdateTenantConfig(t *testing.T) {
 		assert.Nil(t, resp)
 		require.Error(t, err)
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("returns NotFound when tenant does not exist", func(t *testing.T) {
+		repo := &fakeTenantRepo{}
+		s := service.NewTenantForTest(repo, newTenantTestValidation(t))
+
+		resp, err := s.UpdateTenantConfig(context.Background(), &tenantgrpc.UpdateTenantConfigRequest{
+			Id:         "t-1",
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"system_limit"}},
+			Config:     &tenantgrpc.TenantConfiguration{SystemLimit: ptr(10)},
+		})
+
+		assert.Nil(t, resp)
+		require.Error(t, err)
+		assert.Equal(t, codes.NotFound, status.Code(err))
+	})
+
+	t.Run("returns FailedPrecondition when tenant is not active", func(t *testing.T) {
+		repo := &fakeTenantRepo{
+			tenant: &model.Tenant{
+				ID:     "t-1",
+				Status: model.TenantStatus(tenantgrpc.Status_STATUS_BLOCKED.String()),
+			},
+		}
+		s := service.NewTenantForTest(repo, newTenantTestValidation(t))
+
+		resp, err := s.UpdateTenantConfig(context.Background(), &tenantgrpc.UpdateTenantConfigRequest{
+			Id:         "t-1",
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"system_limit"}},
+			Config:     &tenantgrpc.TenantConfiguration{SystemLimit: ptr(10)},
+		})
+
+		assert.Nil(t, resp)
+		require.Error(t, err)
+		assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+	})
+
+	t.Run("applies system_limit and returns updated config", func(t *testing.T) {
+		repo := &fakeTenantRepo{tenant: activeTenant("t-1")}
+		s := service.NewTenantWithOrbitalForTest(repo, noopJobPreparer{}, newTenantTestValidation(t))
+
+		resp, err := s.UpdateTenantConfig(context.Background(), &tenantgrpc.UpdateTenantConfigRequest{
+			Id:         "t-1",
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"system_limit"}},
+			Config:     &tenantgrpc.TenantConfiguration{SystemLimit: ptr(50)},
+		})
+
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.NotNil(t, resp.Config.SystemLimit)
+		assert.Equal(t, int32(50), *resp.Config.SystemLimit)
+	})
+
+	t.Run("clears system_limit when mask includes path but config field is unset", func(t *testing.T) {
+		existing := int32(99)
+		base := activeTenant("t-1")
+		base.Config = &model.TenantConfigModel{SystemLimit: &existing}
+		repo := &fakeTenantRepo{tenant: base}
+		s := service.NewTenantWithOrbitalForTest(repo, noopJobPreparer{}, newTenantTestValidation(t))
+
+		resp, err := s.UpdateTenantConfig(context.Background(), &tenantgrpc.UpdateTenantConfigRequest{
+			Id:         "t-1",
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"system_limit"}},
+			Config:     &tenantgrpc.TenantConfiguration{},
+		})
+
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		assert.Nil(t, resp.Config.SystemLimit)
 	})
 }

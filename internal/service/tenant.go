@@ -29,7 +29,7 @@ type Tenant struct {
 	tenantgrpc.UnimplementedServiceServer
 
 	repo       repository.Repository
-	orbital    *Orbital
+	orbital    JobPreparer
 	meters     *Meters
 	validation *validation.Validation
 }

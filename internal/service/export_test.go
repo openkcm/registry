@@ -32,6 +32,16 @@ func NewTenantForTest(repo repository.Repository, validation *validation.Validat
 	}
 }
 
+// NewTenantWithOrbitalForTest builds a Tenant with a custom JobPreparer so that
+// tests can exercise code paths that enqueue orbital jobs without a real orbital manager.
+func NewTenantWithOrbitalForTest(repo repository.Repository, orbital JobPreparer, validation *validation.Validation) *Tenant {
+	return &Tenant{
+		repo:       repo,
+		orbital:    orbital,
+		validation: validation,
+	}
+}
+
 // NoopRepo is a minimal repository.Repository that does nothing, for use in tests
 // that only exercise code paths which do not reach the repository.
 type NoopRepo struct{}

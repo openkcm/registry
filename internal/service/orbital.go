@@ -23,6 +23,12 @@ var (
 	ErrUnexpectedJobType   = errors.New("unexpected job type")
 )
 
+// JobPreparer is the minimal interface needed to enqueue an orbital job.
+// Wrapping *Orbital behind this interface lets callers (and tests) substitute a lightweight stub.
+type JobPreparer interface {
+	PrepareJob(ctx context.Context, data []byte, externalID, jobType string) error
+}
+
 type (
 	// Orbital manages jobs and their execution targets.
 	Orbital struct {
