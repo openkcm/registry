@@ -66,7 +66,7 @@ func startDB() (*gorm.DB, error) {
 		return nil, err
 	}
 
-	err = db.AutoMigrate(&model.Tenant{}, &model.System{}, &model.RegionalSystem{}, model.Auth{})
+	err = db.AutoMigrate(&model.Tenant{}, &model.System{}, &model.RegionalSystem{}, model.Auth{}, &model.TenantConfig{})
 	if err != nil {
 		return nil, err
 	}

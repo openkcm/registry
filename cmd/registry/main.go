@@ -25,6 +25,7 @@ import (
 	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
 	mappinggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/mapping/v1"
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
+	tenantconfiggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant_config/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
 	slogctx "github.com/veqryn/slog-context"
 
@@ -71,6 +72,7 @@ func main() {
 	systemSrv := service.NewSystem(repository, meters, validation)
 	mappingSrv := service.NewMapping(repository, meters, validation)
 	authSrv := service.NewAuth(repository, orbital, validation)
+	tenantConfigSrv := service.NewTenantConfig(repository, orbital)
 
 	grpcServer, err := setupGRPCServer(ctx, cfg)
 	handleErr("initializing gRPC server", err)
@@ -79,6 +81,7 @@ func main() {
 	mappinggrpc.RegisterServiceServer(grpcServer, mappingSrv)
 	systemgrpc.RegisterServiceServer(grpcServer, systemSrv)
 	authgrpc.RegisterServiceServer(grpcServer, authSrv)
+	tenantconfiggrpc.RegisterServiceServer(grpcServer, tenantConfigSrv)
 
 	err = orbital.Start(ctx)
 	handleErr("starting orbital", err)

@@ -10,9 +10,8 @@ import (
 )
 
 var (
-	MapError         = mapError
-	DetachAllSystems = detachAllSystems
-	ApplyConfigMask  = applyConfigMask
+	MapError          = mapError
+	DetachAllSystems  = detachAllSystems
 )
 
 // NewAuthForTest builds an Auth without registering orbital job handlers, so that unit tests
@@ -47,6 +46,21 @@ func NewTenantWithOrbitalForTest(repo repository.Repository, orbital JobPreparer
 		repo:       repo,
 		orbital:    orbital,
 		validation: validation,
+	}
+}
+
+// NewTenantConfigForTest builds a TenantConfig service without registering orbital job handlers.
+func NewTenantConfigForTest(repo repository.Repository) *TenantConfig {
+	return &TenantConfig{
+		repo: repo,
+	}
+}
+
+// NewTenantConfigWithOrbitalForTest builds a TenantConfig service with a custom JobPreparer.
+func NewTenantConfigWithOrbitalForTest(repo repository.Repository, orbital JobPreparer) *TenantConfig {
+	return &TenantConfig{
+		repo:    repo,
+		orbital: orbital,
 	}
 }
 

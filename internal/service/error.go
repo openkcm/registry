@@ -79,6 +79,13 @@ var (
 )
 
 var (
+	ErrTenantConfigSelect   = status.Error(codes.Internal, "could not select tenant config")
+	ErrTenantConfigUpdate   = status.Error(codes.Internal, "could not update tenant config")
+	ErrTenantConfigNotFound = status.Error(codes.NotFound, "tenant config not found")
+	ErrTenantConfigEncoding = status.Error(codes.Internal, "failed to encode tenant config data")
+)
+
+var (
 	ErrTranCtxTimeout          = status.Error(codes.Aborted, "transaction was aborted due to timeout, please try again")
 	ErrPanic                   = status.Error(codes.Internal, "an unexpected error occurred on the server, please try again")
 	ErrKeyClaimAlreadyActive   = status.Error(codes.FailedPrecondition, "key claim is already active")

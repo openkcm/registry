@@ -10,17 +10,13 @@ import (
 	"github.com/openkcm/registry/internal/validation"
 )
 
+
 const (
 	TenantIDValidationID         = "Tenant.ID"
 	TenantOwnerTypeValidationID  = "Tenant.OwnerType"
 	TenantUserGroupsValidationID = "Tenant.UserGroups"
 	TenantLabelsValidationID     = "Tenant.Labels"
 )
-
-// TenantConfigModel mirrors TenantConfiguration proto; pointer fields = optional overrides.
-type TenantConfigModel struct {
-	SystemLimit *int32 `json:"systemLimit,omitempty"`
-}
 
 // Tenant represents the customer-managed key (CMK) tenant entity.
 type Tenant struct {
@@ -34,7 +30,6 @@ type Tenant struct {
 	Role            string             `gorm:"column:role" validationID:"Tenant.Role"`
 	Labels          map[string]string  `gorm:"column:labels;type:jsonb;serializer:json" validationID:"Tenant.Labels"`
 	UserGroups      []string           `gorm:"column:user_groups;serializer:json" validationID:"Tenant.UserGroups"`
-	Config          *TenantConfigModel `gorm:"column:config;type:jsonb;serializer:json"`
 	UpdatedAt       time.Time          `gorm:"column:updated_at;autoUpdateTime"`
 	CreatedAt       time.Time          `gorm:"column:created_at;autoCreateTime"`
 }
@@ -151,14 +146,4 @@ func (t *Tenant) ToProto() *tenantgrpc.Tenant {
 func (t *Tenant) SetStatus(status TenantStatus) {
 	t.Status = status
 	t.StatusUpdatedAt = time.Now()
-}
-
-// ConfigToProto converts the tenant's Config overrides into a TenantConfiguration proto.
-// Returns an empty message when Config is nil.
-func (t *Tenant) ConfigToProto() *tenantgrpc.TenantConfiguration {
-	cfg := &tenantgrpc.TenantConfiguration{}
-	if t.Config != nil {
-		cfg.SystemLimit = t.Config.SystemLimit
-	}
-	return cfg
 }
