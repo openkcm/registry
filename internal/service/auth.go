@@ -110,17 +110,15 @@ func (a *Auth) ApplyAuth(ctx context.Context, req *authgrpc.ApplyAuthRequest) (*
 
 		if found {
 			slogctx.Info(ctx, "patching an existent auth resource")
-			if _, err := r.Patch(ctx, auth); err != nil {
-				slogctx.Error(ctx, "failed to patch an auth resource", "error", err)
-				return status.Error(codes.Internal, "failed to create auth")
-			}
-
-			return nil
+			_, err = r.Patch(ctx, auth)
+		} else {
+			slogctx.Info(ctx, "creating a new auth resource")
+			err = r.Create(ctx, auth)
 		}
 
-		if err := r.Create(ctx, auth); err != nil {
-			slogctx.Error(ctx, "failed to create auth", "error", err)
-			return status.Error(codes.Internal, "failed to create auth")
+		if err != nil {
+			slogctx.Error(ctx, "failed to apply auth", "error", err)
+			return status.Error(codes.Internal, "failed to apply auth")
 		}
 
 		if err := a.prepareJob(ctx, auth, authgrpc.AuthAction_AUTH_ACTION_APPLY_AUTH.String()); err != nil {
