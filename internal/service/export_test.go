@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	MapError          = mapError
-	DetachAllSystems  = detachAllSystems
+	MapError         = mapError
+	DetachAllSystems = detachAllSystems
 )
 
 // NewAuthForTest builds an Auth without registering orbital job handlers, so that unit tests
