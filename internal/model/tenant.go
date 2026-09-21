@@ -10,7 +10,6 @@ import (
 	"github.com/openkcm/registry/internal/validation"
 )
 
-
 const (
 	TenantIDValidationID         = "Tenant.ID"
 	TenantOwnerTypeValidationID  = "Tenant.OwnerType"

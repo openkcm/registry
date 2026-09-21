@@ -43,55 +43,10 @@ func linkedSystem() model.System {
 	return model.System{ID: id, ExternalID: "sys-1", Type: "application", TenantID: &tid}
 }
 
-// activeTenant returns a Tenant with STATUS_ACTIVE and all fields required by validation.
-func activeTenant(id string) *model.Tenant {
-	return &model.Tenant{
-		ID:        id,
-		Name:      "test-tenant",
-		Region:    "eu-west-1",
-		OwnerID:   "owner-1",
-		OwnerType: "account",
-		Role:      tenantgrpc.Role_ROLE_LIVE.String(),
-		Status:    model.TenantStatus(tenantgrpc.Status_STATUS_ACTIVE.String()),
-	}
-}
-
 // noopJobPreparer satisfies service.JobPreparer and always returns nil.
 type noopJobPreparer struct{}
 
 func (noopJobPreparer) PrepareJob(_ context.Context, _ []byte, _, _ string) error { return nil }
-
-// fakeTenantRepo supports Find / Transaction / Patch for tenant unit tests.
-type fakeTenantRepo struct {
-	service.NoopRepo
-
-	tenant   *model.Tenant
-	findErr  error
-	patchErr error
-}
-
-func (f *fakeTenantRepo) Find(_ context.Context, resource repository.Resource) (bool, error) {
-	if f.findErr != nil {
-		return false, f.findErr
-	}
-	t, ok := resource.(*model.Tenant)
-	if !ok || f.tenant == nil {
-		return false, nil
-	}
-	*t = *f.tenant
-	return true, nil
-}
-
-func (f *fakeTenantRepo) Transaction(_ context.Context, fn repository.TransactionFunc) error {
-	return fn(context.Background(), f)
-}
-
-func (f *fakeTenantRepo) Patch(_ context.Context, _ repository.Resource) (bool, error) {
-	if f.patchErr != nil {
-		return false, f.patchErr
-	}
-	return true, nil
-}
 
 // --- fake repo for detachAllSystems ------------------------------------------
 

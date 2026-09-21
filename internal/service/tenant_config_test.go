@@ -2,7 +2,6 @@ package service_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/openkcm/orbital"
@@ -92,10 +91,8 @@ func mask(paths ...string) *fieldmaskpb.FieldMask {
 	return &fieldmaskpb.FieldMask{Paths: paths}
 }
 
-func ptr32(v int32) *int32 { return &v }
-
-func newOrbitalJob(externalID, jobType, errMsg string) orbital.Job {
-	return orbital.Job{ExternalID: externalID, Type: jobType, ErrorMessage: errMsg}
+func newOrbitalJob(jobType, errMsg string) orbital.Job {
+	return orbital.Job{ExternalID: "t-1", Type: jobType, ErrorMessage: errMsg}
 }
 
 func getTenantConfigReq(tenantID string) *tenantconfiggrpc.GetTenantConfigRequest {
@@ -128,7 +125,7 @@ func TestGetTenantConfig(t *testing.T) {
 	})
 
 	t.Run("returns Internal when repo.Find fails", func(t *testing.T) {
-		repo := &fakeTenantConfigRepo{cfgFindErr: errors.New("db down")}
+		repo := &fakeTenantConfigRepo{cfgFindErr: errListFailed}
 		subj := service.NewTenantConfigForTest(repo)
 
 		resp, err := subj.GetTenantConfig(context.Background(), getTenantConfigReq("t-1"))
@@ -306,7 +303,7 @@ func TestTenantConfigHandleJobDone(t *testing.T) {
 		}
 		subj := service.NewTenantConfigForTest(repo)
 
-		err := subj.HandleJobDone(context.Background(), newOrbitalJob("t-1", tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String(), ""))
+		err := subj.HandleJobDone(context.Background(), newOrbitalJob(tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String(), ""))
 
 		require.NoError(t, err)
 		assert.Equal(t, 1, repo.cfgPatchedCalls)
@@ -316,7 +313,7 @@ func TestTenantConfigHandleJobDone(t *testing.T) {
 		repo := &fakeTenantConfigRepo{}
 		subj := service.NewTenantConfigForTest(repo)
 
-		err := subj.HandleJobDone(context.Background(), newOrbitalJob("t-1", tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String(), ""))
+		err := subj.HandleJobDone(context.Background(), newOrbitalJob(tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String(), ""))
 
 		require.NoError(t, err)
 	})
@@ -329,7 +326,7 @@ func TestTenantConfigHandleJobFailed(t *testing.T) {
 		}
 		subj := service.NewTenantConfigForTest(repo)
 
-		err := subj.HandleJobFailed(context.Background(), newOrbitalJob("t-1", tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String(), "timeout"))
+		err := subj.HandleJobFailed(context.Background(), newOrbitalJob(tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String(), "timeout"))
 
 		require.NoError(t, err)
 		assert.Equal(t, 1, repo.cfgPatchedCalls)
@@ -339,7 +336,7 @@ func TestTenantConfigHandleJobFailed(t *testing.T) {
 		repo := &fakeTenantConfigRepo{}
 		subj := service.NewTenantConfigForTest(repo)
 
-		err := subj.HandleJobFailed(context.Background(), newOrbitalJob("t-1", tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String(), "timeout"))
+		err := subj.HandleJobFailed(context.Background(), newOrbitalJob(tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String(), "timeout"))
 
 		require.NoError(t, err)
 	})

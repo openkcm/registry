@@ -11,8 +11,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
-	tenantconfiggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant_config/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
+	tenantconfiggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant_config/v1"
 	slogctx "github.com/veqryn/slog-context"
 
 	"github.com/openkcm/registry/internal/model"
@@ -62,15 +62,7 @@ func (tc *TenantConfig) GetTenantConfig(ctx context.Context, in *tenantconfiggrp
 func (tc *TenantConfig) UpdateTenantConfig(ctx context.Context, in *tenantconfiggrpc.UpdateTenantConfigRequest) (*tenantconfiggrpc.UpdateTenantConfigResponse, error) {
 	slogctx.Debug(ctx, "UpdateTenantConfig called", "tenantId", in.GetTenantId())
 
-	if in.GetTenantId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "tenant_id must not be empty")
-	}
-
-	if len(in.GetUpdateMask().GetPaths()) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "update_mask must not be empty")
-	}
-
-	if err := validateTenantConfigMaskPaths(in.GetValues(), in.GetUpdateMask().GetPaths()); err != nil {
+	if err := validateUpdateTenantConfigRequest(in); err != nil {
 		return nil, err
 	}
 
@@ -128,7 +120,7 @@ func (tc *TenantConfig) ConfirmJob(ctx context.Context, job orbital.Job) (orbita
 	}
 
 	if cfg.Status != tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_UPDATING.String() {
-		return orbital.CancelJobConfirmer(fmt.Sprintf("tenant config not in UPDATING status: %s", cfg.Status)), nil
+		return orbital.CancelJobConfirmer("tenant config not in UPDATING status: " + cfg.Status), nil
 	}
 
 	return orbital.CompleteJobConfirmer(), nil
@@ -191,6 +183,17 @@ func (tc *TenantConfig) handleJobAborted(ctx context.Context, job orbital.Job) e
 		return nil
 	}
 	return err
+}
+
+// validateUpdateTenantConfigRequest validates the top-level fields of an UpdateTenantConfig request.
+func validateUpdateTenantConfigRequest(in *tenantconfiggrpc.UpdateTenantConfigRequest) error {
+	if in.GetTenantId() == "" {
+		return status.Error(codes.InvalidArgument, "tenant_id must not be empty")
+	}
+	if len(in.GetUpdateMask().GetPaths()) == 0 {
+		return status.Error(codes.InvalidArgument, "update_mask must not be empty")
+	}
+	return validateTenantConfigMaskPaths(in.GetValues(), in.GetUpdateMask().GetPaths())
 }
 
 // validateTenantConfigMaskPaths checks that all paths in the update mask are known,
