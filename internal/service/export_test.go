@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 
+	"github.com/openkcm/orbital"
+
 	"github.com/openkcm/registry/internal/repository"
 	"github.com/openkcm/registry/internal/validation"
 )
@@ -13,7 +15,7 @@ var (
 	ApplyConfigMask  = applyConfigMask
 )
 
-// NewAuthForTest builds an Auth without touching orbital, so that unit tests
+// NewAuthForTest builds an Auth without registering orbital job handlers, so that unit tests
 // can drive its behaviour against a fake repository.
 func NewAuthForTest(repo repository.Repository, orbital *Orbital, validation *validation.Validation) *Auth {
 	return &Auth{
@@ -21,6 +23,12 @@ func NewAuthForTest(repo repository.Repository, orbital *Orbital, validation *va
 		orbital:    orbital,
 		validation: validation,
 	}
+}
+
+// NewOrbitalWithManagerForTest creates an *Orbital that wraps a pre-built manager.
+// Use this in tests that need a real orbital.Manager backed by a live SQL store.
+func NewOrbitalWithManagerForTest(manager *orbital.Manager) *Orbital {
+	return &Orbital{manager: manager}
 }
 
 // NewTenantForTest builds a Tenant without registering orbital job handlers,

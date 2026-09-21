@@ -149,8 +149,8 @@ func TestApplyAuth_PatchOnExistingResource(t *testing.T) {
 			existingAuth: existing,
 			patchFound:   true,
 		}
-
-		auth := service.NewAuthForTest(repo, nil, newTestValidation(t))
+		orbital, _ := newTestOrbital(t)
+		auth := service.NewAuthForTest(repo, orbital, newTestValidation(t))
 
 		// when
 		resp, err := auth.ApplyAuth(context.Background(), validApplyAuthRequest())
@@ -290,5 +290,56 @@ func TestApplyAuth_TenantNotActive(t *testing.T) {
 		assert.Equal(t, codes.NotFound, status.Code(err))
 		assert.False(t, repo.createCalled)
 		assert.False(t, repo.patchCalled)
+	})
+}
+
+func TestApplyAuth_OrbitalJobCreated(t *testing.T) {
+	t.Run("prepares a job when a new auth resource is created", func(t *testing.T) {
+		// given
+		orbital, db := newTestOrbital(t)
+		repo := &fakeAuthRepo{
+			tenant: newActiveTenant(),
+			// no existingAuth → Create path
+		}
+		auth := service.NewAuthForTest(repo, orbital, newTestValidation(t))
+
+		// when
+		resp, err := auth.ApplyAuth(t.Context(), validApplyAuthRequest())
+
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		assert.True(t, repo.createCalled)
+		assert.False(t, repo.patchCalled)
+
+		assertJobPrepared(t, db, "auth-1", authgrpc.AuthAction_AUTH_ACTION_APPLY_AUTH.String())
+	})
+
+	t.Run("prepares a job when an existing auth resource is patched", func(t *testing.T) {
+		// given
+		orbital, db := newTestOrbital(t)
+		existing := &model.Auth{
+			ExternalID: "auth-1",
+			TenantID:   "tenant-1",
+			Type:       "oidc",
+			Status:     authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String(),
+		}
+		repo := &fakeAuthRepo{
+			tenant:       newActiveTenant(),
+			existingAuth: existing,
+			patchFound:   true,
+		}
+		auth := service.NewAuthForTest(repo, orbital, newTestValidation(t))
+
+		// when
+		resp, err := auth.ApplyAuth(t.Context(), validApplyAuthRequest())
+
+		// then
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		assert.True(t, repo.patchCalled)
+		assert.False(t, repo.createCalled)
+
+		assertJobPrepared(t, db, "auth-1", authgrpc.AuthAction_AUTH_ACTION_APPLY_AUTH.String())
 	})
 }
