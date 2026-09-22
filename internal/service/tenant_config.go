@@ -77,50 +77,53 @@ func (tc *TenantConfig) UpdateTenantConfig(ctx context.Context, in *tenantconfig
 		return nil, err
 	}
 
-	err := transact(ctx, tc.repo, func(ctx context.Context, r repository.Repository) error {
-		tenant, err := getTenant(ctx, r, in.GetTenantId())
-		if err != nil {
-			return err
-		}
-
-		if err := checkTenantActive(tenant); err != nil {
-			return err
-		}
-
-		cfg, err := findOrInitTenantConfig(ctx, r, in.GetTenantId())
-		if err != nil {
-			return err
-		}
-
-		if cfg.Status == tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_UPDATING.String() {
-			return ErrTenantConfigUpdateInProgress
-		}
-
-		applyTenantConfigMask(cfg, in.GetValues(), in.GetUpdateMask())
-		cfg.Status = tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_UPDATING.String()
-		cfg.ErrorMessage = ""
-
-		if err := createOrPatchTenantConfig(ctx, r, cfg); err != nil {
-			return err
-		}
-
-		data, err := proto.Marshal(tenant.ToProto())
-		if err != nil {
-			slogctx.Error(ctx, "failed to encode tenant data for config job", "error", err)
-			return fmt.Errorf("%w: %w", ErrTenantConfigEncoding, err)
-		}
-
-		if err := tc.orbital.PrepareJob(ctx, data, in.GetTenantId(), tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String()); err != nil {
-			return status.Errorf(codes.Internal, "failed to start config update job: %v", err)
-		}
-
-		return nil
-	})
-	if err != nil {
+	if err := transact(ctx, tc.repo, func(ctx context.Context, r repository.Repository) error {
+		return tc.applyConfigUpdate(ctx, r, in)
+	}); err != nil {
 		return nil, err
 	}
 
 	return tenantconfiggrpc.UpdateTenantConfigResponse_builder{}.Build(), nil
+}
+
+func (tc *TenantConfig) applyConfigUpdate(ctx context.Context, r repository.Repository, in *tenantconfiggrpc.UpdateTenantConfigRequest) error {
+	tenant, err := getTenant(ctx, r, in.GetTenantId())
+	if err != nil {
+		return err
+	}
+
+	if err := checkTenantActive(tenant); err != nil {
+		return err
+	}
+
+	cfg, err := findOrInitTenantConfig(ctx, r, in.GetTenantId())
+	if err != nil {
+		return err
+	}
+
+	if cfg.Status == tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_UPDATING.String() {
+		return ErrTenantConfigUpdateInProgress
+	}
+
+	applyTenantConfigMask(cfg, in.GetValues(), in.GetUpdateMask())
+	cfg.Status = tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_UPDATING.String()
+	cfg.ErrorMessage = ""
+
+	if err := createOrPatchTenantConfig(ctx, r, cfg); err != nil {
+		return err
+	}
+
+	data, err := proto.Marshal(tenant.ToProto())
+	if err != nil {
+		slogctx.Error(ctx, "failed to encode tenant data for config job", "error", err)
+		return fmt.Errorf("%w: %w", ErrTenantConfigEncoding, err)
+	}
+
+	if err := tc.orbital.PrepareJob(ctx, data, in.GetTenantId(), tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String()); err != nil {
+		return status.Errorf(codes.Internal, "failed to start config update job: %v", err)
+	}
+
+	return nil
 }
 
 // ConfirmJob verifies the config record exists and is still in UPDATING state before the job runs.
