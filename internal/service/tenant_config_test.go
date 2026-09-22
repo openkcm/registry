@@ -222,16 +222,6 @@ func TestUpdateTenantConfig(t *testing.T) {
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
-	t.Run("returns InvalidArgument when system_limit is zero", func(t *testing.T) {
-		subj := service.NewTenantConfigForTest(nil)
-
-		resp, err := subj.UpdateTenantConfig(context.Background(), updateTenantConfigReq("tenant-1", configValues(0), mask("system_limit")))
-
-		assert.Nil(t, resp)
-		require.Error(t, err)
-		assert.Equal(t, codes.InvalidArgument, status.Code(err))
-	})
-
 	t.Run("returns InvalidArgument when system_limit is negative", func(t *testing.T) {
 		subj := service.NewTenantConfigForTest(nil)
 
@@ -240,6 +230,25 @@ func TestUpdateTenantConfig(t *testing.T) {
 		assert.Nil(t, resp)
 		require.Error(t, err)
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("clears system_limit when value is 0", func(t *testing.T) {
+		sl := int32(50)
+		repo := &fakeTenantConfigRepo{
+			tenant: activeTenantForConfig(),
+			cfg: &model.TenantConfig{
+				TenantID:    "t-1",
+				SystemLimit: &sl,
+				Status:      tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_ACTIVE.String(),
+			},
+		}
+		subj := service.NewTenantConfigWithOrbitalForTest(repo, noopJobPreparer{})
+
+		resp, err := subj.UpdateTenantConfig(context.Background(), updateTenantConfigReq("t-1", configValues(0), mask("system_limit")))
+
+		require.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, 1, repo.cfgPatchedCalls)
 	})
 
 	t.Run("returns NotFound when tenant does not exist", func(t *testing.T) {

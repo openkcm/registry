@@ -161,7 +161,7 @@ func (tc *TenantConfig) applyConfigUpdate(ctx context.Context, r repository.Repo
 		return err
 	}
 
-	cfg, err := findOrInitTenantConfig(ctx, r, in.GetTenantId())
+	cfg, isNew, err := findOrInitTenantConfig(ctx, r, in.GetTenantId())
 	if err != nil {
 		return err
 	}
@@ -174,7 +174,7 @@ func (tc *TenantConfig) applyConfigUpdate(ctx context.Context, r repository.Repo
 	cfg.Status = tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_UPDATING.String()
 	cfg.ErrorMessage = ""
 
-	if err := createOrPatchTenantConfig(ctx, r, cfg); err != nil {
+	if err := createOrPatchTenantConfig(ctx, r, cfg, isNew); err != nil {
 		return err
 	}
 
@@ -205,50 +205,51 @@ func (tc *TenantConfig) handleJobAborted(ctx context.Context, job orbital.Job) e
 
 // validateTenantConfigMaskPaths checks that all paths in the update mask are known,
 // and that any supplied values are valid.
+// A system_limit of 0 is accepted as "clear the limit"; negative values are rejected.
 func validateTenantConfigMaskPaths(values *tenantconfiggrpc.TenantConfigurationValues, paths []string) error {
 	for _, path := range paths {
 		if path != systemLimitField {
 			return status.Errorf(codes.InvalidArgument, "unknown field mask path: %s", path)
 		}
-		if values != nil && values.GetSystemLimit() <= 0 {
-			return status.Error(codes.InvalidArgument, "system_limit must be greater than 0")
+		if values != nil && values.GetSystemLimit() < 0 {
+			return status.Error(codes.InvalidArgument, "system_limit must be a positive integer; use 0 to clear the limit")
 		}
 	}
 	return nil
 }
 
 // applyTenantConfigMask writes the fields listed in mask from values onto cfg.
+// When system_limit is in the mask and the supplied value is 0 or absent, the field is cleared.
 func applyTenantConfigMask(cfg *model.TenantConfig, values *tenantconfiggrpc.TenantConfigurationValues, mask *fieldmaskpb.FieldMask) {
 	for _, path := range mask.GetPaths() {
-		if path == systemLimitField && values != nil && values.GetSystemLimit() > 0 {
-			sl := values.GetSystemLimit()
-			cfg.SystemLimit = &sl
+		if path == systemLimitField {
+			if values != nil && values.GetSystemLimit() > 0 {
+				sl := values.GetSystemLimit()
+				cfg.SystemLimit = &sl
+			} else {
+				cfg.SystemLimit = nil
+			}
 		}
 	}
 }
 
 // findOrInitTenantConfig returns the existing config record for tenantID, or a zero-value struct if none exists yet.
-func findOrInitTenantConfig(ctx context.Context, r repository.Repository, tenantID string) (*model.TenantConfig, error) {
+func findOrInitTenantConfig(ctx context.Context, r repository.Repository, tenantID string) (*model.TenantConfig, bool, error) {
 	cfg := &model.TenantConfig{TenantID: tenantID}
 	found, err := r.Find(ctx, cfg)
 	if err != nil {
 		slogctx.Error(ctx, "failed to find tenant config", "tenantId", tenantID, "error", err)
-		return nil, ErrTenantConfigSelect
+		return nil, false, ErrTenantConfigSelect
 	}
 	if !found {
-		return &model.TenantConfig{TenantID: tenantID}, nil
+		return &model.TenantConfig{TenantID: tenantID}, true, nil
 	}
-	return cfg, nil
+	return cfg, false, nil
 }
 
 // createOrPatchTenantConfig creates the config record if it does not exist yet, otherwise patches it.
-func createOrPatchTenantConfig(ctx context.Context, r repository.Repository, cfg *model.TenantConfig) error {
-	probe := &model.TenantConfig{TenantID: cfg.TenantID}
-	found, err := r.Find(ctx, probe)
-	if err != nil {
-		return ErrTenantConfigSelect
-	}
-	if !found {
+func createOrPatchTenantConfig(ctx context.Context, r repository.Repository, cfg *model.TenantConfig, isNew bool) error {
+	if isNew {
 		if err := r.Create(ctx, cfg); err != nil {
 			return ErrTenantConfigUpdate
 		}
