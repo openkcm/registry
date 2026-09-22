@@ -17,7 +17,10 @@ import (
 
 	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository"
+	"github.com/openkcm/registry/internal/validation"
 )
+
+const systemLimitField = "system_limit"
 
 // TenantConfig implements the tenant_config/v1 gRPC service.
 // It owns the lifecycle of per-tenant configuration overrides and tracks whether
@@ -25,15 +28,17 @@ import (
 type TenantConfig struct {
 	tenantconfiggrpc.UnimplementedServiceServer
 
-	repo    repository.Repository
-	orbital JobPreparer
+	repo       repository.Repository
+	orbital    JobPreparer
+	validation *validation.Validation
 }
 
 // NewTenantConfig creates a new TenantConfig service and registers its orbital job handler.
-func NewTenantConfig(repo repository.Repository, orbital *Orbital) *TenantConfig {
+func NewTenantConfig(repo repository.Repository, orbital *Orbital, v *validation.Validation) *TenantConfig {
 	tc := &TenantConfig{
-		repo:    repo,
-		orbital: orbital,
+		repo:       repo,
+		orbital:    orbital,
+		validation: v,
 	}
 	orbital.RegisterJobHandler(tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String(), tc)
 	return tc
@@ -62,11 +67,17 @@ func (tc *TenantConfig) GetTenantConfig(ctx context.Context, in *tenantconfiggrp
 func (tc *TenantConfig) UpdateTenantConfig(ctx context.Context, in *tenantconfiggrpc.UpdateTenantConfigRequest) (*tenantconfiggrpc.UpdateTenantConfigResponse, error) {
 	slogctx.Debug(ctx, "UpdateTenantConfig called", "tenantId", in.GetTenantId())
 
-	if err := validateUpdateTenantConfigRequest(in); err != nil {
+	if err := tc.validation.Validate(model.TenantConfigTenantIDValidationID, in.GetTenantId()); err != nil {
+		return nil, ErrorWithParams(ErrValidationFailed, "err", err.Error())
+	}
+	if len(in.GetUpdateMask().GetPaths()) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "update_mask must not be empty")
+	}
+	if err := validateTenantConfigMaskPaths(in.GetValues(), in.GetUpdateMask().GetPaths()); err != nil {
 		return nil, err
 	}
 
-	err := tc.repo.Transaction(ctx, func(ctx context.Context, r repository.Repository) error {
+	err := transact(ctx, tc.repo, func(ctx context.Context, r repository.Repository) error {
 		tenant, err := getTenant(ctx, r, in.GetTenantId())
 		if err != nil {
 			return err
@@ -81,6 +92,10 @@ func (tc *TenantConfig) UpdateTenantConfig(ctx context.Context, in *tenantconfig
 			return err
 		}
 
+		if cfg.Status == tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_UPDATING.String() {
+			return ErrTenantConfigUpdateInProgress
+		}
+
 		applyTenantConfigMask(cfg, in.GetValues(), in.GetUpdateMask())
 		cfg.Status = tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_UPDATING.String()
 		cfg.ErrorMessage = ""
@@ -92,7 +107,7 @@ func (tc *TenantConfig) UpdateTenantConfig(ctx context.Context, in *tenantconfig
 		data, err := proto.Marshal(tenant.ToProto())
 		if err != nil {
 			slogctx.Error(ctx, "failed to encode tenant data for config job", "error", err)
-			return ErrTenantConfigEncoding
+			return fmt.Errorf("%w: %w", ErrTenantConfigEncoding, err)
 		}
 
 		if err := tc.orbital.PrepareJob(ctx, data, in.GetTenantId(), tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String()); err != nil {
@@ -185,22 +200,11 @@ func (tc *TenantConfig) handleJobAborted(ctx context.Context, job orbital.Job) e
 	return err
 }
 
-// validateUpdateTenantConfigRequest validates the top-level fields of an UpdateTenantConfig request.
-func validateUpdateTenantConfigRequest(in *tenantconfiggrpc.UpdateTenantConfigRequest) error {
-	if in.GetTenantId() == "" {
-		return status.Error(codes.InvalidArgument, "tenant_id must not be empty")
-	}
-	if len(in.GetUpdateMask().GetPaths()) == 0 {
-		return status.Error(codes.InvalidArgument, "update_mask must not be empty")
-	}
-	return validateTenantConfigMaskPaths(in.GetValues(), in.GetUpdateMask().GetPaths())
-}
-
 // validateTenantConfigMaskPaths checks that all paths in the update mask are known,
 // and that any supplied values are valid.
 func validateTenantConfigMaskPaths(values *tenantconfiggrpc.TenantConfigurationValues, paths []string) error {
 	for _, path := range paths {
-		if path != "system_limit" {
+		if path != systemLimitField {
 			return status.Errorf(codes.InvalidArgument, "unknown field mask path: %s", path)
 		}
 		if values != nil && values.GetSystemLimit() <= 0 {
@@ -213,7 +217,7 @@ func validateTenantConfigMaskPaths(values *tenantconfiggrpc.TenantConfigurationV
 // applyTenantConfigMask writes the fields listed in mask from values onto cfg.
 func applyTenantConfigMask(cfg *model.TenantConfig, values *tenantconfiggrpc.TenantConfigurationValues, mask *fieldmaskpb.FieldMask) {
 	for _, path := range mask.GetPaths() {
-		if path == "system_limit" && values != nil && values.GetSystemLimit() > 0 {
+		if path == systemLimitField && values != nil && values.GetSystemLimit() > 0 {
 			sl := values.GetSystemLimit()
 			cfg.SystemLimit = &sl
 		}

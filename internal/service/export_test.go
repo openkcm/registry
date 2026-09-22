@@ -5,6 +5,7 @@ import (
 
 	"github.com/openkcm/orbital"
 
+	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository"
 	"github.com/openkcm/registry/internal/validation"
 )
@@ -49,18 +50,28 @@ func NewTenantWithOrbitalForTest(repo repository.Repository, orbital JobPreparer
 	}
 }
 
+// newTenantConfigValidation builds a minimal Validation seeded with TenantConfig defaults.
+func newTenantConfigValidation() *validation.Validation {
+	v, _ := validation.New(validation.Config{
+		Models: []validation.Model{&model.TenantConfig{}},
+	})
+	return v
+}
+
 // NewTenantConfigForTest builds a TenantConfig service without registering orbital job handlers.
 func NewTenantConfigForTest(repo repository.Repository) *TenantConfig {
 	return &TenantConfig{
-		repo: repo,
+		repo:       repo,
+		validation: newTenantConfigValidation(),
 	}
 }
 
 // NewTenantConfigWithOrbitalForTest builds a TenantConfig service with a custom JobPreparer.
 func NewTenantConfigWithOrbitalForTest(repo repository.Repository, orbital JobPreparer) *TenantConfig {
 	return &TenantConfig{
-		repo:    repo,
-		orbital: orbital,
+		repo:       repo,
+		orbital:    orbital,
+		validation: newTenantConfigValidation(),
 	}
 }
 

@@ -269,6 +269,23 @@ func TestUpdateTenantConfig(t *testing.T) {
 		assert.Equal(t, codes.FailedPrecondition, status.Code(err))
 	})
 
+	t.Run("returns FailedPrecondition when config is already in UPDATING state", func(t *testing.T) {
+		repo := &fakeTenantConfigRepo{
+			tenant: activeTenantForConfig(),
+			cfg: &model.TenantConfig{
+				TenantID: "t-1",
+				Status:   tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_UPDATING.String(),
+			},
+		}
+		subj := service.NewTenantConfigWithOrbitalForTest(repo, noopJobPreparer{})
+
+		resp, err := subj.UpdateTenantConfig(context.Background(), updateTenantConfigReq("t-1", configValues(50), mask("system_limit")))
+
+		assert.Nil(t, resp)
+		require.Error(t, err)
+		assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+	})
+
 	t.Run("creates new config record and enqueues orbital job", func(t *testing.T) {
 		repo := &fakeTenantConfigRepo{tenant: activeTenantForConfig()}
 		subj := service.NewTenantConfigWithOrbitalForTest(repo, noopJobPreparer{})

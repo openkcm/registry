@@ -6,18 +6,33 @@ import (
 	tenantconfiggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant_config/v1"
 
 	"github.com/openkcm/registry/internal/repository"
+	"github.com/openkcm/registry/internal/validation"
 )
+
+const TenantConfigTenantIDValidationID validation.ID = "TenantConfig.TenantID"
 
 // TenantConfig stores per-tenant configuration overrides and their reconciliation status.
 // The status tracks whether the configuration has been propagated to the CMK layer via
 // an orbital job (UPDATING → ACTIVE on success, UPDATING_ERROR on failure).
 type TenantConfig struct {
-	TenantID     string    `gorm:"column:tenant_id;primaryKey"`
+	TenantID     string    `gorm:"column:tenant_id;primaryKey" validationID:"TenantConfig.TenantID"`
 	SystemLimit  *int32    `gorm:"column:system_limit"`
 	Status       string    `gorm:"column:status;not null"`
 	ErrorMessage string    `gorm:"column:error_message"`
 	CreatedAt    time.Time `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt    time.Time `gorm:"column:updated_at;autoUpdateTime"`
+}
+
+// Validations returns the default field validators for TenantConfig.
+func (tc *TenantConfig) Validations() []validation.Field {
+	return []validation.Field{
+		{
+			ID: TenantConfigTenantIDValidationID,
+			Validators: []validation.Validator{
+				validation.NonEmptyConstraint{},
+			},
+		},
+	}
 }
 
 // TableName returns the table name for the TenantConfig model.

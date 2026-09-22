@@ -79,10 +79,11 @@ var (
 )
 
 var (
-	ErrTenantConfigSelect   = status.Error(codes.Internal, "could not select tenant config")
-	ErrTenantConfigUpdate   = status.Error(codes.Internal, "could not update tenant config")
-	ErrTenantConfigNotFound = status.Error(codes.NotFound, "tenant config not found")
-	ErrTenantConfigEncoding = status.Error(codes.Internal, "failed to encode tenant config data")
+	ErrTenantConfigSelect          = status.Error(codes.Internal, "could not select tenant config")
+	ErrTenantConfigUpdate          = status.Error(codes.Internal, "could not update tenant config")
+	ErrTenantConfigNotFound        = status.Error(codes.NotFound, "tenant config not found")
+	ErrTenantConfigEncoding        = status.Error(codes.Internal, "failed to encode tenant config data")
+	ErrTenantConfigUpdateInProgress = status.Error(codes.FailedPrecondition, "tenant config update is already in progress")
 )
 
 var (
