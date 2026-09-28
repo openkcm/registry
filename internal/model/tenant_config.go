@@ -17,6 +17,7 @@ const TenantConfigTenantIDValidationID validation.ID = "TenantConfig.TenantID"
 type TenantConfig struct {
 	TenantID     string    `gorm:"column:tenant_id;primaryKey" validationID:"TenantConfig.TenantID"`
 	SystemLimit  *int32    `gorm:"column:system_limit"`
+	KeyLimit     *int32    `gorm:"column:key_limit"`
 	Status       string    `gorm:"column:status;not null"`
 	ErrorMessage string    `gorm:"column:error_message"`
 	CreatedAt    time.Time `gorm:"column:created_at;autoCreateTime"`
@@ -62,9 +63,17 @@ func (tc *TenantConfig) ToProto() *tenantconfiggrpc.GetTenantConfigResponse {
 		CreatedAt:    &createdAt,
 		UpdatedAt:    &updatedAt,
 	}
-	if tc.SystemLimit != nil {
-		sl := *tc.SystemLimit
-		b.Values = tenantconfiggrpc.TenantConfigurationValues_builder{SystemLimit: &sl}.Build()
+	if tc.SystemLimit != nil || tc.KeyLimit != nil {
+		vb := tenantconfiggrpc.TenantConfigurationValues_builder{}
+		if tc.SystemLimit != nil {
+			sl := *tc.SystemLimit
+			vb.SystemLimit = &sl
+		}
+		if tc.KeyLimit != nil {
+			kl := *tc.KeyLimit
+			vb.KeyLimit = &kl
+		}
+		b.Values = vb.Build()
 	}
 	return b.Build()
 }

@@ -20,7 +20,10 @@ import (
 	"github.com/openkcm/registry/internal/validation"
 )
 
-const systemLimitField = "system_limit"
+const (
+	systemLimitField = "system_limit"
+	keyLimitField    = "key_limit"
+)
 
 // TenantConfig implements the tenant_config/v1 gRPC service.
 // It owns the lifecycle of per-tenant configuration overrides and tracks whether
@@ -205,29 +208,43 @@ func (tc *TenantConfig) handleJobAborted(ctx context.Context, job orbital.Job) e
 
 // validateTenantConfigMaskPaths checks that all paths in the update mask are known,
 // and that any supplied values are valid.
-// A system_limit of 0 is accepted as "clear the limit"; negative values are rejected.
+// A limit of 0 is accepted as "clear the limit"; negative values are rejected.
 func validateTenantConfigMaskPaths(values *tenantconfiggrpc.TenantConfigurationValues, paths []string) error {
 	for _, path := range paths {
-		if path != systemLimitField {
+		switch path {
+		case systemLimitField:
+			if values != nil && values.GetSystemLimit() < 0 {
+				return status.Error(codes.InvalidArgument, "system_limit must be a positive integer; use 0 to clear the limit")
+			}
+		case keyLimitField:
+			if values != nil && values.GetKeyLimit() < 0 {
+				return status.Error(codes.InvalidArgument, "key_limit must be a positive integer; use 0 to clear the limit")
+			}
+		default:
 			return status.Errorf(codes.InvalidArgument, "unknown field mask path: %s", path)
-		}
-		if values != nil && values.GetSystemLimit() < 0 {
-			return status.Error(codes.InvalidArgument, "system_limit must be a positive integer; use 0 to clear the limit")
 		}
 	}
 	return nil
 }
 
 // applyTenantConfigMask writes the fields listed in mask from values onto cfg.
-// When system_limit is in the mask and the supplied value is 0 or absent, the field is cleared.
+// When a limit field is in the mask and the supplied value is 0 or absent, the field is cleared.
 func applyTenantConfigMask(cfg *model.TenantConfig, values *tenantconfiggrpc.TenantConfigurationValues, mask *fieldmaskpb.FieldMask) {
 	for _, path := range mask.GetPaths() {
-		if path == systemLimitField {
+		switch path {
+		case systemLimitField:
 			if values != nil && values.GetSystemLimit() > 0 {
 				sl := values.GetSystemLimit()
 				cfg.SystemLimit = &sl
 			} else {
 				cfg.SystemLimit = nil
+			}
+		case keyLimitField:
+			if values != nil && values.GetKeyLimit() > 0 {
+				kl := values.GetKeyLimit()
+				cfg.KeyLimit = &kl
+			} else {
+				cfg.KeyLimit = nil
 			}
 		}
 	}
