@@ -64,16 +64,10 @@ func (tc *TenantConfig) ToProto() *tenantconfiggrpc.GetTenantConfigResponse {
 		UpdatedAt:    &updatedAt,
 	}
 	if tc.SystemLimit != nil || tc.KeyLimit != nil {
-		vb := tenantconfiggrpc.TenantConfigurationValues_builder{}
-		if tc.SystemLimit != nil {
-			sl := *tc.SystemLimit
-			vb.SystemLimit = &sl
-		}
-		if tc.KeyLimit != nil {
-			kl := *tc.KeyLimit
-			vb.KeyLimit = &kl
-		}
-		b.Values = vb.Build()
+		b.Values = tenantconfiggrpc.TenantConfigurationValues_builder{
+				SystemLimit: tc.SystemLimit,
+				KeyLimit: tc.KeyLimit,
+		}.Build()
 	}
 	return b.Build()
 }
