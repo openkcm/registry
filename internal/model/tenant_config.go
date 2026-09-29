@@ -65,8 +65,8 @@ func (tc *TenantConfig) ToProto() *tenantconfiggrpc.GetTenantConfigResponse {
 	}
 	if tc.SystemLimit != nil || tc.KeyLimit != nil {
 		b.Values = tenantconfiggrpc.TenantConfigurationValues_builder{
-				SystemLimit: tc.SystemLimit,
-				KeyLimit: tc.KeyLimit,
+			SystemLimit: tc.SystemLimit,
+			KeyLimit:    tc.KeyLimit,
 		}.Build()
 	}
 	return b.Build()
