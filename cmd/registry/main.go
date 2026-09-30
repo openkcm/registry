@@ -39,6 +39,10 @@ import (
 
 var BuildInfo = "{}"
 
+// meterName is the instrumentation scope name for OpenTelemetry metrics.
+// Per the OTEL spec, the import path of the instrumentation package is used.
+const meterName = "github.com/openkcm/registry/internal/interceptor"
+
 func main() {
 	ctx := context.Background()
 
@@ -119,7 +123,7 @@ func setupGRPCServer(ctx context.Context, cfg *config.Config) (*grpc.Server, err
 	}
 
 	meter := otel.Meter(
-		cfg.Application.Name,
+		meterName,
 		metric.WithInstrumentationVersion(otel.Version()),
 		metric.WithInstrumentationAttributes(otlp.CreateAttributesFrom(cfg.Application)...),
 	)
