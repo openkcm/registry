@@ -13,7 +13,7 @@ require (
 	github.com/openkcm/api-sdk v0.22.0
 	github.com/openkcm/common-sdk v1.19.3
 	github.com/openkcm/orbital v0.6.2
-	github.com/samber/oops v1.23.1
+	github.com/samber/oops v1.23.2
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
 	github.com/veqryn/slog-context v0.9.0
@@ -22,7 +22,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.46.0
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
-	gorm.io/driver/postgres v1.6.2
+	gorm.io/driver/postgres v1.6.3
 	gorm.io/gorm v1.31.2
 )
 
