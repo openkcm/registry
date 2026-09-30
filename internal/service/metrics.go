@@ -23,11 +23,15 @@ const (
 	AttrType         = "type"
 	AttrRole         = "role"
 	ErrDomainMetrics = "metrics"
+
+	// meterName is the instrumentation scope name for OpenTelemetry metrics.
+	// Per the OTEL spec, the import path of the instrumentation package is used.
+	meterName = "github.com/openkcm/registry/internal/service"
 )
 
 func InitMeters(ctx context.Context, cfgApp *commoncfg.Application, db *gorm.DB) (*Meters, error) {
 	meter := otel.Meter(
-		cfgApp.Name,
+		meterName,
 		metric.WithInstrumentationVersion(otel.Version()),
 		metric.WithInstrumentationAttributes(otlp.CreateAttributesFrom(*cfgApp)...),
 	)
