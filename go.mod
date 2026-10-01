@@ -11,7 +11,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.4
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/openkcm/api-sdk v0.22.0
-	github.com/openkcm/common-sdk v1.19.3
+	github.com/openkcm/common-sdk v1.19.4
 	github.com/openkcm/orbital v0.6.2
 	github.com/samber/oops v1.23.2
 	github.com/stretchr/testify v1.12.1
@@ -45,7 +45,7 @@ require (
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/platforms v0.2.1 // indirect
 	github.com/cpuguy83/dockercfg v0.3.2 // indirect
-	github.com/creasty/defaults v1.8.0 // indirect
+	github.com/creasty/defaults v1.11.0 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
