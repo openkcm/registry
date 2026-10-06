@@ -120,6 +120,10 @@ func configValuesWithKeyLimit(keyLimit int32) *tenantconfiggrpc.TenantConfigurat
 	return tenantconfiggrpc.TenantConfigurationValues_builder{KeyLimit: &keyLimit}.Build()
 }
 
+func configValuesWithKeyConfigLimit(limit int32) *tenantconfiggrpc.TenantConfigurationValues {
+	return tenantconfiggrpc.TenantConfigurationValues_builder{KeyConfigLimit: &limit}.Build()
+}
+
 // --- TestGetTenantConfig -----------------------------------------------------
 
 func TestGetTenantConfig(t *testing.T) {
@@ -211,14 +215,32 @@ func TestGetTenantConfig(t *testing.T) {
 		assert.Equal(t, int32(10), resp.GetValues().GetKeyLimit())
 	})
 
-	t.Run("returns both limits when config has both values", func(t *testing.T) {
-		sl, kl := int32(5), int32(20)
+	t.Run("returns key_config_limit when config has a value", func(t *testing.T) {
 		repo := &fakeTenantConfigRepo{
 			cfg: &model.TenantConfig{
-				TenantID:    "t-1",
-				SystemLimit: &sl,
-				KeyLimit:    &kl,
-				Status:      tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_ACTIVE.String(),
+				TenantID:       "t-1",
+				KeyConfigLimit: new(int32(30)),
+				Status:         tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_ACTIVE.String(),
+			},
+		}
+		subj := service.NewTenantConfigForTest(repo)
+
+		resp, err := subj.GetTenantConfig(context.Background(), getTenantConfigReq("t-1"))
+
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.NotNil(t, resp.GetValues())
+		assert.Equal(t, int32(30), resp.GetValues().GetKeyConfigLimit())
+	})
+
+	t.Run("returns all limits when config has all values", func(t *testing.T) {
+		repo := &fakeTenantConfigRepo{
+			cfg: &model.TenantConfig{
+				TenantID:       "t-1",
+				SystemLimit:    new(int32(5)),
+				KeyLimit:       new(int32(20)),
+				KeyConfigLimit: new(int32(30)),
+				Status:         tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_ACTIVE.String(),
 			},
 		}
 		subj := service.NewTenantConfigForTest(repo)
@@ -229,6 +251,7 @@ func TestGetTenantConfig(t *testing.T) {
 		require.NotNil(t, resp.GetValues())
 		assert.Equal(t, int32(5), resp.GetValues().GetSystemLimit())
 		assert.Equal(t, int32(20), resp.GetValues().GetKeyLimit())
+		assert.Equal(t, int32(30), resp.GetValues().GetKeyConfigLimit())
 	})
 }
 
@@ -285,6 +308,16 @@ func TestUpdateTenantConfig(t *testing.T) {
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
+	t.Run("returns InvalidArgument when key_config_limit is negative", func(t *testing.T) {
+		subj := service.NewTenantConfigForTest(nil)
+
+		resp, err := subj.UpdateTenantConfig(context.Background(), updateTenantConfigReq("tenant-1", configValuesWithKeyConfigLimit(-1), mask("key_config_limit")))
+
+		assert.Nil(t, resp)
+		require.Error(t, err)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
 	t.Run("clears system_limit when value is 0", func(t *testing.T) {
 		sl := int32(50)
 		repo := &fakeTenantConfigRepo{
@@ -328,6 +361,34 @@ func TestUpdateTenantConfig(t *testing.T) {
 		subj := service.NewTenantConfigWithOrbitalForTest(repo, noopJobPreparer{})
 
 		resp, err := subj.UpdateTenantConfig(context.Background(), updateTenantConfigReq("t-1", configValuesWithKeyLimit(100), mask("key_limit")))
+
+		require.NoError(t, err)
+		assert.NotNil(t, resp)
+	})
+
+	t.Run("clears key_config_limit when value is 0", func(t *testing.T) {
+		repo := &fakeTenantConfigRepo{
+			tenant: activeTenantForConfig(),
+			cfg: &model.TenantConfig{
+				TenantID:       "t-1",
+				KeyConfigLimit: new(int32(10)),
+				Status:         tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_ACTIVE.String(),
+			},
+		}
+		subj := service.NewTenantConfigWithOrbitalForTest(repo, noopJobPreparer{})
+
+		resp, err := subj.UpdateTenantConfig(context.Background(), updateTenantConfigReq("t-1", configValuesWithKeyConfigLimit(0), mask("key_config_limit")))
+
+		require.NoError(t, err)
+		assert.NotNil(t, resp)
+		assert.Equal(t, 1, repo.cfgPatchedCalls)
+	})
+
+	t.Run("sets key_config_limit when value is positive", func(t *testing.T) {
+		repo := &fakeTenantConfigRepo{tenant: activeTenantForConfig()}
+		subj := service.NewTenantConfigWithOrbitalForTest(repo, noopJobPreparer{})
+
+		resp, err := subj.UpdateTenantConfig(context.Background(), updateTenantConfigReq("t-1", configValuesWithKeyConfigLimit(100), mask("key_config_limit")))
 
 		require.NoError(t, err)
 		assert.NotNil(t, resp)
