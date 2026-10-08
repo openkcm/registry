@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	systemLimitField = "system_limit"
-	keyLimitField    = "key_limit"
+	systemLimitField    = "system_limit"
+	keyLimitField       = "key_limit"
+	keyConfigLimitField = "key_config_limit"
 )
 
 // TenantConfig implements the tenant_config/v1 gRPC service.
@@ -206,25 +207,40 @@ func (tc *TenantConfig) handleJobAborted(ctx context.Context, job orbital.Job) e
 	return err
 }
 
+func getTenantConfigValueFromMaskPath(values *tenantconfiggrpc.TenantConfigurationValues, path string) (int32, error) {
+	switch path {
+	case systemLimitField:
+		return values.GetSystemLimit(), nil
+	case keyLimitField:
+		return values.GetKeyLimit(), nil
+	case keyConfigLimitField:
+		return values.GetKeyConfigLimit(), nil
+	default:
+		return 0, status.Errorf(codes.InvalidArgument, "unknown field mask path: %s", path)
+	}
+}
+
 // validateTenantConfigMaskPaths checks that all paths in the update mask are known,
 // and that any supplied values are valid.
 // A limit of 0 is accepted as "clear the limit"; negative values are rejected.
 func validateTenantConfigMaskPaths(values *tenantconfiggrpc.TenantConfigurationValues, paths []string) error {
 	for _, path := range paths {
-		switch path {
-		case systemLimitField:
-			if values != nil && values.GetSystemLimit() < 0 {
-				return status.Error(codes.InvalidArgument, "system_limit must be a positive integer; use 0 to clear the limit")
-			}
-		case keyLimitField:
-			if values != nil && values.GetKeyLimit() < 0 {
-				return status.Error(codes.InvalidArgument, "key_limit must be a positive integer; use 0 to clear the limit")
-			}
-		default:
-			return status.Errorf(codes.InvalidArgument, "unknown field mask path: %s", path)
+		val, err := getTenantConfigValueFromMaskPath(values, path)
+		if err != nil {
+			return err
+		}
+		if val < 0 {
+			return status.Errorf(codes.InvalidArgument, "%s must be a positive integer; use 0 to clear the limit", path)
 		}
 	}
 	return nil
+}
+
+func limitOrNil(limit int32) *int32 {
+	if limit <= 0 {
+		return nil
+	}
+	return &limit
 }
 
 // applyTenantConfigMask writes the fields listed in mask from values onto cfg.
@@ -233,19 +249,11 @@ func applyTenantConfigMask(cfg *model.TenantConfig, values *tenantconfiggrpc.Ten
 	for _, path := range mask.GetPaths() {
 		switch path {
 		case systemLimitField:
-			if values != nil && values.GetSystemLimit() > 0 {
-				sl := values.GetSystemLimit()
-				cfg.SystemLimit = &sl
-			} else {
-				cfg.SystemLimit = nil
-			}
+			cfg.SystemLimit = limitOrNil(values.GetSystemLimit())
 		case keyLimitField:
-			if values != nil && values.GetKeyLimit() > 0 {
-				kl := values.GetKeyLimit()
-				cfg.KeyLimit = &kl
-			} else {
-				cfg.KeyLimit = nil
-			}
+			cfg.KeyLimit = limitOrNil(values.GetKeyLimit())
+		case keyConfigLimitField:
+			cfg.KeyConfigLimit = limitOrNil(values.GetKeyConfigLimit())
 		}
 	}
 }
