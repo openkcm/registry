@@ -27,6 +27,7 @@ import (
 
 	authgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/auth/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
+	tenantconfiggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant_config/v1"
 
 	"github.com/openkcm/registry/internal/config"
 )
@@ -136,6 +137,7 @@ func registerHandlers(operator *orbital.Operator) error {
 		tenantgrpc.ACTION_ACTION_BLOCK_TENANT.String(),
 		tenantgrpc.ACTION_ACTION_UNBLOCK_TENANT.String(),
 		tenantgrpc.ACTION_ACTION_TERMINATE_TENANT.String(),
+		tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String(),
 	} {
 		err := operator.RegisterHandler(jobType, handleTenant)
 		if err != nil {

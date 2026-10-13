@@ -14,6 +14,7 @@ import (
 	mappinggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/mapping/v1"
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
+	tenantconfiggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant_config/v1"
 
 	"github.com/openkcm/registry/integration/operatortest"
 	"github.com/openkcm/registry/internal/model"
@@ -728,6 +729,146 @@ func TestSystemMetrics(t *testing.T) {
 
 				// Then
 				assertCounterEqual(t, scraper, ctx, metricMappings, mappingsBefore)
+			})
+		})
+	})
+}
+
+func TestTenantConfigMetrics(t *testing.T) {
+	conn, err := newGRPCClientConn()
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, conn.Close())
+	}()
+
+	tcSubj := tenantconfiggrpc.NewServiceClient(conn)
+
+	scraper, err := newMetricScraper()
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	db, err := startDB()
+	require.NoError(t, err)
+
+	operator, err := operatortest.New(ctx)
+	require.NoError(t, err)
+	go func() { _ = operator.ListenAndRespond(ctx) }()
+
+	t.Run("Updated counter", func(t *testing.T) {
+		// The counter carries only application-level attributes, so match on the always-present
+		// serviceName label to avoid matching the metric's HELP/TYPE comment lines.
+		metric := createMetric(t, "tenant_configurations_updated", "serviceName", "registry")
+
+		t.Run("increase", func(t *testing.T) {
+			t.Run("should happen when a tenant config update completes", func(t *testing.T) {
+				// Given — an active tenant whose config job the operator completes
+				tenant := validTenant()
+				tenant.ID = operatortest.TenantIDSuccess
+				require.NoError(t, createTenantInDB(ctx, db, tenant))
+				defer func() {
+					assert.NoError(t, deleteTenantConfigFromDB(ctx, db, tenant.ID))
+					assert.NoError(t, deleteTenantFromDB(ctx, db, &model.Tenant{ID: tenant.ID}))
+				}()
+
+				updatedBefore, err := getSafeMetric(ctx, scraper, metric)
+				assert.NoError(t, err)
+
+				// When
+				_, err = tcSubj.UpdateTenantConfig(ctx, validUpdateTenantConfigReq(tenant.ID, 42))
+				assert.NoError(t, err)
+
+				err = waitForTenantConfig(ctx, tcSubj, tenant.ID, func(c *tenantconfiggrpc.GetTenantConfigResponse) bool {
+					return c.GetStatus() == tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_ACTIVE
+				})
+				assert.NoError(t, err)
+
+				// Then
+				assertCounterInc(t, scraper, ctx, metric, updatedBefore)
+			})
+
+			t.Run("should not happen if the update job fails", func(t *testing.T) {
+				// Given — an active tenant whose config job the operator fails
+				tenant := validTenant()
+				tenant.ID = operatortest.TenantIDFail
+				require.NoError(t, createTenantInDB(ctx, db, tenant))
+				defer func() {
+					assert.NoError(t, deleteTenantConfigFromDB(ctx, db, tenant.ID))
+					assert.NoError(t, deleteTenantFromDB(ctx, db, &model.Tenant{ID: tenant.ID}))
+				}()
+
+				updatedBefore, err := getSafeMetric(ctx, scraper, metric)
+				assert.NoError(t, err)
+
+				// When
+				_, err = tcSubj.UpdateTenantConfig(ctx, validUpdateTenantConfigReq(tenant.ID, 42))
+				assert.NoError(t, err)
+
+				err = waitForTenantConfig(ctx, tcSubj, tenant.ID, func(c *tenantconfiggrpc.GetTenantConfigResponse) bool {
+					return c.GetStatus() == tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_UPDATING_ERROR
+				})
+				assert.NoError(t, err)
+
+				// Then
+				assertCounterEqual(t, scraper, ctx, metric, updatedBefore)
+			})
+
+			t.Run("should not happen if error occurs", func(t *testing.T) {
+				// Given
+				updatedBefore, err := getSafeMetric(ctx, scraper, metric)
+				assert.NoError(t, err)
+
+				// When — empty request is rejected before any job is enqueued
+				_, err = tcSubj.UpdateTenantConfig(ctx, &tenantconfiggrpc.UpdateTenantConfigRequest{})
+				assert.Error(t, err)
+
+				// Then
+				assertCounterEqual(t, scraper, ctx, metric, updatedBefore)
+			})
+		})
+	})
+
+	t.Run("Status gauge", func(t *testing.T) {
+		metricActive := createMetric(t, "tenant_configurations_total",
+			service.AttrStatus, tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_ACTIVE.String())
+
+		t.Run("increase", func(t *testing.T) {
+			t.Run("should happen for an activated tenant config", func(t *testing.T) {
+				// Given
+				tenant := validTenant()
+				tenant.ID = operatortest.TenantIDSuccess
+				require.NoError(t, createTenantInDB(ctx, db, tenant))
+				defer func() {
+					assert.NoError(t, deleteTenantConfigFromDB(ctx, db, tenant.ID))
+					assert.NoError(t, deleteTenantFromDB(ctx, db, &model.Tenant{ID: tenant.ID}))
+				}()
+
+				activeBefore, err := getSafeMetric(ctx, scraper, metricActive)
+				assert.NoError(t, err)
+
+				// When
+				_, err = tcSubj.UpdateTenantConfig(ctx, validUpdateTenantConfigReq(tenant.ID, 42))
+				assert.NoError(t, err)
+
+				err = waitForTenantConfig(ctx, tcSubj, tenant.ID, func(c *tenantconfiggrpc.GetTenantConfigResponse) bool {
+					return c.GetStatus() == tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_ACTIVE
+				})
+				assert.NoError(t, err)
+
+				// Then
+				assertCounterInc(t, scraper, ctx, metricActive, activeBefore)
+			})
+
+			t.Run("should not happen if error occurs", func(t *testing.T) {
+				// Given
+				activeBefore, err := getSafeMetric(ctx, scraper, metricActive)
+				assert.NoError(t, err)
+
+				// When
+				_, err = tcSubj.UpdateTenantConfig(ctx, &tenantconfiggrpc.UpdateTenantConfigRequest{})
+				assert.Error(t, err)
+
+				// Then
+				assertCounterEqual(t, scraper, ctx, metricActive, activeBefore)
 			})
 		})
 	})

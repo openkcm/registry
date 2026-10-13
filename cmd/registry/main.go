@@ -76,7 +76,7 @@ func main() {
 	systemSrv := service.NewSystem(repository, meters, validation)
 	mappingSrv := service.NewMapping(repository, meters, validation)
 	authSrv := service.NewAuth(repository, orbital, validation)
-	tenantConfigSrv := service.NewTenantConfig(repository, orbital, validation)
+	tenantConfigSrv := service.NewTenantConfig(repository, orbital, meters, validation)
 
 	grpcServer, err := setupGRPCServer(ctx, cfg)
 	handleErr("initializing gRPC server", err)

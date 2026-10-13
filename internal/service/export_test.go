@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 
+	"github.com/openkcm/common-sdk/pkg/commoncfg"
 	"github.com/openkcm/orbital"
+	"go.opentelemetry.io/otel"
 
 	"github.com/openkcm/registry/internal/model"
 	"github.com/openkcm/registry/internal/repository"
@@ -58,10 +60,31 @@ func newTenantConfigValidation() *validation.Validation {
 	return v
 }
 
+// newTestMeters builds a Meters backed by the global (no-op in tests) OTEL meter,
+// so that service unit tests can exercise code paths that record metrics without a
+// real meter provider.
+func newTestMeters() *Meters {
+	ctrs, err := initCounters(context.Background(), otel.Meter(meterName))
+	if err != nil {
+		panic(err)
+	}
+	return &Meters{
+		application:            &commoncfg.Application{},
+		tenantConfigUpdatedCtr: ctrs.tenantConfigUpdatedCtr,
+		systemRegistrationCtr:  ctrs.systemRegistrationCtr,
+		systemDeletionCtr:      ctrs.systemDeletionCtr,
+		connectionCreatedCtr:   ctrs.connectionCreatedCtr,
+		mappingCreatedCtr:      ctrs.mappingCreatedCtr,
+		tenantRegistrationCtr:  ctrs.tenantRegistrationCtr,
+		tenantRemovalCtr:       ctrs.tenantRemovalCtr,
+	}
+}
+
 // NewTenantConfigForTest builds a TenantConfig service without registering orbital job handlers.
 func NewTenantConfigForTest(repo repository.Repository) *TenantConfig {
 	return &TenantConfig{
 		repo:       repo,
+		meters:     newTestMeters(),
 		validation: newTenantConfigValidation(),
 	}
 }
@@ -71,6 +94,7 @@ func NewTenantConfigWithOrbitalForTest(repo repository.Repository, orbital JobPr
 	return &TenantConfig{
 		repo:       repo,
 		orbital:    orbital,
+		meters:     newTestMeters(),
 		validation: newTenantConfigValidation(),
 	}
 }
