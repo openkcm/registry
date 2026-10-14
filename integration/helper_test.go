@@ -5,8 +5,10 @@ package integration_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 	"uuid"
 
 	"github.com/openkcm/common-sdk/pkg/commoncfg"
@@ -14,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"gorm.io/gorm"
 
 	_ "google.golang.org/grpc/health"
@@ -22,6 +25,7 @@ import (
 	mappinggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/mapping/v1"
 	systemgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/system/v1"
 	tenantgrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant/v1"
+	tenantconfiggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant_config/v1"
 	typespb "github.com/openkcm/api-sdk/proto/kms/api/cmk/types/v1"
 
 	"github.com/openkcm/registry/integration/operatortest"
@@ -142,6 +146,15 @@ func validRegisterTenantReq() *tenantgrpc.RegisterTenantRequest {
 	}
 }
 
+// validUpdateTenantConfigReq builds a request that sets the tenant's system_limit.
+func validUpdateTenantConfigReq(tenantID string, systemLimit int32) *tenantconfiggrpc.UpdateTenantConfigRequest {
+	return tenantconfiggrpc.UpdateTenantConfigRequest_builder{
+		TenantId:   &tenantID,
+		Values:     tenantconfiggrpc.TenantConfigurationValues_builder{SystemLimit: &systemLimit}.Build(),
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"system_limit"}},
+	}.Build()
+}
+
 func validRegisterSystemReq() *systemgrpc.RegisterSystemRequest {
 	return &systemgrpc.RegisterSystemRequest{
 		ExternalId: validRandID(),
@@ -218,6 +231,49 @@ func deleteTenantFromDB(ctx context.Context, db *gorm.DB, tenant *model.Tenant) 
 func createTenantInDB(ctx context.Context, db *gorm.DB, tenant *model.Tenant) error {
 	repo := sql.NewRepository(db)
 	return repo.Create(ctx, tenant)
+}
+
+// deleteTenantConfigFromDB removes the tenant config row for the given tenant along with
+// any orbital resources created by its update job.
+func deleteTenantConfigFromDB(ctx context.Context, db *gorm.DB, tenantID string) error {
+	if err := deleteOrbitalResources(ctx, db, tenantID); err != nil {
+		return err
+	}
+	repo := sql.NewRepository(db)
+	_, err := repo.Delete(ctx, &model.TenantConfig{TenantID: tenantID})
+	return err
+}
+
+// waitForTenantConfig polls GetTenantConfig until expState is satisfied or the reconciliation
+// timeout elapses.
+func waitForTenantConfig(ctx context.Context, tcSubj tenantconfiggrpc.ServiceClient, tenantID string, expState func(*tenantconfiggrpc.GetTenantConfigResponse) bool) error {
+	timeout := getReconciliationTimeout()
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	backoff := getInitialPollInterval()
+	startTime := time.Now()
+	attempts := 0
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%w after %v (%d attempts)", ctx.Err(), time.Since(startTime), attempts)
+		default:
+			attempts++
+			resp, err := tcSubj.GetTenantConfig(ctx, tenantconfiggrpc.GetTenantConfigRequest_builder{TenantId: &tenantID}.Build())
+			if err != nil {
+				return err
+			}
+			if expState(resp) {
+				return nil
+			}
+		}
+		time.Sleep(backoff)
+		if backoff < maxPollInterval {
+			backoff = min(backoff*2, maxPollInterval)
+		}
+	}
 }
 
 func createSystemInDB(ctx context.Context, db *gorm.DB, system *model.System) error {

@@ -46,26 +46,33 @@ func InitMeters(ctx context.Context, cfgApp *commoncfg.Application, db *gorm.DB)
 	}
 
 	return &Meters{
-		application:           cfgApp,
-		systemRegistrationCtr: ctrs.systemRegistrationCtr,
-		systemDeletionCtr:     ctrs.systemDeletionCtr,
-		connectionCreatedCtr:  ctrs.connectionCreatedCtr,
-		mappingCreatedCtr:     ctrs.mappingCreatedCtr,
-		tenantRegistrationCtr: ctrs.tenantRegistrationCtr,
-		tenantRemovalCtr:      ctrs.tenantRemovalCtr,
+		application:            cfgApp,
+		tenantConfigUpdatedCtr: ctrs.tenantConfigUpdatedCtr,
+		systemRegistrationCtr:  ctrs.systemRegistrationCtr,
+		systemDeletionCtr:      ctrs.systemDeletionCtr,
+		connectionCreatedCtr:   ctrs.connectionCreatedCtr,
+		mappingCreatedCtr:      ctrs.mappingCreatedCtr,
+		tenantRegistrationCtr:  ctrs.tenantRegistrationCtr,
+		tenantRemovalCtr:       ctrs.tenantRemovalCtr,
 	}, nil
 }
 
 type meterCounters struct {
-	systemRegistrationCtr metric.Int64Counter
-	systemDeletionCtr     metric.Int64Counter
-	connectionCreatedCtr  metric.Int64Counter
-	mappingCreatedCtr     metric.Int64Counter
-	tenantRegistrationCtr metric.Int64Counter
-	tenantRemovalCtr      metric.Int64Counter
+	tenantConfigUpdatedCtr metric.Int64Counter
+	systemRegistrationCtr  metric.Int64Counter
+	systemDeletionCtr      metric.Int64Counter
+	connectionCreatedCtr   metric.Int64Counter
+	mappingCreatedCtr      metric.Int64Counter
+	tenantRegistrationCtr  metric.Int64Counter
+	tenantRemovalCtr       metric.Int64Counter
 }
 
 func initCounters(ctx context.Context, meter metric.Meter) (meterCounters, error) {
+	tenantConfigUpdatedCtr, err := createCounter(ctx, meter, "tenant_configurations.updated", "Counter of tenant configuration updates")
+	if err != nil {
+		return meterCounters{}, err
+	}
+
 	systemRegistrationCtr, err := createCounter(ctx, meter, "systems.registered", "Counter of system registrations, partitioned by region")
 	if err != nil {
 		return meterCounters{}, err
@@ -97,16 +104,23 @@ func initCounters(ctx context.Context, meter metric.Meter) (meterCounters, error
 	}
 
 	return meterCounters{
-		systemRegistrationCtr: systemRegistrationCtr,
-		systemDeletionCtr:     systemDeletionCtr,
-		connectionCreatedCtr:  connectionCreatedCtr,
-		mappingCreatedCtr:     mappingCreatedCtr,
-		tenantRegistrationCtr: tenantRegistrationCtr,
-		tenantRemovalCtr:      tenantRemovalCtr,
+		tenantConfigUpdatedCtr: tenantConfigUpdatedCtr,
+		systemRegistrationCtr:  systemRegistrationCtr,
+		systemDeletionCtr:      systemDeletionCtr,
+		connectionCreatedCtr:   connectionCreatedCtr,
+		mappingCreatedCtr:      mappingCreatedCtr,
+		tenantRegistrationCtr:  tenantRegistrationCtr,
+		tenantRemovalCtr:       tenantRemovalCtr,
 	}, nil
 }
 
 func initGauges(ctx context.Context, meter metric.Meter, db *gorm.DB) error {
+	if err := createObservableGauge(ctx, meter, "tenant_configurations.total", "Gauge of tenant configurations, partitioned by status", func(ctx context.Context, observer metric.Int64Observer) error {
+		return measureTenantConfigurations(ctx, observer, db)
+	}); err != nil {
+		return err
+	}
+
 	if err := createObservableGauge(ctx, meter, "systems.total", "Gauge of systems, partitioned by region and tenant link status",
 		func(ctx context.Context, observer metric.Int64Observer) error {
 			return measureSystems(ctx, observer, db)
@@ -162,6 +176,22 @@ func createObservableGauge(ctx context.Context, meter metric.Meter, name string,
 		return oops.In(ErrDomainMetrics).
 			WithContext(ctx).
 			Wrapf(err, "creating %s meter", name)
+	}
+
+	return nil
+}
+
+func measureTenantConfigurations(ctx context.Context, observer metric.Int64Observer, db *gorm.DB) error {
+	var tenantConfigStatuses []struct {
+		Status string
+		Count  int64
+	}
+	if err := db.WithContext(ctx).Model(new(model.TenantConfig)).Select("count(*) as count, status").Group("status").Scan(&tenantConfigStatuses).Error; err != nil {
+		return err
+	}
+
+	for _, status := range tenantConfigStatuses {
+		observer.Observe(status.Count, metric.WithAttributes(attribute.String(AttrStatus, status.Status)))
 	}
 
 	return nil
@@ -283,13 +313,18 @@ func measureTenants(ctx context.Context, observer metric.Int64Observer, db *gorm
 }
 
 type Meters struct {
-	application           *commoncfg.Application
-	systemRegistrationCtr metric.Int64Counter
-	systemDeletionCtr     metric.Int64Counter
-	connectionCreatedCtr  metric.Int64Counter
-	mappingCreatedCtr     metric.Int64Counter
-	tenantRegistrationCtr metric.Int64Counter
-	tenantRemovalCtr      metric.Int64Counter
+	application            *commoncfg.Application
+	tenantConfigUpdatedCtr metric.Int64Counter
+	systemRegistrationCtr  metric.Int64Counter
+	systemDeletionCtr      metric.Int64Counter
+	connectionCreatedCtr   metric.Int64Counter
+	mappingCreatedCtr      metric.Int64Counter
+	tenantRegistrationCtr  metric.Int64Counter
+	tenantRemovalCtr       metric.Int64Counter
+}
+
+func (m *Meters) handleTenantConfigurationUpdate(ctx context.Context) {
+	m.tenantConfigUpdatedCtr.Add(ctx, 1, metric.WithAttributes(otlp.CreateAttributesFrom(*m.application)...))
 }
 
 func (m *Meters) handleSystemRegistration(ctx context.Context, region string) {

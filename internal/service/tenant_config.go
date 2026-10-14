@@ -33,14 +33,16 @@ type TenantConfig struct {
 
 	repo       repository.Repository
 	orbital    JobPreparer
+	meters     *Meters
 	validation *validation.Validation
 }
 
 // NewTenantConfig creates a new TenantConfig service and registers its orbital job handler.
-func NewTenantConfig(repo repository.Repository, orbital *Orbital, v *validation.Validation) *TenantConfig {
+func NewTenantConfig(repo repository.Repository, orbital *Orbital, meters *Meters, v *validation.Validation) *TenantConfig {
 	tc := &TenantConfig{
 		repo:       repo,
 		orbital:    orbital,
+		meters:     meters,
 		validation: v,
 	}
 	orbital.RegisterJobHandler(tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String(), tc)
@@ -133,15 +135,21 @@ func (tc *TenantConfig) ResolveTasks(ctx context.Context, job orbital.Job, targe
 
 // HandleJobDone transitions the config status to ACTIVE when the orbital job completes.
 func (tc *TenantConfig) HandleJobDone(ctx context.Context, job orbital.Job) error {
-	err := patchTenantConfig(ctx, tc.repo, job.ExternalID, func(cfg *model.TenantConfig) {
+	if err := patchTenantConfig(ctx, tc.repo, job.ExternalID, func(cfg *model.TenantConfig) {
 		cfg.Status = tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_ACTIVE.String()
 		cfg.ErrorMessage = ""
-	})
-	if errors.Is(err, ErrTenantConfigNotFound) {
-		slogctx.Warn(ctx, "tenant config not found on job done", "tenantId", job.ExternalID)
-		return nil
+	}); err != nil {
+		if errors.Is(err, ErrTenantConfigNotFound) {
+			slogctx.Warn(ctx, "tenant config not found on job done", "tenantId", job.ExternalID)
+			return nil
+		}
+
+		return err
 	}
-	return err
+
+	tc.meters.handleTenantConfigurationUpdate(ctx)
+
+	return nil
 }
 
 // HandleJobFailed transitions the config status to UPDATING_ERROR when the orbital job fails.
