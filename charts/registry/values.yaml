@@ -1,191 +1,262 @@
-# Default values for registry.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
+# Default values for the OpenKCM Registry chart.
+#
+# The Registry is the global registry of tenants and systems. It exposes a gRPC API
+# (port 9092) and a status server (port 8888), stores its data in PostgreSQL, and sends
+# tenant jobs to the CMK of each region over an AMQP broker (Orbital).
+#
+# Layout of this file:
+#   1. Names and labels
+#   2. Workload: replicas, image, pod and container settings, probes, resources
+#   3. Networking: service, ports, network policy
+#   4. Extension points: extra containers, volumes and environment variables
+#   5. config: the Registry's own configuration, rendered into /etc/registry/config.yaml
+#
+# Full reference of the Registry configuration:
+#   https://openkcm.io/components/cmk/security/registry-config
+#
+# Comments starting with "# --" document a value (helm-docs format).
 
+###############################################################################
+# 1. Names and labels
+###############################################################################
 
-# Override the "name" value, which is used to annotate some of
-# the resources that are created by this Chart (using "app.kubernetes.io/name").
-# +docs:property
+# -- Override the chart name. Used in resource names and in the
+# `app.kubernetes.io/name` label.
 nameOverride: ""
 
-# Override the "fullname" value. This value is used as part of
-# most of the names of the resources created by this Helm chart.
-# +docs:property
+# -- Override the full name of all resources. Default: `<release name>-registry`,
+# or the release name if it already contains `registry`.
 fullnameOverride: ""
 
-# This namespace allows you to define where the services are installed into.
-# If not set then they use the namespace of the release.
-# This is helpful when installing a chart dependency (sub chart).
+# -- Namespace for all resources. Empty: the namespace of the Helm release.
+# Useful when the chart is installed as a dependency of another chart.
 namespace: ""
 
-# This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+# -- Labels added to every resource of the chart, for example a team or cost center.
+commonLabels: {}
+
+###############################################################################
+# 2. Workload
+###############################################################################
+
+# -- Number of Registry pods. Ignored when `hpa.enabled` is true. Use two or more
+# in production; replicas share the database and need no coordination.
 replicaCount: 1
 
-# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
+# -- Number of old ReplicaSets kept for `kubectl rollout undo`.
+revisionHistoryLimit: 10
+
+# -- Deployment update strategy. Empty uses the Kubernetes default
+# (RollingUpdate with 25% maxSurge and 25% maxUnavailable).
+# Example:
+#   strategy:
+#     type: RollingUpdate
+#     rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+strategy: {}
+
 image:
-  # The container registry to pull the image from.
-  # For example:
-  #   registry: ghcr.io/openkcm
-  #   repository: images/checker
-  # +docs:property
+  # -- Container registry of the image. Set to "" when `repository` contains the
+  # full image name.
   registry: ghcr.io/openkcm
 
-  # The container image
-  # +docs:property
-  repository: images/registry
+  # -- Image repository within `image.registry`. Release images are published as
+  # `ghcr.io/openkcm/registry/images/registry`.
+  repository: registry/images/registry
 
-  # Override the image tag to deploy by setting this variable.
-  # +docs:property
-  # tag: 0.0.1
+  # -- Image tag, for example `v1.9.0`. **Required** unless `image.digest` is set;
+  # the chart does not fall back to the chart's appVersion.
+  tag: ""
 
-  # Setting a digest will override any tag.
-  # +docs:property
-  # digest: sha256:0e072dddd1f7f8fc8909a2ca6f65e76c5f0d2fcfb8be47935ae3457e8bbceb20
+  # -- Image digest, for example `sha256:0e07…`. Takes precedence over `image.tag`.
+  # Use a digest for reproducible deployments.
+  digest: ""
 
-  # Kubernetes imagePullPolicy.
+  # -- Kubernetes image pull policy: `IfNotPresent`, `Always` or `Never`.
   pullPolicy: IfNotPresent
 
-  # Setting the arguments for the container
-  # +docs:property
-  #args:
-  #  - --graceful-shutdown=2
-  #  - --graceful-shutdown-message="Graceful shutdown in %d seconds"
+  # -- Override the container command, as a list or a single string. Empty uses
+  # the image's command (`/registry`). The Registry takes no command-line flags;
+  # it is configured through `config`.
+  command: []
 
-  # Setting the command
-  # +docs:property
-  #command: "./extension-server"
+  # -- Arguments passed to the container command.
+  args: []
 
-
-# This is for the secretes for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+# -- Secrets with credentials for pulling the image from a private registry.
+# Example: `[{ name: registry-access }]`
 imagePullSecrets: []
-  # - name: "registry-access"
 
-# This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
 serviceAccount:
-  # Specifies whether a service account should be created
+  # -- Create a ServiceAccount for the Registry. If false, `serviceAccount.name`
+  # (or `default`) must exist.
   create: true
-  # Automatically mount a ServiceAccount's API credentials?
-  automount: true
-  # Annotations to add to the service account
+  # -- Mount the ServiceAccount token. The Registry does not call the Kubernetes
+  # API; the pod never mounts the token, whatever this value is.
+  automount: false
+  # -- Annotations for the ServiceAccount, for example for workload identity.
   annotations: {}
-  # The name of the service account to use.
-  # If not set and create is true, a name is generated using the fullname template
+  # -- Name of the ServiceAccount. Empty with `create: true`: the chart's full name.
   name: ""
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-# runAsUser: 1000
-
 pod:
-  # This is for setting Kubernetes Annotations to a Pod.
-  # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+  # -- Annotations for the pods, for example for a service mesh
+  # (`linkerd.io/inject: enabled`). The chart always adds `checksum/config`, which
+  # restarts the pods when the configuration changes.
   annotations: {}
-  # This is for setting Kubernetes Labels to a Pod.
-  # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+
+  # -- Additional labels for the pods.
   labels: {}
 
-  securityContext: {}
-    # fsGroup: 2000
+  # -- Pod security context. The defaults run the Registry as a non-root user with
+  # the runtime's default seccomp profile. Both published images run as non-root.
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+  # -- Inject environment variables for the Services of the namespace
+  # (`<SERVICE>_PORT`, …). Keep this off: the Registry reads environment variables
+  # without prefix as configuration overrides, so a Service named `database` would
+  # override `config.database.port`.
+  enableServiceLinks: false
+
+  # -- PriorityClass of the pods. Empty: the cluster default.
+  priorityClassName: ""
+
+  # -- Seconds the pod has to shut down after SIGTERM. Null: the Kubernetes
+  # default (30). The Registry stops accepting calls and finishes running ones.
+  terminationGracePeriodSeconds: null
 
   disruptionBudget:
-    # Enable or disable the PodDisruptionBudget resource.
-    #
-    # This prevents downtime during voluntary disruptions such as during a Node upgrade.
-    # For example, the PodDisruptionBudget will block `kubectl drain`
-    # Pod is currently running.
+    # -- Create a PodDisruptionBudget, which limits how many pods voluntary
+    # disruptions such as node drains may take down at once.
     enabled: false
-
-    # This configures the minimum available pods for disruptions. It can either be set to
-    # an integer (e.g. 1) or a percentage value (e.g. 25%).
-    # It cannot be used if `maxUnavailable` is set.
-    # +docs:property
-    # +docs:type=unknown
+    # -- Minimum number (for example `1`) or percentage (for example `50%`) of pods
+    # that must stay available. Do not set together with `maxUnavailable`. With a
+    # single replica, `minAvailable: 1` blocks node drains.
     # minAvailable: 1
-
-    # This configures the maximum unavailable pods for disruptions. It can either be set to
-    # an integer (e.g. 1) or a percentage value (e.g. 25%).
-    # it cannot be used if `minAvailable` is set.
-    # +docs:property
-    # +docs:type=unknown
+    # -- Maximum number or percentage of pods that may be unavailable. Default
+    # when neither value is set: `1`.
     # maxUnavailable: 1
-  nodeSelector: { }
-  affinity: { }
-  topologySpreadConstraints: [ ]
-  tolerations: [ ]
 
-# This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
+  # -- Node labels the pods must be scheduled on.
+  nodeSelector: {}
+
+  # -- Affinity rules, for example to spread pods across nodes.
+  affinity: {}
+
+  # -- Topology spread constraints, for example across zones:
+  #   - maxSkew: 1
+  #     topologyKey: topology.kubernetes.io/zone
+  #     whenUnsatisfiable: ScheduleAnyway
+  #     labelSelector:
+  #       matchLabels: { app.kubernetes.io/name: registry }
+  topologySpreadConstraints: []
+
+  # -- Tolerations for node taints.
+  tolerations: []
+
+# -- Container security context. The defaults forbid privilege escalation, drop
+# all Linux capabilities and make the root filesystem read-only; `/tmp` is a
+# writable emptyDir (see `tmpVolume`).
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+tmpVolume:
+  # -- Mount a writable emptyDir at `/tmp`. Needed with a read-only root filesystem.
+  enabled: true
+  # -- Size limit of the `/tmp` volume.
+  sizeLimit: 64Mi
+
+# -- CPU and memory of the Registry container. Requests are needed for the
+# autoscaler (`hpa`). No CPU limit is set by default, so the Registry is not
+# throttled under load.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+# -- Startup probe: gives the Registry time to connect to the database and migrate
+# its tables before the liveness probe applies (here up to 60 seconds).
+# Requires `config.status.enabled: true`.
+startupProbe:
+  httpGet:
+    path: /probe/liveness
+    port: http-status
+  periodSeconds: 2
+  failureThreshold: 30
+
+# -- Liveness probe: restarts the container when the process no longer responds.
+livenessProbe:
+  httpGet:
+    path: /probe/liveness
+    port: http-status
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+
+# -- Readiness probe: the Registry is ready when its gRPC health service and the
+# database respond. Requires `config.grpcServer.flags.health: true`.
+readinessProbe:
+  httpGet:
+    path: /probe/readiness
+    port: http-status
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+
+hpa:
+  # -- Create a HorizontalPodAutoscaler. Replaces `replicaCount`. Needs
+  # `resources.requests` for the metrics used.
+  enabled: false
+  # -- Minimum number of pods.
+  minReplicas: 1
+  # -- Maximum number of pods.
+  maxReplicas: 10
+  # -- Target average CPU utilization in percent of the request. Null disables the
+  # CPU metric.
+  targetCPUUtilizationPercentage: 80
+  # -- Target average memory utilization in percent of the request. Null disables
+  # the memory metric.
+  targetMemoryUtilizationPercentage: 80
+  # -- Scaling behavior (stabilization windows and policies) of the autoscaler.
+  behavior: {}
+
+###############################################################################
+# 3. Networking
+###############################################################################
+
 service:
-  # Labels to add to the service
+  # -- Additional labels for the Service.
   labels: {}
-  # Annotations to add to the service
+  # -- Annotations for the Service.
   annotations: {}
-  # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+  # -- Service type. Keep `ClusterIP`: the gRPC API must not be exposed outside
+  # the cluster.
   type: ClusterIP
-  # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+  # -- Ports of the Service. The first port is the gRPC API and is shown in the
+  # release notes. `appProtocol: grpc` lets service meshes handle the traffic as
+  # gRPC.
   ports:
     - name: grpc
       protocol: TCP
       port: 9092
-      targetPort: 9092
+      targetPort: grpc
+      appProtocol: grpc
     - name: http-status
       protocol: TCP
       port: 8888
-      targetPort: 8888
+      targetPort: http-status
 
-
-resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
-
-# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-livenessProbe: {}
-readinessProbe: {}
-
-# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
-hpa:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 80
-  targetMemoryUtilizationPercentage: 80
-
-# Additional init containers on the output Deployment definition.
-extraInitContainers: []
-
-# Additional containers on the output Deployment definition.
-extraContainers: []
-
-# Additional volumes on the output Deployment definition.
-extraVolumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
-
-# Additional volumeMounts on the output Deployment definition.
-extraVolumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
-
-# Additional ens on the output Deployment definition.
-extraEnvs: []
-# Additional envsFrom on the output Deployment definition.
-extraEnvsFrom: []
-
-
+# -- Ports of the Registry container. They must match `config.grpcServer.address`
+# and `config.status.address`. The probes and the network policy refer to them by
+# name.
 ports:
   - name: grpc
     containerPort: 9092
@@ -194,102 +265,211 @@ ports:
     containerPort: 8888
     protocol: TCP
 
+networkPolicy:
+  # -- Create a NetworkPolicy for the Registry pods. **Recommended**: the gRPC API
+  # can create, block and terminate tenants and has no authentication of its own.
+  # When enabled, only the peers listed below can reach the pods; everything else
+  # is denied. Outgoing traffic (database, broker, collector) is not restricted.
+  enabled: false
+  grpc:
+    # -- Peers allowed to call the gRPC API (port `grpc`): CMK, the CMK-2-Krypton
+    # Bridge and your tenant onboarding tooling. NetworkPolicy peer syntax, for
+    # example:
+    #   - namespaceSelector:
+    #       matchLabels: { kubernetes.io/metadata.name: services }
+    #     podSelector:
+    #       matchLabels: { app.kubernetes.io/name: cmk }
+    # Empty: no peer can reach the gRPC API.
+    from: []
+  status:
+    # -- Peers allowed to reach the status port (`http-status`), for example your
+    # metrics collector. Kubelet probes are usually not affected.
+    from: []
+  # -- Additional ingress rules, in NetworkPolicy syntax.
+  extraIngress: []
+
+###############################################################################
+# 4. Extension points
+###############################################################################
+
+# -- Init containers added to the pod.
+extraInitContainers: []
+
+# -- Containers added to the pod, after the Registry container.
+extraContainers: []
+
+# -- Volumes added to the pod, for example the Secrets with database credentials
+# and broker certificates:
+#   - name: db-credentials
+#     secret: { secretName: registry-database }
+#   - name: broker-certs
+#     secret: { secretName: registry-broker-certs }
+extraVolumes: []
+
+# -- Volume mounts added to the Registry container. Do not mount anything at
+# `/etc/registry` itself; it holds the configuration.
+#   - name: db-credentials
+#     mountPath: /etc/credentials/database
+#     readOnly: true
+#   - name: broker-certs
+#     mountPath: /etc/credentials/broker
+#     readOnly: true
+extraVolumeMounts: []
+
+# -- Environment variables added to the Registry container. Variables without
+# prefix that match a configuration key override it, for example `DATABASE_HOST`
+# for `config.database.host`. The database driver also reads the standard
+# PostgreSQL variables; use them for TLS to the database:
+#   - name: PGSSLMODE
+#     value: verify-full
+#   - name: PGSSLROOTCERT
+#     value: /etc/credentials/database/ca.crt
+extraEnvs: []
+
+# -- Sources of environment variables (ConfigMaps or Secrets) for the container.
+extraEnvsFrom: []
+
+configMap:
+  # -- Make the configuration ConfigMap immutable. The chart then adds a hash of
+  # the configuration to its name, so a changed configuration creates a new
+  # ConfigMap during the upgrade. (`config.isImmutable` from older values files is
+  # still honoured.)
+  immutable: false
+  # -- Annotations for the configuration ConfigMap.
+  annotations: {}
+
+###############################################################################
+# 5. Registry configuration
+#
+# Everything under `config` is written to /etc/registry/config.yaml. The Registry
+# rejects unknown keys at startup ("has invalid keys"), so only use the keys below.
+# Key names are case-insensitive.
+#
+# Values marked "value reference" take one of:
+#   { source: embedded, value: "…" }
+#   { source: env, env: VARIABLE_NAME }
+#   { source: file, file: { path: /path, format: binary } }
+#   { source: file, file: { path: /path.json, format: json, jsonPath: "$.field" } }
+###############################################################################
 config:
-  # Database configuration
+
+  application:
+    # -- Name of the application, attached to logs, traces and metrics.
+    name: registry
+    # -- Environment name, attached to logs, traces and metrics, for example
+    # `production` or `staging`.
+    environment: production
+    # -- Additional attributes attached to logs, traces and metrics.
+    labels: {}
+
   database:
+    # -- PostgreSQL host name. **Required.**
     host: "to be set"
+    # -- PostgreSQL port.
     port: 5432
+    # -- Database name. Use a database of its own for the Registry. The Registry
+    # creates and updates its tables at startup, so its user needs the right to
+    # change the schema.
     name: "registry"
+    # -- Database user; value reference. **Required.** Prefer a mounted Secret:
+    #   user: { source: file, file: { path: /etc/credentials/database/username, format: binary } }
     user:
       source: "embedded"
       value: "to be set"
+    # -- Database password; value reference. **Required.** Do not embed it in
+    # production; the ConfigMap is readable by everyone who can read ConfigMaps in
+    # the namespace:
+    #   password: { source: file, file: { path: /etc/credentials/database/password, format: binary } }
     password:
       source: "embedded"
       value: "to be set"
-
-  application:
-    name: registry
-    environment: production
+    # -- SQL logging: 1 silent, 2 errors, 3 warnings, 4 every statement.
+    logLevel: 1
+    # The configuration has no TLS settings; set PGSSLMODE and PGSSLROOTCERT in
+    # `extraEnvs` instead.
 
   grpcServer:
+    # -- Listen address of the gRPC API. Must match the `grpc` container port.
     address: :9092
     flags:
+      # -- Serve the gRPC health service. **Keep true**: the readiness probe uses it.
       health: true
-      reflection: true
+      # -- Serve gRPC server reflection, which lets clients list the API without
+      # its definitions. Keep false in production.
+      reflection: false
     attributes:
-      # maxConnectionIdle is a duration for the amount of time after which an idle connection would be closed by sending a GoAway.
-      maxConnectionIdle: 300s # the default value is infinity.
-
-      # maxConnectionAge is a duration for the maximum amount of time a connection may exist before it will be closed by sending a GoAway.
-      maxConnectionAge: 1800s # the default value is infinity.
-
-      # maxConnectionAgeGrace is an additive period after MaxConnectionAge after which the connection will be forcibly closed.
-      maxConnectionAgeGrace: 5s # the default value is infinity.
-
-      # After a duration of this time, if the server doesn't see any activity, it pings the client to see if the transport is still alive.
-      time: 7200s # the default value is 2 hours.
-
-      # After having pinged for keepalive check, the server waits for a duration of Timeout, and if no activity is seen even after that, the connection is closed.
-      timeout: 20s # the default value is 20 seconds.
-
-    # efPolMinTime is a minimum amount of time a client should wait before sending a keepalive ping.
-    efPolMinTime: 300s # the default value is 5 minutes.
-
-    # If true, the server allows keepalive pings even when there are no active streams(RPCs).
-    # If false, and the client sends ping when there are no active streams, the server will send GOAWAY and close the connection.
-    efPolPermitWithoutStream: false # default value is false.
-
-    maxRecvMsgSize: 4194304 # in bytes (4 MB), the default value is 4 MB.
-
+      # -- Close a connection that has been idle this long. Default: 1800s.
+      maxConnectionIdle: 300s
+      # -- Close connections after this age, so that clients reconnect and spread
+      # over new replicas. Default: 1800s.
+      maxConnectionAge: 1800s
+      # -- Grace period for running calls after `maxConnectionAge`. Default: 300s.
+      maxConnectionAgeGrace: 5s
+      # -- Ping a client after this time without activity. Default: 120m.
+      time: 7200s
+      # -- Close the connection if a ping is not answered within this time.
+      # Default: 20s.
+      timeout: 20s
+    # -- Minimum interval between keepalive pings of a client; faster pings close
+    # the connection. Default: 180s.
+    efPolMinTime: 300s
+    # -- Allow client keepalive pings when no call is running. Default: false.
+    efPolPermitWithoutStream: false
+    # -- Largest accepted request in bytes. Default: 125829120 (120 MiB). The
+    # Registry's requests are small; 4 MiB is plenty.
+    maxRecvMsgSize: 4194304
     client:
+      # Keepalive of the internal client that the readiness check uses to call the
+      # gRPC health service.
       attributes:
-        # Defines how often the client sends keepalive pings to the server.
+        # -- Interval of the health check client's keepalive pings.
         keepaliveTime: 1s
-        # Specifies how long the client waits for a response to a keepalive ping before considering the connection dead.
+        # -- Time the health check client waits for a ping answer.
         keepaliveTimeout: 1s
 
-  # Configuration for the orbital service for tenant provisioning.
   orbital:
-    # confirmJobAfter is the delay before confirming a job. Use time.Duration syntax, e.g. 10ms, 1s, 5m, etc.
-    confirmJobAfter: 0
-    # taskLimitNum is the maximum number of tasks to process concurrently.
+    # -- Delay before a new job is confirmed and sent, as a duration (`500ms`,
+    # `2s`). A short delay gives the request that created the job time to finish.
+    confirmJobAfter: 2s
+    # -- **Required**, greater than 0. Number of tasks processed per run.
     taskLimitNum: 10
-    # maxPendingReconciles is the maximum number of times a task can be reconciled.
+    # -- **Required**, greater than 0. Number of unanswered sends after which a task
+    # fails.
     maxPendingReconciles: 10
-    # backoffBaseIntervalSec is the base interval for exponential backoff in seconds.
+    # -- **Required**, greater than 0. First retry interval in seconds; it doubles
+    # with every retry.
     backoffBaseIntervalSec: 2
-    # backoffMaxIntervalSec is the maximum interval for exponential backoff in seconds.
+    # -- **Required**, greater than 0. Longest retry interval in seconds.
     backoffMaxIntervalSec: 240
-    # targets defines the regions and their respective connection configurations.
-    # Regions must match the tenant regions defined in the registry.
-    targets:
-#      # Example target configuration, replace with actual values.
-#      - region: "to be set"
-#        connection:
-#          # type defines the connection type to the target, only amqp is supported at the moment.
-#          type: amqp
-#          amqp:
-#            # url is the AMQP URL to connect to the message broker including port, e.g. amqps://my-broker-host:5671
-#            url: "amqps://<to be set>"
-#            # source defines the queue to consume messages from, e.g. cmk/global/tenants
-#            source: "to be set"
-#            # target defines the topic to publish messages to, e.g. cmk/emea/tenants
-#            target: "to be set"
-#          auth:
-#            # type defines the authentication method, currently only none and mtls are supported.
-#            type: mtls
-#            # mtls contains the configuration for mutual TLS authentication.
-#            mtls:
-#              # certFile is the path to the client certificate file.
-#              certFile: /etc/certs/tls.crt
-#              # keyFile is the path to the client private key file.
-#              keyFile: /etc/certs/tls.key
-#              # caFile is the path to the CA certificate file for verifying the server certificate.
-#              caFile: /etc/certs/ca.crt
-    # workers defines the configurations for the orbital workers. Existing workers are:
-    # confirm-job, create-task, reconcile, and notify-event.
-    # Each worker has a name, number of workers, execution interval, and timeout.
-    # For execution interval and timeout, use time.Duration syntax, e.g. 1s, 100ms, etc.
+
+    # -- One target per region that has a CMK. A tenant's jobs go to the target
+    # whose `region` equals the tenant's region; without a matching target its jobs
+    # cannot be delivered. **Required** for a working deployment. Example:
+    #   targets:
+    #     - region: emea                      # region name used in RegisterTenant
+    #       connection:
+    #         type: amqp                      # the only supported type
+    #         amqp:
+    #           url: amqps://rabbitmq.services.svc.cluster.local:5671
+    #           # Address the Registry sends jobs to. Must equal the `source` of the
+    #           # CMK tenant manager of this region (tenantManager.amqp.source).
+    #           target: /queues/cmk.emea.tenants
+    #           # Address the Registry reads the answers from. Must equal the
+    #           # `target` of that CMK tenant manager.
+    #           source: /queues/cmk.global.tenants
+    #         auth:
+    #           type: mtls                    # mtls or none; use mtls in production
+    #           mtls:                         # all three files are required
+    #             certFile: /etc/credentials/broker/tls.crt
+    #             keyFile: /etc/credentials/broker/tls.key
+    #             caFile: /etc/credentials/broker/ca.crt
+    targets: []
+
+    # -- Tuning of Orbital's background workers. Workers that are not listed keep
+    # Orbital's defaults. Each needs `noOfWorkers`, `execInterval` and `timeout`
+    # greater than 0. Workers: `confirm-job` (confirms new jobs), `create-task`
+    # (splits jobs into tasks), `reconcile` (sends tasks and processes answers),
+    # `notify-event` (reports finished jobs).
     workers:
       - name: confirm-job
         noOfWorkers: 1
@@ -308,247 +488,153 @@ config:
         execInterval: 1s
         timeout: 5s
 
+  # -- Rules that restrict the values callers may register, in addition to the
+  # API's own checks. Each entry has an `id` (the field) and `constraints`:
+  #   list        spec.allowList: [values]   value (or each list value) is allowed
+  #   regex       spec.pattern: "RE2"        value (or each list value) matches
+  #   non-empty                              value is not empty
+  #   non-empty-keys / non-empty-vals        no empty map keys / values
+  #   map-keys    spec.keys: [{ name, required, constraints }]
+  # Field IDs: Tenant.ID, Tenant.Name, Tenant.Region, Tenant.OwnerID,
+  # Tenant.OwnerType, Tenant.Role, Tenant.Labels, Tenant.UserGroups,
+  # System.ExternalID, System.Type, RegionalSystem.Region, RegionalSystem.Status,
+  # RegionalSystem.L2KeyID, RegionalSystem.Labels, Auth.ExternalID, Auth.TenantID,
+  # Auth.Type, Auth.Properties, Auth.Status, TenantConfig.TenantID.
+  # An unknown `id` stops the Registry at startup unless the entry sets
+  # `skipIfNotExists: true`. Rules apply to every later change of an object, so
+  # tightening a rule can block changes to objects registered before.
+  # The defaults below fit a deployment with CMK. Add your regions and tenant
+  # owner types, for example:
+  #   - id: Tenant.Region
+  #     constraints: [{ type: list, spec: { allowList: ["emea", "us"] } }]
+  #   - id: RegionalSystem.Region
+  #     constraints: [{ type: list, spec: { allowList: ["eu10", "us10"] } }]
+  #   - id: Tenant.OwnerType
+  #     constraints: [{ type: list, spec: { allowList: ["customer"] } }]
+  validations:
+    # CMK applies OpenID Connect settings only.
+    - id: Auth.Type
+      constraints:
+        - type: list
+          spec:
+            allowList: ["oidc"]
+    # Every identity provider needs an issuer.
+    - id: Auth.Properties
+      constraints:
+        - type: map-keys
+          spec:
+            keys:
+              - name: issuer
+                required: true
+                constraints:
+                  - type: non-empty
+    # The groups that CMK creates for each tenant.
+    - id: Tenant.UserGroups
+      constraints:
+        - type: regex
+          spec:
+            pattern: "^KMS_(TenantAdministrator|TenantAuditor)_[A-Za-z0-9-]+$"
+    # CMK accepts only these system types.
+    - id: System.Type
+      constraints:
+        - type: list
+          spec:
+            allowList: ["system", "subaccount"]
+
   status:
+    # -- Serve the status endpoints (`/probe/liveness`, `/probe/readiness`,
+    # `/version` and, if enabled, `/metrics`). Needed by the probes.
     enabled: true
+    # -- Listen address of the status server. Must match the `http-status`
+    # container port.
     address: :8888
+    # -- Serve Go profiling endpoints on the status port, without authentication.
+    # Keep false in production.
     profiling: false
 
   logger:
-    level: debug # one of: trace, debug, info, warn, error
-    # Format of the logs
-    format: json # one of: json, text
+    # -- Log level: `debug`, `info`, `warn` or `error`. `debug` logs request
+    # details; use it only for troubleshooting.
+    level: info
+    # -- Log format: `json` or `text`.
+    format: json
+    # -- Add the source file and line to each log record.
+    source: false
     formatter:
       time:
-        type: pattern # one of: pattern, unix
-        # Used only when the property type: pattern
-        # Should follow golang time pattern
-        # Default value time.RFC3339.
+        # -- Time format: `pattern` (uses `pattern`) or `unix` (uses `precision`).
+        type: pattern
+        # -- Go time layout, used with `type: pattern`.
         pattern: "Mon Jan 02 15:04:05 -0700 2006"
-        # Used only when the property type: unix
-        # Time units are "1ns", "1us" (or "1µs"), "1ms", "1s"
-        # Default value 1s.
+        # -- Unix time precision, used with `type: unix`: `1ns`, `1us`, `1ms` or `1s`.
         precision: 1s
+      # Field names and masking of log records. Example with the defaults:
       # fields:
-      #   # Field names (this way the field name can be changed) to be used on log records; These are their defaults.
-      #   error: "error"
-      #   message: "msg"
-      #   level: "level"
-      #   time: "time"
-      #   # Fields names used by OTEL to track the Trace and Span ID
-      #   otel:
-      #     traceID: "TraceID" # Default is TraceID
-      #     spanID: "SpanID" # Default is SpanID
+      #   time: time
+      #   error: error
+      #   level: level
+      #   message: msg
+      #   otel: { traceID: TraceID, spanID: SpanID }
       #   masking:
-      #     # All fields under PII, the formatters will mask the value and keeping first 4 original characters
-      #     pii:
-      #       - email
-      #       - ip-address
-      #     # All fields under other, the formatters will mask the value, using given mask.
-      #     other:
-      #       jwt-token: "*****"
+      #     pii: [email, ip-address]     # keep the first 4 characters, mask the rest
+      #     other: { jwt-token: "*****" } # replace the whole value
 
+  # OpenTelemetry export of logs, traces and metrics (OTLP). Each signal has:
+  #   enabled    export this signal
+  #   protocol   grpc or http
+  #   host       collector endpoint; value reference, e.g. otel-collector:4317 (grpc)
+  #              or http://otel-collector:4318 (http)
+  #   url        path for http, default /v1/logs, /v1/traces, /v1/metrics
+  #   secretRef  connection security:
+  #                { type: insecure }
+  #                { type: api-token, apiToken: <value reference> }
+  #                { type: mtls, mtls: { cert: <value reference>,
+  #                                       certKey: <value reference>,
+  #                                       serverCa: <value reference> } }
+  # Example of an API token read from a mounted file:
+  #   secretRef:
+  #     type: api-token
+  #     apiToken:
+  #       source: file
+  #       file: { path: /etc/credentials/otel/api-token, format: binary }
   telemetry:
     logs:
+      # -- Export logs over OTLP.
       enabled: false
-      protocol: http # one of: http, grpc; Default is http
-      # Host configures the target endpoint for logs export
-      # Host configuration example set as a value:
-      # host:
-      #   source: embedded
-      #   value: http://localhost:4318
-      # Host configuration example load value from an environment variable:
+      # -- OTLP protocol: `grpc` or `http`.
+      protocol: http
+      # -- Collector endpoint; value reference. Read here from the variable
+      # `OTEL_HOST`, which you can set in `extraEnvs`.
       host:
         source: env
         env: OTEL_HOST
-      # Host configuration example load value from a JSON file:
-      # host:
-      #   source: file
-      #   file:
-      #     path: /etc/credentials/config.json
-      #     format: json # one of: json
-      #     jsonPath: "$.credentials.ingest-otlp-endpoint" # Syntax JSONPath Query Expression
-      # URL configures the path for http; default is /v1/logs
-      # url: /v1/logs
-      # OpenTelemetry secret connections; Applicable in the same way for logs, traces and metrics
-      # Insecure configuration example:
+      # -- Connection security; see above.
       secretRef:
-        type: insecure # one of: insecure, mtls, api-token
-      # APIToken configuration example loading directly from embedded value
-      #   secretRef:
-      #     type: api-token # one of: insecure, mtls, api-token
-      #     apiToken:
-      #       source: embedded
-      #       value: "unknown"
-      # APIToken configuration example loading value from environment variable:
-      #   secretRef:
-      #     type: api-token # one of: insecure, mtls, api-token
-      #     apiToken:
-      #       source: env
-      #       env: OTEL_API_TOKEN
-      # APIToken configuration example loading value from binary file as is:
-      #   secretRef:
-      #     type: api-token # one of: insecure, mtls, api-token
-      #     apiToken:
-      #       source: file
-      #       path: /etc/credentials/api-token
-      #       format: binary # one of: json, binary
-      # APIToken configuration example loading value from JSON file, extracting a specific field:
-      #   secretRef:
-      #     type: api-token # one of: insecure, mtls, api-token
-      #     apiToken:
-      #       source: file
-      #       path: /etc/credentials/api-token.json
-      #       format: json # one of: json, binary
-      #       jsonPath: "$.credentials.api-token" # Syntax JSONPath Query Expression
-      # mTLS configuration example loading value from environment variables:
-      #   secretRef:
-      #     type: mtls # one of: insecure, mtls, api-token
-      #     mtls:
-      #       cert:
-      #         source: env
-      #         env: OTEL_X509_CERT
-      #       certKey:
-      #         source: env
-      #         env: OTEL_X509_CERT_KEY
-      #       serverCA:
-      #         source: env
-      #         env: OTEL_X509_SERVER_CA
-      # mTLS configuration example loading value from binary file as is:
-      #   secretRef:
-      #     type: mtls # one of: insecure, mtls, api-token
-      #     mtls:
-      #       cert:
-      #         source: file
-      #         file:
-      #           path: /etc/credentials/cert.pem
-      #           format: binary # one of: json, binary
-      #       certKey:
-      #         source: file
-      #         file:
-      #           path: /etc/credentials/cert-key.pem
-      #           format: binary # one of: json, binary
-      #       serverCA:
-      #         source: file
-      #         file:
-      #           path: /etc/credentials/server-ca.pem
-      #           format: binary # one of: json, binary
-      # mTLS configuration example loading value from JSON file, extracting a specific field:
-      #   secretRef:
-      #     type: mtls # one of: insecure, mtls, api-token
-      #     mtls:
-      #       cert:
-      #         source: file
-      #         file:
-      #           path: /etc/credentials/config.json
-      #           format: json # one of: json, binary
-      #           jsonPath: "$.credentials.ingest-otlp-cert" # Syntax JSONPath Query Expression
-      #       certKey:
-      #         source: file
-      #         file:
-      #           path: /etc/credentials/config.json
-      #           format: json # one of: json, binary
-      #           jsonPath: "$.credentials.ingest-otlp-key" # Syntax JSONPath Query Expression
-      #       serverCA:
-      #         source: file
-      #         file:
-      #           path: /etc/credentials/config.json
-      #           format: json # one of: json, binary
-      #           jsonPath: "$.credentials.server-ca" # Syntax JSONPath Query Expression
-
+        type: insecure
     traces:
+      # -- Export traces over OTLP.
       enabled: false
-      protocol: http # one of: http, grpc; Default is http
-      # Host configures the target endpoint for traces export
-      # Host configuration example set as a value:
-      # host:
-      #   source: embedded
-      #   value: http://localhost:4318
-      # Host configuration example load value from an environment variable:
+      # -- OTLP protocol: `grpc` or `http`.
+      protocol: http
+      # -- Collector endpoint; value reference.
       host:
         source: env
         env: OTEL_HOST
-      # Host configuration example load value from a JSON file:
-      # host:
-      #   source: file
-      #   file:
-      #     path: /etc/credentials/config.json
-      #     format: json # one of: json
-      #     jsonPath: "$.credentials.ingest-otlp-endpoint" # Syntax JSONPath Query Expression
-      # URL configures the path for http; default is /v1/traces
-      # url: /v1/traces
-      # OpenTelemetry traces secret; See examples from logs.
-      # Insecure configuration example:
+      # -- Connection security; see above.
       secretRef:
-        type: insecure # one of: insecure, mtls, api-token
-
+        type: insecure
     metrics:
+      # -- Export metrics over OTLP.
       enabled: false
-      protocol: http # one of: http, grpc; Default is http
-      # Host configures the target endpoint for metrics export
-      # Host configuration example set as a value:
-      # host:
-      #   source: embedded
-      #   value: http://localhost:4318
-      # Host configuration example load value from an environment variable:
+      # -- OTLP protocol: `grpc` or `http`.
+      protocol: http
+      # -- Collector endpoint; value reference.
       host:
         source: env
         env: OTEL_HOST
-      # Host configuration example load value from a JSON file:
-      # host:
-      #   source: file
-      #   file:
-      #     path: /etc/credentials/config.json
-      #     format: json # one of: json
-      #     jsonPath: "$.credentials.ingest-otlp-endpoint" # Syntax JSONPath Query Expression
-      # URL configures the path for http; default is /v1/metrics
-      # url: /v1/metrics
-      # OpenTelemetry metrics secret; See examples from logs.
-      # Insecure configuration example:
+      # -- Connection security; see above.
       secretRef:
-        type: insecure # one of: insecure, mtls, api-token
-
-      # Metrics exposed through /metrics endpoint for prometheus
+        type: insecure
       prometheus:
+        # -- Serve metrics for Prometheus on the status port at `/metrics`.
         enabled: false
-
-  # Validation configurations.
-  validations:
-    - id: Auth.Type # configures validation constraints for the Type field of a Auth
-      constraints: 
-      - type: list # defines the allowed values for the Type field
-        spec:
-          allowlist: ["type1","type2","type3"] # restricts Type to either "type1", "type2" or "type3"
-    - id: Auth.Properties # configures validation constraints for the Properties field of Auth
-      constraints:
-      - type: map-keys
-        spec:
-          keys:
-          - name: issuer # configure validation constraint for the issuer key in the properties map
-            required: true
-            constraints:
-              - type: non-empty # defines that the value corresponding of the Issuer key cannot be empty if the key is present
-    - id: Tenant.OwnerType # configures validation constraints for the OwnerType field of a Tenant
-      constraints:
-      - type: list # defines the allowed values for the OwnerType field
-        spec:
-          allowlist: ["type1","type2"] # restricts OwnerType to either "type1" or "type2"
-    - id: Tenant.Region # configures validation constraints for the Region field of a Tenant
-      constraints:
-      - type: list # defines the allowed values for the Region field
-        spec:
-          allowlist: ["region1","region2"] # restricts Region to either "region1" or "region2"
-    - id: Tenant.UserGroups
-      constraints:
-      - type: regex
-        spec:
-          pattern: "^KMS_(TenantAdministrator|TenantAuditor)_[A-Za-z0-9-]+$"
-    - id: System.Type # configures validation constraints for the Type field of a System
-      constraints:
-      - type: list # defines the allowed values for the Type field
-        spec:
-          allowlist: ["system", "application"] # restricts Type to either "system" or "application"
-    - id: RegionalSystem.Region # configures validation constraints for the Region field of a System
-      constraints:
-      - type: list # defines the allowed values for the Region field
-        spec:
-          allowlist: ["region-A", "region-B"] # restricts Region to either "region-A" or "region-B"
