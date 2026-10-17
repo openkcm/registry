@@ -172,15 +172,18 @@ tmpVolume:
   # -- Size limit of the `/tmp` volume.
   sizeLimit: 64Mi
 
-# -- CPU and memory of the Registry container. Requests are needed for the
-# autoscaler (`hpa`). No CPU limit is set by default, so the Registry is not
-# throttled under load.
+# -- CPU, memory and ephemeral storage of the Registry container. Requests are needed
+# for the autoscaler (`hpa`). No CPU limit is set by default, so the Registry is not
+# throttled under load. The ephemeral-storage limit covers the container's logs and the
+# `/tmp` volume (`tmpVolume.sizeLimit`); a pod that exceeds it is evicted.
 resources:
   requests:
     cpu: 100m
     memory: 128Mi
+    ephemeral-storage: 128Mi
   limits:
     memory: 512Mi
+    ephemeral-storage: 512Mi
 
 # -- Startup probe: gives the Registry time to connect to the database and migrate
 # its tables before the liveness probe applies (here up to 60 seconds).

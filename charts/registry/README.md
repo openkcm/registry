@@ -120,7 +120,7 @@ The release notes list warnings for settings that are not production-ready.
 | `config.validations` | CMK-compatible rules | Restrict registered values; add your regions |
 | `networkPolicy.enabled` | `false` | **Recommended.** Restrict the gRPC API to its callers |
 | `extraEnvs` | `[]` | For example `PGSSLMODE=verify-full` for TLS to PostgreSQL |
-| `resources` | 100m CPU, 128Mi memory requested; 512Mi memory limit | |
+| `resources` | 100m CPU, 128Mi memory and 128Mi ephemeral storage requested; 512Mi memory and 512Mi ephemeral storage limits | |
 | `hpa.enabled` | `false` | Autoscale on CPU and memory |
 | `pod.disruptionBudget.enabled` | `false` | Limit voluntary disruptions |
 | `configMap.immutable` | `false` | Immutable configuration, versioned by a content hash |
