@@ -96,14 +96,14 @@ func (tc *TenantConfig) ConfirmJob(ctx context.Context, job orbital.Job) (orbita
 	cfg, err := getTenantConfig(ctx, tc.repo, job.ExternalID)
 	if err != nil {
 		if errors.Is(err, ErrTenantConfigNotFound) {
-			return orbital.CancelJobConfirmer("tenant config not found"), nil
+			return cancelOrWaitJobConfirmer(ctx, job, "tenant config not found"), nil
 		}
 		slogctx.Error(ctx, "failed to load tenant config for job confirmation", "error", err, "jobId", job.ID.String())
 		return nil, err
 	}
 
 	if cfg.Status != tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_UPDATING.String() {
-		return orbital.CancelJobConfirmer("tenant config not in UPDATING status: " + cfg.Status), nil
+		return cancelOrWaitJobConfirmer(ctx, job, "tenant config not in UPDATING status: "+cfg.Status), nil
 	}
 
 	return orbital.CompleteJobConfirmer(), nil
