@@ -12,7 +12,6 @@ import (
 	"uuid"
 
 	"github.com/openkcm/common-sdk/pkg/commoncfg"
-	"github.com/openkcm/orbital"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -189,26 +188,29 @@ func unlinkSystemFromTenant(ctx context.Context, s systemgrpc.ServiceClient, m m
 	return err
 }
 
+// deleteOrbitalResources deletes the orbital jobs of the given external ID, with their tasks,
+// cursors and events. Only the job IDs are read: GORM cannot map orbital.Job, whose Labels
+// field has no SQL data type.
 func deleteOrbitalResources(ctx context.Context, db *gorm.DB, externalID string) error {
-	var jobs []orbital.Job
-	err := db.WithContext(ctx).Table("jobs").Find(&jobs).Where("external_id = ?", externalID).Error
+	var jobIDs []string
+	err := db.WithContext(ctx).Table("jobs").Where("external_id = ?", externalID).Pluck("id", &jobIDs).Error
 	if err != nil {
 		return err
 	}
-	for _, job := range jobs {
-		err := db.WithContext(ctx).Table("tasks").Where("job_id = ?", job.ID).Delete(nil).Error
+	for _, jobID := range jobIDs {
+		err := db.WithContext(ctx).Table("tasks").Where("job_id = ?", jobID).Delete(nil).Error
 		if err != nil {
 			return err
 		}
-		err = db.WithContext(ctx).Table("job_cursor").Where("id = ?", job.ID).Delete(nil).Error
+		err = db.WithContext(ctx).Table("job_cursor").Where("id = ?", jobID).Delete(nil).Error
 		if err != nil {
 			return err
 		}
-		err = db.WithContext(ctx).Table("job_event").Where("id = ?", job.ID).Delete(nil).Error
+		err = db.WithContext(ctx).Table("job_event").Where("id = ?", jobID).Delete(nil).Error
 		if err != nil {
 			return err
 		}
-		err = db.WithContext(ctx).Table("jobs").Where("id = ?", job.ID).Delete(nil).Error
+		err = db.WithContext(ctx).Table("jobs").Where("id = ?", jobID).Delete(nil).Error
 		if err != nil {
 			return err
 		}

@@ -274,7 +274,7 @@ func (a *Auth) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConf
 	auth, err := getAuth(ctx, a.repo, job.ExternalID)
 	if err != nil {
 		if errors.Is(err, ErrAuthNotFound) {
-			return orbital.CancelJobConfirmer("auth not found"), nil
+			return cancelOrWaitJobConfirmer(ctx, job, "auth not found"), nil
 		}
 		slogctx.Error(ctx, "failed to get auth for job confirmation", "error", err)
 		return nil, err
@@ -285,8 +285,7 @@ func (a *Auth) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobConf
 		return orbital.CompleteJobConfirmer(), nil
 	case authgrpc.AuthAction_AUTH_ACTION_REMOVE_AUTH.String():
 		if auth.Status != authgrpc.AuthStatus_AUTH_STATUS_REMOVING.String() {
-			slogctx.Error(ctx, AuthInvalidStatusMsg, "status", auth.Status)
-			return orbital.CancelJobConfirmer(fmt.Sprintf("%s: %s",
+			return cancelOrWaitJobConfirmer(ctx, job, fmt.Sprintf("%s: %s",
 				ErrAuthInvalidStatus, auth.Status)), nil
 		}
 		return orbital.CompleteJobConfirmer(), nil

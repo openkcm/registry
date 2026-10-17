@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/openkcm/orbital"
 	"github.com/stretchr/testify/assert"
@@ -532,6 +533,7 @@ func TestConfirmJob(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, result)
+		assert.Equal(t, orbital.CancelJobConfirmer("").Type(), result.Type())
 	})
 
 	t.Run("cancels when status is not UPDATING", func(t *testing.T) {
@@ -544,6 +546,37 @@ func TestConfirmJob(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, result)
+		assert.Equal(t, orbital.CancelJobConfirmer("").Type(), result.Type())
+	})
+
+	// A job can be seen before the transaction that prepared it has committed: young jobs
+	// are retried instead of being canceled.
+	t.Run("retries a young job while the config is not visible yet", func(t *testing.T) {
+		repo := &fakeTenantConfigRepo{}
+		subj := service.NewTenantConfigForTest(repo)
+		job := newOrbitalJob(tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String(), "")
+		job.CreatedAt = time.Now().UnixNano()
+
+		result, err := subj.ConfirmJob(context.Background(), job)
+
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, orbital.ContinueJobConfirmer().Type(), result.Type())
+	})
+
+	t.Run("retries a young job while the status is not UPDATING yet", func(t *testing.T) {
+		repo := &fakeTenantConfigRepo{
+			cfg: &model.TenantConfig{TenantID: "t-1", Status: tenantconfiggrpc.TenantConfigStatus_TENANT_CONFIG_STATUS_ACTIVE.String()},
+		}
+		subj := service.NewTenantConfigForTest(repo)
+		job := newOrbitalJob(tenantconfiggrpc.TenantConfigAction_TENANT_CONFIG_ACTION_UPDATE.String(), "")
+		job.CreatedAt = time.Now().UnixNano()
+
+		result, err := subj.ConfirmJob(context.Background(), job)
+
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, orbital.ContinueJobConfirmer().Type(), result.Type())
 	})
 
 	t.Run("completes when status is UPDATING", func(t *testing.T) {
@@ -556,6 +589,7 @@ func TestConfirmJob(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, result)
+		assert.Equal(t, orbital.CompleteJobConfirmer().Type(), result.Type())
 	})
 }
 
