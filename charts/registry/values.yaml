@@ -365,8 +365,6 @@ configMap:
 #   { source: file, file: { path: /path.json, format: json, jsonPath: "$.field" } }
 ###############################################################################
 config:
-  isImmutable: false
-
   # -- Environment name (`application.environment`), attached to logs, traces, metrics and
   # audit events.
   environment: production
