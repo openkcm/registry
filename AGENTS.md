@@ -37,6 +37,9 @@ go test -tags=integration -run TestName ./integration/...
 # Helm chart tests (needs a running k8s cluster)
 make helm-test
 
+# Helm chart unit tests only (renders the chart with helm template; no cluster needed)
+go test -count=1 -tags=helmtest ./helmtest/unit/...
+
 # Run locally
 make docker-compose-dependencies-up
 go run ./cmd/registry/main.go         # reads ./config.yaml or /etc/registry/config.yaml

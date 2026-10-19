@@ -15,6 +15,8 @@ keywords:
 # Version of the chart. Increment it for every change to the chart.
 # Versions follow Semantic Versioning (https://semver.org/).
 version: 1.4.0
-# Registry release this chart is made for: the tag of its image, and the default of image.tag.
-# The workflow update-app-versions opens a pull request when openkcm/registry has a newer release.
-appVersion: "v1.9.0"
+# Registry release this chart deploys by default: the tag of its image (default of image.tag).
+# release-please updates it in each release pull request (marker on the line). Increase
+# `version` in the same pull request, otherwise the chart release workflow skips the
+# already-published chart version.
+appVersion: "v1.9.0" # x-release-please-version

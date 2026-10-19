@@ -57,14 +57,14 @@ strategy: {}
 image:
   # -- Container registry of the image. Set to "" when `repository` contains the
   # full image name.
-  registry: ghcr.io/openkcm/charts/registry
+  registry: ghcr.io/openkcm
 
   # -- Image repository within `image.registry`. Release images are published as
   # `ghcr.io/openkcm/registry/images/registry`.
   repository: registry/images/registry
 
-  # -- Image tag, for example `v1.9.0`. Empty: the chart's appVersion, the Registry version
-  # this chart release is made for and that its OCM component references.
+  # -- Image tag, for example `v1.9.0`. Empty: the chart's appVersion, the Registry
+  # release this chart deploys by default.
   tag: ""
 
   # -- Image digest, for example `sha256:0e07…`. Takes precedence over `image.tag`.
@@ -107,10 +107,17 @@ pod:
   # -- Additional labels for the pods.
   labels: {}
 
-  # -- Pod security context. The defaults run the Registry as a non-root user with
-  # the runtime's default seccomp profile. Both published images run as non-root.
+  # -- Pod security context. The defaults run the Registry as user and group 65532
+  # (`nonroot` of the distroless release image), give that group access to the
+  # mounted volumes (`fsGroup`) and use the runtime's default seccomp profile.
+  # `runAsUser` is needed with `runAsNonRoot`: the kubelet refuses to start an image
+  # whose user is a name, such as `USER nonroot`, because it cannot check that the
+  # user is not root.
   securityContext:
     runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
     seccompProfile:
       type: RuntimeDefault
 
@@ -185,9 +192,10 @@ resources:
     memory: 512Mi
     ephemeral-storage: 512Mi
 
-# -- Startup probe: gives the Registry time to connect to the database and migrate
-# its tables before the liveness probe applies (here up to 60 seconds).
-# Requires `config.status.enabled: true`.
+# -- Startup probe: gives the Registry time to start its status server (here up to
+# 60 seconds) before the liveness probe applies. `/probe/liveness` answers as soon as
+# the status server runs, before the Registry connects to the database; the readiness
+# probe checks the database. Requires `config.status.enabled: true`.
 startupProbe:
   httpGet:
     path: /probe/liveness
@@ -335,7 +343,9 @@ extraEnvsFrom: []
 configMap:
   # -- Make the configuration ConfigMap immutable. The chart then adds a hash of
   # the configuration to its name, so a changed configuration creates a new
-  # ConfigMap during the upgrade. (`config.isImmutable` from older values files is
+  # ConfigMap during the upgrade and Helm deletes the previous one. Roll back with
+  # `helm rollback`, not `kubectl rollout undo`: the previous pods would mount the
+  # deleted ConfigMap and not start. (`config.isImmutable` from older values files is
   # still honoured.)
   immutable: false
   # -- Annotations for the configuration ConfigMap.
@@ -495,7 +505,10 @@ config:
 
   # -- Rules that restrict the values callers may register, in addition to the
   # API's own checks. Each entry has an `id` (the field) and `constraints`:
-  #   list        spec.allowList: [values]   value (or each list value) is allowed
+  #   list        spec.allowList: [values]   value is one of the values. Single values
+  #                                          only: on a list field such as
+  #                                          Tenant.UserGroups every check fails
+  #                                          ("value has wrong type"); use regex there
   #   regex       spec.pattern: "RE2"        value (or each list value) matches
   #   non-empty                              value is not empty
   #   non-empty-keys / non-empty-vals        no empty map keys / values
@@ -508,8 +521,9 @@ config:
   # An unknown `id` stops the Registry at startup unless the entry sets
   # `skipIfNotExists: true`. Rules apply to every later change of an object, so
   # tightening a rule can block changes to objects registered before.
-  # The defaults below fit a deployment with CMK. Add your regions and tenant
-  # owner types, for example:
+  # The defaults below fit a deployment with CMK. A `validations` list in your values
+  # replaces them (Helm replaces lists), so repeat the default rules you keep. Add your
+  # regions and tenant owner types, for example:
   #   - id: Tenant.Region
   #     constraints: [{ type: list, spec: { allowList: ["emea", "us"] } }]
   #   - id: RegionalSystem.Region
@@ -573,22 +587,25 @@ config:
         pattern: "Mon Jan 02 15:04:05 -0700 2006"
         # -- Unix time precision, used with `type: unix`: `1ns`, `1us`, `1ms` or `1s`.
         precision: 1s
-      # Field names and masking of log records. Example with the defaults:
-      # fields:
-      #   time: time
-      #   error: error
-      #   level: level
-      #   message: msg
-      #   otel: { traceID: TraceID, spanID: SpanID }
-      #   masking:
-      #     pii: [email, ip-address]     # keep the first 4 characters, mask the rest
-      #     other: { jwt-token: "*****" } # replace the whole value
+      # Field names and masking of log records. Keys not set here keep the Registry's
+      # defaults: `time: time`, `error: error`, `message: msg`,
+      # `otel: { traceId: traceId, spanId: spanId }` and no masking. Example:
+      #   fields:
+      #     level: level
+      #     otel: { traceId: trace_id, spanId: span_id }
+      #     masking:
+      #       pii: [email, ip-address]     # keep the first 4 characters, mask the rest
+      #       other: { jwt-token: "*****" } # replace the whole value
+      fields:
+        # -- Name of the log level field. The Registry's own default is `info`, which
+        # writes `"info":"INFO"`; the chart uses `level`.
+        level: level
 
   # OpenTelemetry export of logs, traces and metrics (OTLP). Each signal has:
   #   enabled    export this signal
   #   protocol   grpc or http
-  #   host       collector endpoint; value reference, e.g. otel-collector:4317 (grpc)
-  #              or http://otel-collector:4318 (http)
+  #   host       collector endpoint as host:port, without scheme or path; value
+  #              reference, e.g. otel-collector:4317 (grpc) or otel-collector:4318 (http)
   #   url        path for http, default /v1/logs, /v1/traces, /v1/metrics
   #   secretRef  connection security:
   #                { type: insecure }

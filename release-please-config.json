@@ -46,7 +46,13 @@
   "release-search-depth": 400,
   "packages": {
     ".": {
-      "release-type": "go"
+      "release-type": "go",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "charts/registry/Chart.yaml"
+        }
+      ]
     }
   },
   "changelog": {

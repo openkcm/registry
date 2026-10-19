@@ -90,13 +90,24 @@ config:
               certFile: /etc/credentials/broker/tls.crt
               keyFile: /etc/credentials/broker/tls.key
               caFile: /etc/credentials/broker/ca.crt
+  # This list replaces the chart's default validations (Helm replaces lists), so it
+  # repeats the four default rules and adds Tenant.Region.
   validations:
-    - id: Tenant.Region
-      constraints: [{ type: list, spec: { allowList: ["emea"] } }]
     - id: Auth.Type
       constraints: [{ type: list, spec: { allowList: ["oidc"] } }]
+    - id: Auth.Properties
+      constraints:
+        - type: map-keys
+          spec:
+            keys: [{ name: issuer, required: true, constraints: [{ type: non-empty }] }]
+    - id: Tenant.UserGroups
+      constraints:
+        - type: regex
+          spec: { pattern: "^KMS_(TenantAdministrator|TenantAuditor)_[A-Za-z0-9-]+$" }
     - id: System.Type
       constraints: [{ type: list, spec: { allowList: ["system", "subaccount"] } }]
+    - id: Tenant.Region
+      constraints: [{ type: list, spec: { allowList: ["emea"] } }]
 ```
 
 Install the chart:
@@ -116,7 +127,7 @@ The release notes list warnings for settings that are not production-ready.
 | `replicaCount` | `1` | Use two or more in production |
 | `config.database.*` | placeholders | **Required.** PostgreSQL connection; load credentials from a Secret |
 | `config.orbital.targets` | `[]` | **Required.** One entry per CMK region |
-| `config.validations` | CMK-compatible rules | Restrict registered values; add your regions |
+| `config.validations` | CMK-compatible rules | Restrict registered values; add your regions. A list you set replaces the defaults, so repeat the default rules |
 | `networkPolicy.enabled` | `false` | **Recommended.** Restrict the gRPC API to its callers |
 | `extraEnvs` | `[]` | For example `PGSSLMODE=verify-full` for TLS to PostgreSQL |
 | `resources` | 100m CPU, 128Mi memory and 128Mi ephemeral storage requested; 512Mi memory and 512Mi ephemeral storage limits | |
@@ -128,7 +139,7 @@ The release notes list warnings for settings that are not production-ready.
 
 | Setting | Default |
 | --- | --- |
-| Pod | Non-root, `RuntimeDefault` seccomp profile, no ServiceAccount token, no Service environment variables |
+| Pod | User and group 65532 (non-root), `RuntimeDefault` seccomp profile, no ServiceAccount token, no Service environment variables |
 | Container | No privilege escalation, all capabilities dropped, read-only root filesystem, writable `/tmp` |
 | gRPC reflection | Off |
 | Profiling endpoints | Off |
@@ -158,17 +169,23 @@ section per setting: `application`, `status`, `logger`, `telemetry`, `grpcServer
 Inside a section, the Registry rejects unknown keys at startup. Keys that only control the
 chart, such as `configMap.immutable`, are outside `config`.
 
+With `configMap.immutable: true`, every configuration change creates a ConfigMap with a
+new name and Helm deletes the previous one. Roll back with `helm rollback`, which
+restores the previous ConfigMap. `kubectl rollout undo` does not work: the previous pods
+mount the deleted ConfigMap and do not start.
+
 ## Upgrading from 1.3.x
 
 | Change | Action |
 | --- | --- |
-| Default image repository is now `registry/images/registry` | If you set `image.repository` yourself, nothing changes |
-| The ConfigMap is named after the release (`<release>-registry-config`) instead of always `registry-config`, so two releases no longer collide | None; the chart switches the pods to the new ConfigMap. For a release named `registry` the name stays `registry-config` |
+| Default image repository is now `registry/images/registry`, so the default image is `ghcr.io/openkcm/registry/images/registry`, where release images are published. `image.tag` defaults to the chart's appVersion | If you set `image.repository` yourself, nothing changes. `image.tag` is no longer required |
+| The ConfigMap is named after the chart's full name (`<fullname>-config`) instead of always `registry-config`, so two releases no longer collide. The full name is `<release>-registry`, or the release name if it contains `registry` | None; the chart switches the pods to the new ConfigMap. For a release named `registry` the name stays `registry-config` |
 | `config.isImmutable` is no longer written into `config.yaml` | Prefer `configMap.immutable`. The old key still works |
-| New security defaults (non-root, read-only root filesystem, dropped capabilities) | Both published images run as non-root. Override `securityContext` and `pod.securityContext` only if a custom image needs it |
+| New security defaults (user and group 65532, read-only root filesystem, dropped capabilities) | The release image runs as this user (`nonroot`). Override `securityContext` and `pod.securityContext` only if a custom image needs another user |
 | Probes and resource requests are set by default | Override `livenessProbe`, `readinessProbe`, `startupProbe` and `resources` if needed |
 | `enableServiceLinks` is off | Set `pod.enableServiceLinks: true` if something in the pod needs Service variables |
 | `config.grpcServer.flags.reflection` defaults to `false`, `config.logger.level` to `info`, `config.orbital.confirmJobAfter` to `2s` | Set them back explicitly if you rely on the old behaviour |
+| Log records carry the level in the field `level` (`config.logger.formatter.fields.level: level`) instead of `info` | Update log queries that read the `info` field, or set `config.logger.formatter.fields.level: info` |
 | The placeholder `validations` were replaced by rules that fit CMK | Review your `validations`; add `Tenant.Region` and others for your deployment |
 | `image.command` accepts a list | A single string still works |
 | PodDisruptionBudget without `minAvailable` or `maxUnavailable` uses `maxUnavailable: 1` | Set `minAvailable` explicitly if you want the old behaviour |
