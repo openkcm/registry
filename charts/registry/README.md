@@ -6,7 +6,8 @@ stores its data in PostgreSQL, and sends tenant jobs to the CMK of each region
 over an AMQP broker.
 
 Every value is documented in [values.yaml](values.yaml). Every setting of the
-Registry itself, under `config`, is described in the
+Registry itself, under `config`, is documented there with its default, its allowed
+values and examples, and described in the
 [Registry configuration reference](https://openkcm.io/components/cmk/security/registry-config).
 
 ## What the chart creates
@@ -195,8 +196,10 @@ mount the deleted ConfigMap and do not start.
 | --- | --- |
 | Pod exits with `has invalid keys` | A key under `config` is not a Registry setting |
 | Pod exits with `… must be greater than zero` | A required `config.orbital` value is missing |
+| Pod exits at startup with an AMQP or certificate error | A broker in `config.orbital.targets` cannot be reached, or its `mtls` files are missing or invalid. The Registry connects to every target at startup |
 | Pod never becomes ready | Database unreachable, wrong credentials or TLS settings, or `config.grpcServer.flags.health` is false |
-| Tenants stay in a provisioning, blocking or terminating state | No `config.orbital.targets` entry for the tenant's region, or no CMK answers on that target |
+| Tenants stay in a provisioning, blocking or terminating state | No CMK answers on the target of the tenant's region. After `config.orbital.maxPendingReconciles` sends without an answer, the tenant changes to an error state |
+| Tenants change to an error state, for example `STATUS_PROVISIONING_ERROR`, soon after the request | No `config.orbital.targets` entry for the tenant's region |
 
 ## Uninstall
 

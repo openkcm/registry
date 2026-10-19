@@ -355,26 +355,52 @@ configMap:
 # 5. Registry configuration
 #
 # Everything under `config` is written to /etc/registry/config.yaml (helper registry.config
-# in templates/_helpers.tpl). The Registry rejects unknown keys at startup ("has invalid
-# keys"), so only use the keys below. Key names are case-insensitive.
+# in templates/_helpers.tpl). The Registry reads it at startup and rejects unknown keys
+# ("has invalid keys"), so only use the keys below. Key names are case-insensitive.
+# "Default:" names the Registry's value for a key that is not set in config.yaml.
 #
-# Values marked "value reference" take one of:
-#   { source: embedded, value: "…" }
-#   { source: env, env: VARIABLE_NAME }
-#   { source: file, file: { path: /path, format: binary } }
-#   { source: file, file: { path: /path.json, format: json, jsonPath: "$.field" } }
+# Value references. Settings marked "value reference" take one of these forms:
+#   { source: embedded, value: "…" }      # the value itself. Stored in plain text in the
+#                                         # ConfigMap: do not use it for secrets
+#   { source: env, env: VARIABLE_NAME }   # an environment variable of the container
+#                                         # (extraEnvs, extraEnvsFrom)
+#   { source: file, file: { path: /etc/credentials/db/password, format: binary } }
+#                                         # the whole file as it is: a trailing newline is part
+#                                         # of the value. Mount Secrets with extraVolumes and
+#                                         # extraVolumeMounts. format: yaml reads the whole file
+#                                         # too
+#   { source: file, file: { path: /etc/credentials/db.json, format: json, jsonPath: "$.password" } }
+#                                         # one string field of a JSON file
+# `source` defaults to `embedded`.
+#
+# Durations are Go duration strings: `500ms`, `10s`, `5m`, `1h30m`.
+#
+# Environment variables without prefix override settings that are present in config.yaml:
+# the path of the key in upper case, with `_` between the levels, for example
+# `DATABASE_HOST` for `database.host` or `ORBITAL_TASKLIMITNUM` for `orbital.taskLimitNum`.
 ###############################################################################
 config:
-  # -- Environment name (`application.environment`), attached to logs, traces, metrics and
-  # audit events.
+  # -- Name of the installation, for example `production` or `staging`
+  # (`application.environment`). Attached to logs, traces and metrics.
   environment: production
 
-  # -- Additional attributes (`application.labels`) attached to logs, traces and metrics.
+  # -- Additional attributes of the installation (`application.labels`), a map of strings.
+  # Attached to logs, traces and metrics. Example: `{ team: key-management }`
   labels: {}
 
+  # The chart writes `environment` and `labels`, together with `name` (the chart name, or
+  # `nameOverride`), to the `application` block of config.yaml. To set that block directly,
+  # use `application`; its keys take precedence. `name` is the service name in logs, traces
+  # and metrics. Example:
+  #   application:
+  #     name: registry-emea
+  #     environment: staging
+  #     labels: { team: key-management }
 
+  # PostgreSQL database. The Registry creates and updates its tables at startup.
   database:
-    # -- PostgreSQL host name. **Required.**
+    # -- PostgreSQL host name or IP address, a plain string (not a value reference).
+    # **Required**, for example `postgresql.services.svc.cluster.local`.
     host: "to be set"
     # -- PostgreSQL port.
     port: 5432
@@ -382,47 +408,68 @@ config:
     # creates and updates its tables at startup, so its user needs the right to
     # change the schema.
     name: "registry"
-    # -- Database user; value reference. **Required.** Prefer a mounted Secret:
+    # -- Database user; value reference. **Required.** Prefer a mounted Secret or a
+    # variable:
     #   user: { source: file, file: { path: /etc/credentials/database/username, format: binary } }
+    #   user: { source: env, env: DB_USER }
     user:
       source: "embedded"
       value: "to be set"
     # -- Database password; value reference. **Required.** Do not embed it in
     # production; the ConfigMap is readable by everyone who can read ConfigMaps in
-    # the namespace:
-    #   password: { source: file, file: { path: /etc/credentials/database/password, format: binary } }
+    # the namespace. Examples:
+    #   password:
+    #     source: file
+    #     file: { path: /etc/credentials/database/password, format: binary }
+    #   password: { source: env, env: DB_PASSWORD }
+    #   password:
+    #     source: file
+    #     file: { path: /etc/credentials/database/db.json, format: json, jsonPath: "$.password" }
+    # `user` and `password` are written unquoted into the PostgreSQL connection string: they
+    # must not contain spaces, quotes or backslashes. A trailing newline is ignored here.
     password:
       source: "embedded"
       value: "to be set"
-    # -- SQL logging: 1 silent, 2 errors, 3 warnings, 4 every statement.
+    # -- SQL logging of the database layer: 1 silent, 2 errors, 3 warnings and errors,
+    # 4 every statement (only for troubleshooting). Default: 1.
     logLevel: 1
-    # The configuration has no TLS settings; set PGSSLMODE and PGSSLROOTCERT in
-    # `extraEnvs` instead.
+    # The configuration has no TLS settings. The database driver reads the standard
+    # PostgreSQL variables of the container; set them in `extraEnvs`:
+    #   PGSSLMODE             disable, allow, prefer (default), require, verify-ca or
+    #                         verify-full. Use verify-full in production
+    #   PGSSLROOTCERT         CA file that signed the server certificate
+    #   PGSSLCERT, PGSSLKEY   client certificate and key files, if the server requires them
+    # Host, port, database name, user and password always come from this configuration.
 
+  # gRPC API of the Registry.
   grpcServer:
-    # -- Listen address of the gRPC API. Must match the `grpc` container port.
+    # -- Listen address of the gRPC API, `:port` or `host:port`. Must match the `grpc`
+    # container port. Default: `:9092`.
     address: :9092
     flags:
-      # -- Serve the gRPC health service. **Keep true**: the readiness probe uses it.
+      # -- Serve the standard gRPC health service. **Keep true**: the readiness probe uses
+      # it. Default: false.
       health: true
       # -- Serve gRPC server reflection, which lets clients list the API without
-      # its definitions. Keep false in production.
+      # its definitions. Keep false in production. Default: false.
       reflection: false
     attributes:
-      # -- Close a connection that has been idle this long. Default: 1800s.
+      # -- Close a connection that has had no running call for this long. Default: 1800s.
       maxConnectionIdle: 300s
-      # -- Close connections after this age, so that clients reconnect and spread
+      # -- Close connections after this age (±10%), so that clients reconnect and spread
       # over new replicas. Default: 1800s.
       maxConnectionAge: 1800s
-      # -- Grace period for running calls after `maxConnectionAge`. Default: 300s.
+      # -- Time that running calls get to finish after `maxConnectionAge`; then the
+      # connection is closed. Default: 300s.
       maxConnectionAgeGrace: 5s
-      # -- Ping a client after this time without activity. Default: 120m.
+      # -- Ping a client after this time without activity. Values below 1s count as 1s.
+      # Default: 120m.
       time: 7200s
       # -- Close the connection if a ping is not answered within this time.
       # Default: 20s.
       timeout: 20s
-    # -- Minimum interval between keepalive pings of a client; faster pings close
-    # the connection. Default: 180s.
+    # -- Minimum interval between keepalive pings of a client; a client that pings more
+    # often is disconnected. Default: 180s.
     efPolMinTime: 300s
     # -- Allow client keepalive pings when no call is running. Default: false.
     efPolPermitWithoutStream: false
@@ -430,57 +477,100 @@ config:
     # Registry's requests are small; 4 MiB is plenty.
     maxRecvMsgSize: 4194304
     client:
-      # Keepalive of the internal client that the readiness check uses to call the
-      # gRPC health service.
+      # Internal client of the readiness check. It calls the gRPC health service at
+      # `grpcServer.address`, without TLS.
       attributes:
-        # -- Interval of the health check client's keepalive pings.
+        # -- Interval of the health check client's keepalive pings. gRPC raises values
+        # below 10s to 10s. Default: 80s.
         keepaliveTime: 1s
-        # -- Time the health check client waits for a ping answer.
+        # -- Time the health check client waits for a ping answer. Default: 40s.
         keepaliveTimeout: 1s
+      # Connections of the health check client. Example with the defaults:
+      #   pool:
+      #     initialCapacity: 1      # connections opened at the first check, at least 1
+      #     maxCapacity: 1          # most connections, at least initialCapacity
+      #     idleTimeout: 5s         # replace a connection unused for this long
+      #     maxLifeDuration: 60s    # replace a connection older than this
 
+  # Orbital delivers the jobs of a tenant (changes of the tenant, its authentication and its
+  # configuration) to the CMK of the tenant's region: it confirms a new job, creates its task
+  # and sends the task over AMQP until the CMK answers.
   orbital:
-    # -- Delay before a new job is confirmed and sent, as a duration (`500ms`,
-    # `2s`). A short delay gives the request that created the job time to finish.
+    # -- Minimum age of a new job before it is confirmed and sent. A short delay gives
+    # the request that created the job time to finish. Duration, at least 0.
+    # Default: 0s.
     confirmJobAfter: 2s
-    # -- **Required**, greater than 0. Number of tasks processed per run.
+    # -- **Required**, greater than 0. Most tasks of one job that a reconcile run sends.
     taskLimitNum: 10
-    # -- **Required**, greater than 0. Number of unanswered sends after which a task
-    # fails.
+    # -- **Required**, greater than 0. Number of sends of a task without an answer after
+    # which the task fails. Every answer resets the count.
     maxPendingReconciles: 10
-    # -- **Required**, greater than 0. First retry interval in seconds; it doubles
-    # with every retry.
+    # -- **Required**, greater than 0. Base of the resend interval, in seconds: after the
+    # n-th send without an answer, the next send waits `backoffBaseIntervalSec` × 2^n
+    # seconds, at most `backoffMaxIntervalSec`. With 2: 4s, 8s, 16s, …
     backoffBaseIntervalSec: 2
-    # -- **Required**, greater than 0. Longest retry interval in seconds.
+    # -- **Required**, greater than 0. Longest resend interval in seconds.
     backoffMaxIntervalSec: 240
 
-    # -- One target per region that has a CMK. A tenant's jobs go to the target
-    # whose `region` equals the tenant's region; without a matching target its jobs
-    # cannot be delivered. **Required** for a working deployment. Example:
+    # -- Brokers to send tenant jobs to: one target per region that has a CMK. A tenant's
+    # jobs go to the target whose `region` equals the tenant's region; without a matching
+    # target the job is canceled. **Required** for a working deployment. The Registry
+    # connects to every target at startup and does not start if one cannot be reached.
+    #   region                region name as used in RegisterTenant. **Required**
+    #   connection.type       `amqp` (AMQP 1.0), the only type. **Required**
+    #   connection.amqp       all three **required**:
+    #     url                 amqps://host:port (TLS; default port 5671; amqp+ssl:// is the
+    #                         same) or amqp://host:port (no TLS; default port 5672)
+    #     target              address the Registry sends jobs to. Must equal the `source` of
+    #                         the CMK tenant manager of this region (tenantManager.amqp.source)
+    #     source              address the Registry reads the answers from. Must equal the
+    #                         `target` of that CMK tenant manager
+    #   connection.auth.type  `mtls` or `none`. **Required**; use mtls in production:
+    #     mtls                client certificate (SASL EXTERNAL). Needs an amqps:// URL; the
+    #                         broker certificate must be valid for the host name in `url`.
+    #                         All three PEM files are required and are read at startup:
+    #                         restart the pods after renewing the certificate
+    #       certFile          client certificate
+    #       keyFile           its private key
+    #       caFile            CA that signed the broker certificate
+    #     none                no credentials (SASL ANONYMOUS), for development brokers
+    # Example with mTLS:
     #   targets:
-    #     - region: emea                      # region name used in RegisterTenant
+    #     - region: emea
     #       connection:
-    #         type: amqp                      # the only supported type
+    #         type: amqp
     #         amqp:
     #           url: amqps://rabbitmq.services.svc.cluster.local:5671
-    #           # Address the Registry sends jobs to. Must equal the `source` of the
-    #           # CMK tenant manager of this region (tenantManager.amqp.source).
     #           target: /queues/cmk.emea.tenants
-    #           # Address the Registry reads the answers from. Must equal the
-    #           # `target` of that CMK tenant manager.
     #           source: /queues/cmk.global.tenants
     #         auth:
-    #           type: mtls                    # mtls or none; use mtls in production
-    #           mtls:                         # all three files are required
+    #           type: mtls
+    #           mtls:
     #             certFile: /etc/credentials/broker/tls.crt
     #             keyFile: /etc/credentials/broker/tls.key
     #             caFile: /etc/credentials/broker/ca.crt
+    # Example of a development broker without authentication:
+    #   targets:
+    #     - region: emea
+    #       connection:
+    #         type: amqp
+    #         amqp:
+    #           url: amqp://rabbitmq.dev.svc.cluster.local:5672
+    #           target: /queues/cmk.emea.tenants
+    #           source: /queues/cmk.global.tenants
+    #         auth:
+    #           type: none
     targets: []
 
-    # -- Tuning of Orbital's background workers. Workers that are not listed keep
-    # Orbital's defaults. Each needs `noOfWorkers`, `execInterval` and `timeout`
-    # greater than 0. Workers: `confirm-job` (confirms new jobs), `create-task`
-    # (splits jobs into tasks), `reconcile` (sends tasks and processes answers),
-    # `notify-event` (reports finished jobs).
+    # -- Tuning of Orbital's background workers in each pod. Workers that are not listed
+    # keep Orbital's defaults: 5 workers, `execInterval` 10s (reconcile: 5s), `timeout` 5s.
+    # A listed worker needs all three values, each greater than 0.
+    #   name          `confirm-job` (confirms new jobs), `create-task` (creates the tasks of
+    #                 a job), `reconcile` (sends tasks and processes answers) or
+    #                 `notify-event` (reports finished jobs)
+    #   noOfWorkers   workers of this kind that run in parallel
+    #   execInterval  interval between the runs of a worker, duration
+    #   timeout       longest duration of one run, duration
     workers:
       - name: confirm-job
         noOfWorkers: 1
@@ -499,33 +589,62 @@ config:
         execInterval: 1s
         timeout: 5s
 
-  # -- Rules that restrict the values callers may register, in addition to the
-  # API's own checks. Each entry has an `id` (the field) and `constraints`:
-  #   list        spec.allowList: [values]   value is one of the values. Single values
-  #                                          only: on a list field such as
-  #                                          Tenant.UserGroups every check fails
-  #                                          ("value has wrong type"); use regex there
-  #   regex       spec.pattern: "RE2"        value (or each list value) matches
-  #   non-empty                              value is not empty
-  #   non-empty-keys / non-empty-vals        no empty map keys / values
-  #   map-keys    spec.keys: [{ name, required, constraints }]
-  # Field IDs: Tenant.ID, Tenant.Name, Tenant.Region, Tenant.OwnerID,
-  # Tenant.OwnerType, Tenant.Role, Tenant.Labels, Tenant.UserGroups,
-  # System.ExternalID, System.Type, RegionalSystem.Region, RegionalSystem.Status,
-  # RegionalSystem.L2KeyID, RegionalSystem.Labels, Auth.ExternalID, Auth.TenantID,
-  # Auth.Type, Auth.Properties, Auth.Status, TenantConfig.TenantID.
-  # An unknown `id` stops the Registry at startup unless the entry sets
-  # `skipIfNotExists: true`. Rules apply to every later change of an object, so
-  # tightening a rule can block changes to objects registered before.
+  # -- Rules that restrict the values callers may register, in addition to the Registry's
+  # built-in checks (for example, IDs, names and regions must not be empty). Each entry:
+  #   id               the field, see the field IDs below
+  #   constraints      one or more constraints; a value must pass all of them
+  #   skipIfNotExists  true: ignore the entry if `id` is not a field of this Registry
+  #                    version. Default: false, an unknown `id` stops the Registry at startup
+  # Constraint types (`type`) and their `spec`:
+  #   list            spec.allowList: [values]   the value is one of the values
+  #   regex           spec.pattern: "RE2"        the value matches the Go (RE2) regular
+  #                                              expression; for a list field, every
+  #                                              element does. Use ^…$ for the whole value
+  #   non-empty       no spec                    the value is not empty
+  #   non-empty-keys  no spec                    the map has no empty key
+  #   non-empty-vals  no spec                    the map has no empty value
+  #   map-keys        spec.keys: [{ name, required, constraints }]
+  #                                              rules per map key: `required: true` rejects
+  #                                              a map without the key; `constraints` (list,
+  #                                              regex, non-empty) check the key's value
+  # Field IDs, with the constraint types that fit them:
+  #   text (list, regex, non-empty): Tenant.ID, Tenant.Name, Tenant.Region, Tenant.OwnerID,
+  #     Tenant.OwnerType, Tenant.Role, System.ExternalID, System.Type, RegionalSystem.Region,
+  #     RegionalSystem.Status, RegionalSystem.L2KeyID, Auth.ExternalID, Auth.TenantID,
+  #     Auth.Type, Auth.Status, TenantConfig.TenantID
+  #   list of text (regex): Tenant.UserGroups
+  #   map of text (non-empty-keys, non-empty-vals, map-keys): Tenant.Labels,
+  #     RegionalSystem.Labels, Auth.Properties
+  # Any other combination rejects every value of the field ("value has wrong type").
+  # Several entries for the same `id` add up. Rules apply to every later change of an
+  # object, so tightening a rule can block changes to objects registered before.
   # The defaults below fit a deployment with CMK. A `validations` list in your values
   # replaces them (Helm replaces lists), so repeat the default rules you keep. Add your
-  # regions and tenant owner types, for example:
+  # regions and tenant owner types. Example with every constraint type, to add to the
+  # default rules:
   #   - id: Tenant.Region
   #     constraints: [{ type: list, spec: { allowList: ["emea", "us"] } }]
   #   - id: RegionalSystem.Region
   #     constraints: [{ type: list, spec: { allowList: ["eu10", "us10"] } }]
   #   - id: Tenant.OwnerType
   #     constraints: [{ type: list, spec: { allowList: ["customer"] } }]
+  #   - id: Tenant.ID
+  #     constraints: [{ type: regex, spec: { pattern: "^[a-z0-9-]{1,64}$" } }]
+  #   - id: Tenant.Labels
+  #     constraints: [{ type: non-empty-keys }, { type: non-empty-vals }]
+  #   - id: RegionalSystem.Labels
+  #     constraints:
+  #       - type: map-keys
+  #         spec:
+  #           keys:
+  #             - name: cost-center
+  #               required: true
+  #               constraints: [{ type: regex, spec: { pattern: "^[0-9]{4}$" } }]
+  #             - name: tier                  # optional key, checked when present
+  #               constraints: [{ type: list, spec: { allowList: ["gold", "silver"] } }]
+  #   - id: Tenant.Contact                    # not a field of this Registry version
+  #     skipIfNotExists: true
+  #     constraints: [{ type: non-empty }]
   validations:
     # CMK applies OpenID Connect settings only.
     - id: Auth.Type
@@ -556,65 +675,152 @@ config:
           spec:
             allowList: ["system", "subaccount"]
 
+  # Status server for the probes, version and metrics.
   status:
-    # -- Serve the status endpoints (`/probe/liveness`, `/probe/readiness`,
-    # `/version` and, if enabled, `/metrics`). Needed by the probes.
+    # -- Serve the status endpoints (`/probe/liveness`, `/probe/readiness`, `/version`
+    # and, if enabled, `/metrics` and `/debug/pprof/`). Needed by the probes.
+    # Default: false.
     enabled: true
     # -- Listen address of the status server. Must match the `http-status`
-    # container port.
+    # container port. Default: `:8888`.
     address: :8888
-    # -- Serve Go profiling endpoints on the status port, without authentication.
-    # Keep false in production.
+    # -- Serve Go profiling endpoints (`/debug/pprof/`) on the status port, without
+    # authentication. Keep false in production; enable it only for troubleshooting.
     profiling: false
 
+  # Logs of the Registry on standard output.
   logger:
-    # -- Log level: `debug`, `info`, `warn` or `error`. `debug` logs request
-    # details; use it only for troubleshooting.
+    # -- Log level: `trace`, `debug`, `info`, `warn` or `error`; other values mean `info`.
+    # `debug` and `trace` log request details; use them only for troubleshooting.
     level: info
-    # -- Log format: `json` or `text`.
+    # -- Log format: `json` or `text`. Default: `json`.
     format: json
-    # -- Add the source file and line to each log record.
+    # -- Add the source file and line to each log record. Default: false.
     source: false
     formatter:
       time:
-        # -- Time format: `pattern` (uses `pattern`) or `unix` (uses `precision`).
+        # -- Time format: `pattern` (text, see `pattern`) or `unix` (a number, see
+        # `precision`). Default: `unix`.
         type: pattern
-        # -- Go time layout, used with `type: pattern`.
+        # -- Go time layout, used with `type: pattern`. Times are written in UTC.
+        # Default: `Mon Jan 02 15:04:05 -0700 2006`.
         pattern: "Mon Jan 02 15:04:05 -0700 2006"
-        # -- Unix time precision, used with `type: unix`: `1ns`, `1us`, `1ms` or `1s`.
+        # -- Unit of the Unix time, used with `type: unix`: `1ns`, `1us`, `1ms` or `1s`.
+        # Default: `1us`. Example of Unix time in milliseconds:
+        #   time: { type: unix, precision: 1ms }
         precision: 1s
       # Field names and masking of log records. Keys not set here keep the Registry's
       # defaults: `time: time`, `error: error`, `message: msg`,
       # `otel: { traceId: traceId, spanId: spanId }` and no masking. Example:
       #   fields:
+      #     time: ts
+      #     error: err
       #     level: level
+      #     message: message
       #     otel: { traceId: trace_id, spanId: span_id }
       #     masking:
-      #       pii: [email, ip-address]     # keep the first 4 characters, mask the rest
+      #       pii: [email, ip-address]     # string values keep their first 4 characters
       #       other: { jwt-token: "*****" } # replace the whole value
       fields:
         # -- Name of the log level field. The Registry's own default is `info`, which
         # writes `"info":"INFO"`; the chart uses `level`.
         level: level
 
-  # OpenTelemetry export of logs, traces and metrics (OTLP). Each signal has:
-  #   enabled    export this signal
-  #   protocol   grpc or http
-  #   host       collector endpoint as host:port, without scheme or path; value
-  #              reference, e.g. otel-collector:4317 (grpc) or otel-collector:4318 (http)
-  #   url        path for http, default /v1/logs, /v1/traces, /v1/metrics
-  #   secretRef  connection security:
-  #                { type: insecure }
+  # OpenTelemetry export (OTLP) of logs, traces and metrics. Each signal has:
+  #   enabled    export this signal. Default: false
+  #   protocol   `grpc` or `http`
+  #   host       collector endpoint as host:port, without scheme or path; value reference,
+  #              e.g. otel-collector:4317 (grpc) or otel-collector:4318 (http)
+  #   url        URL path, used with `http`. Empty: /v1/traces and /v1/metrics; logs have no
+  #              default, set `url: /v1/logs`
+  #   secretRef  connection security, **required** for an enabled signal. With `grpc`:
+  #              insecure, api-token, basic or mtls. With `http`: insecure, api-token or
+  #              mtls. Use mtls or api-token in production:
+  #                { type: insecure }               # no TLS
   #                { type: api-token, apiToken: <value reference> }
-  #                { type: mtls, mtls: { cert: <value reference>,
-  #                                       certKey: <value reference>,
-  #                                       serverCa: <value reference> } }
-  # Example of an API token read from a mounted file:
-  #   secretRef:
-  #     type: api-token
-  #     apiToken:
-  #       source: file
-  #       file: { path: /etc/credentials/otel/api-token, format: binary }
+  #                                                 # TLS; header Authorization: Api-Token …
+  #                type: basic                      # grpc only. TLS; Authorization: Basic …
+  #                basic:
+  #                  username: <value reference>
+  #                  password: <value reference>
+  #                type: mtls                       # TLS with a client certificate
+  #                mtls:
+  #                  cert: <value reference>        # client certificate (PEM)
+  #                  certKey: <value reference>     # its private key (PEM)
+  #                  serverCa: <value reference>    # CA that signed the collector
+  #                                                 # certificate. Optional
+  #                  rootCAs: [<value reference>]   # additional trusted CAs. Optional
+  #                  attributes:
+  #                    serverName: …                # expected server name, if it differs
+  #                                                 # from `host`. Optional
+  #              api-token and basic, and mtls without serverCa and rootCAs, trust the CA
+  #              certificates of the container image.
+  # An enabled signal needs `protocol`, `host` and `secretRef`; metrics for Prometheus need
+  # none of them.
+  # `dynatraceOneAgent: true` adds the metadata of a Dynatrace OneAgent on the node to the
+  # exported data. Default: false.
+  # Example: traces over gRPC with mTLS, metrics and logs over HTTP:
+  #   telemetry:
+  #     traces:
+  #       enabled: true
+  #       protocol: grpc
+  #       host: { source: embedded, value: otel-collector.observability:4317 }
+  #       secretRef:
+  #         type: mtls
+  #         mtls:
+  #           cert: { source: file, file: { path: /etc/otel/tls.crt, format: binary } }
+  #           certKey: { source: file, file: { path: /etc/otel/tls.key, format: binary } }
+  #           serverCa: { source: file, file: { path: /etc/otel/ca.crt, format: binary } }
+  #     metrics:
+  #       enabled: true
+  #       protocol: http
+  #       host: { source: env, env: OTEL_HOST }
+  #       url: /v1/metrics
+  #       secretRef:
+  #         type: api-token
+  #         apiToken: { source: file, file: { path: /etc/otel/api-token, format: binary } }
+  #     logs:
+  #       enabled: true
+  #       protocol: http
+  #       host: { source: env, env: OTEL_HOST }
+  #       url: /v1/logs
+  #       secretRef: { type: insecure }
+  # Example: basic authentication and an API token over gRPC, metrics for Prometheus:
+  #   telemetry:
+  #     dynatraceOneAgent: true
+  #     traces:
+  #       enabled: true
+  #       protocol: grpc
+  #       host: { source: env, env: OTEL_HOST }
+  #       secretRef:
+  #         type: basic
+  #         basic:
+  #           username: { source: env, env: OTEL_USERNAME }
+  #           password: { source: file, file: { path: /etc/otel/password, format: binary } }
+  #     logs:
+  #       enabled: true
+  #       protocol: grpc
+  #       host: { source: env, env: OTEL_HOST }
+  #       secretRef:
+  #         type: api-token
+  #         apiToken: { source: env, env: OTEL_API_TOKEN }
+  #     metrics:
+  #       enabled: true
+  #       prometheus: { enabled: true }
+  # Example: mTLS over HTTP with additional CAs and another server name:
+  #   telemetry:
+  #     traces:
+  #       enabled: true
+  #       protocol: http
+  #       host: { source: embedded, value: otel-collector.observability:4318 }
+  #       secretRef:
+  #         type: mtls
+  #         mtls:
+  #           cert: { source: file, file: { path: /etc/otel/tls.crt, format: binary } }
+  #           certKey: { source: file, file: { path: /etc/otel/tls.key, format: binary } }
+  #           rootCAs:
+  #             - { source: file, file: { path: /etc/otel/root-ca.crt, format: binary } }
+  #           attributes: { serverName: otel-collector.example.com }
   telemetry:
     logs:
       # -- Export logs over OTLP.
@@ -642,7 +848,7 @@ config:
       secretRef:
         type: insecure
     metrics:
-      # -- Export metrics over OTLP.
+      # -- Export metrics: over OTLP, or for Prometheus (see `prometheus`).
       enabled: false
       # -- OTLP protocol: `grpc` or `http`.
       protocol: http
@@ -654,5 +860,6 @@ config:
       secretRef:
         type: insecure
       prometheus:
-        # -- Serve metrics for Prometheus on the status port at `/metrics`.
+        # -- Serve the metrics for Prometheus on the status port at `/metrics` instead of
+        # sending them over OTLP. Needs `metrics.enabled: true`.
         enabled: false

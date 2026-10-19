@@ -70,9 +70,35 @@ func readmeValues(t *testing.T) string {
 	return path
 }
 
-// TestConfigStrict renders the chart and starts the Registry's configuration handling on
-// the rendered config.yaml exactly as the service does at startup: the strict loader,
-// Validate and validation.New with the Registry's models.
+// startConfig renders the chart with the given --set/-f arguments and starts the Registry's
+// configuration handling on the rendered config.yaml exactly as the service does at startup
+// (cmd/registry/main.go): the strict loader, Validate and validation.New with the Registry's
+// models.
+func startConfig(t *testing.T, args ...string) error {
+	t.Helper()
+
+	cfg, err := loadConfig(t, renderConfigYAML(t, args...))
+	if err != nil {
+		return err
+	}
+
+	_, err = validation.New(validation.Config{
+		Fields: cfg.Validations,
+		Models: []validation.Model{
+			&model.Tenant{},
+			&model.Auth{},
+			&model.RegionalSystem{},
+			&model.System{},
+			&model.TenantConfig{},
+		},
+	})
+
+	return err
+}
+
+// TestConfigStrict checks that the Registry starts with the configuration rendered from the
+// default values, the README example and every example documented under `config` in
+// values.yaml (testdata/values-all-config*.yaml).
 func TestConfigStrict(t *testing.T) {
 	tests := []struct {
 		name string
@@ -89,24 +115,23 @@ func TestConfigStrict(t *testing.T) {
 				return []string{"-f", readmeValues(t)}
 			},
 		},
+		{
+			name: "every documented setting, first example of each alternative",
+			args: func(*testing.T) []string { return []string{"-f", "testdata/values-all-config.yaml"} },
+		},
+		{
+			name: "second example of each alternative",
+			args: func(*testing.T) []string { return []string{"-f", "testdata/values-all-config-alt1.yaml"} },
+		},
+		{
+			name: "third example of each alternative",
+			args: func(*testing.T) []string { return []string{"-f", "testdata/values-all-config-alt2.yaml"} },
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg, err := loadConfig(t, renderConfigYAML(t, tt.args(t)...))
-			require.NoError(t, err)
-
-			_, err = validation.New(validation.Config{
-				Fields: cfg.Validations,
-				Models: []validation.Model{
-					&model.Tenant{},
-					&model.Auth{},
-					&model.RegionalSystem{},
-					&model.System{},
-					&model.TenantConfig{},
-				},
-			})
-			require.NoError(t, err)
+			require.NoError(t, startConfig(t, tt.args(t)...))
 		})
 	}
 
@@ -114,6 +139,97 @@ func TestConfigStrict(t *testing.T) {
 		_, err := loadConfig(t, renderConfigYAML(t, "--set", "config.database.notARegistrySetting=value"))
 		require.ErrorContains(t, err, "invalid keys")
 	})
+}
+
+// TestConfigStrictRejects checks limits that values.yaml documents for `config`: the Registry
+// does not start with a value outside them.
+func TestConfigStrictRejects(t *testing.T) {
+	const allConfig = "testdata/values-all-config.yaml"
+
+	// target returns --set-json for one orbital target with the given connection type and
+	// auth block (JSON).
+	target := func(connectionType, auth string) string {
+		return `config.orbital.targets=[{"region":"emea","connection":{"type":"` + connectionType +
+			`","amqp":{"url":"amqps://broker:5671","target":"/queues/a","source":"/queues/b"},` +
+			`"auth":` + auth + `}}]`
+	}
+
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "connection type other than amqp",
+			args:    []string{"--set-json", target("kafka", `{"type":"none"}`)},
+			wantErr: "connection type is not supported",
+		},
+		{
+			name:    "auth type other than mtls and none",
+			args:    []string{"--set-json", target("amqp", `{"type":"basic"}`)},
+			wantErr: "authentication type is not supported",
+		},
+		{
+			name: "mtls without caFile",
+			args: []string{"--set-json", target("amqp",
+				`{"type":"mtls","mtls":{"certFile":"/tls.crt","keyFile":"/tls.key"}}`)},
+			wantErr: "CA file must not be empty",
+		},
+		{
+			name: "amqp target without source",
+			args: []string{"--set-json", `config.orbital.targets=[{"region":"emea","connection":` +
+				`{"type":"amqp","amqp":{"url":"amqps://broker:5671","target":"/queues/a"},` +
+				`"auth":{"type":"none"}}}]`},
+			wantErr: "source must not be empty",
+		},
+		{
+			name:    "taskLimitNum 0",
+			args:    []string{"--set", "config.orbital.taskLimitNum=0"},
+			wantErr: "task limit number must be greater than zero",
+		},
+		{
+			name:    "negative confirmJobAfter",
+			args:    []string{"--set", "config.orbital.confirmJobAfter=-1s"},
+			wantErr: "confirm job delay must be equal or greater than zero",
+		},
+		{
+			name: "unknown worker name",
+			args: []string{"--set-json",
+				`config.orbital.workers=[{"name":"cleanup","noOfWorkers":1,"execInterval":"1s","timeout":"5s"}]`},
+			wantErr: "worker name is not supported",
+		},
+		{
+			name: "worker without timeout",
+			args: []string{"--set-json",
+				`config.orbital.workers=[{"name":"reconcile","noOfWorkers":1,"execInterval":"1s"}]`},
+			wantErr: "timeout must be greater than zero",
+		},
+		{
+			name: "validation of an unknown field without skipIfNotExists",
+			args: []string{"--set-json",
+				`config.validations=[{"id":"Tenant.Contact","constraints":[{"type":"non-empty"}]}]`},
+			wantErr: "id must exist: Tenant.Contact",
+		},
+		{
+			name: "unknown constraint type",
+			args: []string{"--set-json",
+				`config.validations=[{"id":"Tenant.Region","constraints":[{"type":"enum"}]}]`},
+			wantErr: "unknown constraint type",
+		},
+		{
+			name: "list constraint without allowList",
+			args: []string{"--set-json",
+				`config.validations=[{"id":"Tenant.Region","constraints":[{"type":"list","spec":{}}]}]`},
+			wantErr: "constraint allow list is missing",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := startConfig(t, append([]string{"-f", allConfig}, tt.args...)...)
+			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
 }
 
 // TestConfigReadmeValidations checks that the values file example of the README keeps every
