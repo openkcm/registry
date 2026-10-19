@@ -310,27 +310,68 @@ extraInitContainers: []
 extraContainers: []
 
 # -- Volumes added to the pod, for example the Secrets with database credentials
-# and broker certificates:
+# and broker certificates. Besides its configuration, the Registry reads the files that
+# `config` and the PGSSL* variables (`config.database`) name; each setting describes its
+# file. The examples in this file use these Secrets and paths:
+#   Secret                 mounted at                  files
+#   registry-database      /etc/credentials/database   username and password, or db.json;
+#                                                      for TLS ca.crt, tls.crt and tls.key
+#   registry-broker-certs  /etc/credentials/broker     tls.crt, tls.key, ca.crt
+#   registry-otel          /etc/otel                   tls.crt, tls.key, ca.crt, root-ca.crt,
+#                                                      api-token, password
+# Certificates and keys are PEM files:
+#   tls.crt   the certificate, then the intermediate CAs that issued it, if any:
+#               -----BEGIN CERTIFICATE-----
+#               MIIB…                                (certificate of the Registry)
+#               -----END CERTIFICATE-----
+#               -----BEGIN CERTIFICATE-----
+#               MIIB…                                (intermediate CA)
+#               -----END CERTIFICATE-----
+#   tls.key   the private key of that certificate, unencrypted, in one block:
+#               -----BEGIN PRIVATE KEY-----          (PKCS #8: RSA, ECDSA or Ed25519 key)
+#               MIIE…
+#               -----END PRIVATE KEY-----
+#             `BEGIN RSA PRIVATE KEY` (PKCS #1) and `BEGIN EC PRIVATE KEY` (SEC 1) work too
+#   ca.crt    one or more CA certificates, each a CERTIFICATE block as above
+# A Secret of type kubernetes.io/tls with an added ca.crt has the same keys. Create tokens
+# and passwords with `--from-literal`, which adds no trailing newline:
+#   kubectl -n services create secret generic registry-database \
+#     --from-literal=username=registry --from-literal=password='<password>' \
+#     --from-file=ca.crt=postgres-ca.crt
+#   kubectl -n services create secret generic registry-broker-certs \
+#     --from-file=tls.crt=registry.crt --from-file=tls.key=registry.key \
+#     --from-file=ca.crt=broker-ca.crt
+#   kubectl -n services create secret generic registry-otel \
+#     --from-file=tls.crt=otel-client.crt --from-file=tls.key=otel-client.key \
+#     --from-file=ca.crt=otel-ca.crt --from-literal=api-token='<token>'
+# The pods run with group 65532 (`pod.securityContext.fsGroup`), so the files are readable
+# with mode 0440. Example of the volumes:
 #   - name: db-credentials
-#     secret: { secretName: registry-database }
+#     secret: { secretName: registry-database, defaultMode: 0440 }
 #   - name: broker-certs
-#     secret: { secretName: registry-broker-certs }
+#     secret: { secretName: registry-broker-certs, defaultMode: 0440 }
+#   - name: otel-credentials
+#     secret: { secretName: registry-otel, defaultMode: 0440 }
 extraVolumes: []
 
-# -- Volume mounts added to the Registry container. Do not mount anything at
-# `/etc/registry/config.yaml`, the configuration file, or over `/etc/registry`.
+# -- Volume mounts added to the Registry container. Mount Secrets read-only. Do not mount
+# anything at `/etc/registry/config.yaml`, the configuration file, or over `/etc/registry`.
+# Example of the mounts for the volumes above:
 #   - name: db-credentials
 #     mountPath: /etc/credentials/database
 #     readOnly: true
 #   - name: broker-certs
 #     mountPath: /etc/credentials/broker
 #     readOnly: true
+#   - name: otel-credentials
+#     mountPath: /etc/otel
+#     readOnly: true
 extraVolumeMounts: []
 
 # -- Environment variables added to the Registry container. Variables without
 # prefix that match a configuration key override it, for example `DATABASE_HOST`
 # for `config.database.host`. The database driver also reads the standard
-# PostgreSQL variables; use them for TLS to the database:
+# PostgreSQL variables; use them for TLS to the database (see `config.database`):
 #   - name: PGSSLMODE
 #     value: verify-full
 #   - name: PGSSLROOTCERT
@@ -428,6 +469,10 @@ config:
     # variable:
     #   user: { source: file, file: { path: /etc/credentials/database/username, format: binary } }
     #   user: { source: env, env: DB_USER }
+    #   user:
+    #     source: file
+    #     file: { path: /etc/credentials/database/db.json, format: json, jsonPath: "$.username" }
+    # The files are described at `password`.
     user:
       source: "embedded"
       value: "to be set"
@@ -443,6 +488,12 @@ config:
     #     file: { path: /etc/credentials/database/db.json, format: json, jsonPath: "$.password" }
     # `user` and `password` are written unquoted into the PostgreSQL connection string: they
     # must not contain spaces, quotes or backslashes. A trailing newline is ignored here.
+    # Files (Secret and mounting: see extraVolumes): with `format: binary`, the file holds
+    # only the value, for example `registry` in username and `<password>` in password. With
+    # `format: json`, `jsonPath` selects a string field of a JSON document, such as
+    # `$.password`, or `$.registry.password` for a nested field. Example for `$.username` and
+    # `$.password`, content of /etc/credentials/database/db.json:
+    #   { "username": "registry", "password": "<password>" }
     password:
       source: "embedded"
       value: "to be set"
@@ -456,6 +507,21 @@ config:
     #   PGSSLROOTCERT         CA file that signed the server certificate
     #   PGSSLCERT, PGSSLKEY   client certificate and key files, if the server requires them
     # Host, port, database name, user and password always come from this configuration.
+    # The files are PEM (formats, Secret and mounting: see extraVolumes):
+    #   PGSSLROOTCERT   one or more CA certificates. With verify-ca and verify-full, the server
+    #                   certificate must be issued by one of them; with verify-full, it must
+    #                   also be valid for `host`: that name, or IP address, in its subject
+    #                   alternative names. `system` instead of a file trusts the CA
+    #                   certificates of the container image and always verifies like
+    #                   verify-full
+    #   PGSSLCERT       client certificate, then its intermediate CAs. Set it with PGSSLKEY
+    #   PGSSLKEY        the private key of that certificate, unencrypted
+    # Example of the TLS variables in `extraEnvs`:
+    #   extraEnvs:
+    #     - { name: PGSSLMODE, value: verify-full }
+    #     - { name: PGSSLROOTCERT, value: /etc/credentials/database/ca.crt }
+    #     - { name: PGSSLCERT, value: /etc/credentials/database/tls.crt }
+    #     - { name: PGSSLKEY, value: /etc/credentials/database/tls.key }
 
   # ---------------------------------------------------------------------------
   # grpcServer: gRPC API of the Registry.
@@ -554,13 +620,18 @@ config:
     #     source              address the Registry reads the answers from. Must equal the
     #                         `target` of that CMK tenant manager
     #   connection.auth.type  `mtls` or `none`. **Required**; use mtls in production:
-    #     mtls                client certificate (SASL EXTERNAL). Needs an amqps:// URL; the
-    #                         broker certificate must be valid for the host name in `url`.
-    #                         All three PEM files are required and are read at startup:
-    #                         restart the pods after renewing the certificate
-    #       certFile          client certificate
-    #       keyFile           its private key
-    #       caFile            CA that signed the broker certificate
+    #     mtls                client certificate (SASL EXTERNAL), TLS 1.2 or later. Needs an
+    #                         amqps:// URL; the broker certificate must be issued by a CA in
+    #                         `caFile` and be valid for the host name in `url`: that name, or
+    #                         IP address, in its subject alternative names. All three PEM
+    #                         files are required and are read at startup: restart the pods
+    #                         after renewing the certificate. Formats, Secret and mounting:
+    #                         see extraVolumes
+    #       certFile          client certificate, then its intermediate CAs. The broker
+    #                         identifies the Registry by this certificate
+    #       keyFile           its private key, unencrypted
+    #       caFile            one or more CA certificates. Only these are trusted for the
+    #                         broker, not the CA certificates of the container image
     #     none                no credentials (SASL ANONYMOUS), for development brokers
     # Example with mTLS:
     #   targets:
@@ -813,6 +884,16 @@ config:
   #                                                 # from `host`. Optional
   #              api-token and basic, and mtls without serverCa and rootCAs, trust the CA
   #              certificates of the container image.
+  # Files of the examples below (PEM formats, Secret and mounting: see extraVolumes):
+  #   /etc/otel/tls.crt      client certificate, then its intermediate CAs (PEM)
+  #   /etc/otel/tls.key      its private key, unencrypted (PEM)
+  #   /etc/otel/ca.crt       CA certificates (PEM). The collector certificate must be issued
+  #   /etc/otel/root-ca.crt  by one of them and be valid for the host name of `host`, or for
+  #                          `serverName` if set
+  #   /etc/otel/api-token    only the token, for example `<token>`
+  #   /etc/otel/password     only the password
+  # Token and password files are used as they are, a trailing newline included: create
+  # them without one.
   # An enabled signal needs `protocol`, `host` and `secretRef`; metrics for Prometheus need
   # none of them.
   # `dynatraceOneAgent: true` adds the metadata of a Dynatrace OneAgent on the node to the

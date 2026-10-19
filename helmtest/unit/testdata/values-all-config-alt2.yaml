@@ -3,6 +3,9 @@
 config:
   database:
     host: postgresql.services.svc.cluster.local
+    user:
+      source: file
+      file: { path: /etc/credentials/database/db.json, format: json, jsonPath: "$.username" }
     password:
       source: file
       file: { path: /etc/credentials/database/db.json, format: json, jsonPath: "$.password" }

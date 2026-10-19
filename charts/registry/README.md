@@ -32,11 +32,12 @@ values and examples, and described in the
 
 ## Install
 
-Create Secrets for the database credentials and the broker certificates:
+Create Secrets for the database credentials and the broker certificates (the content of each
+file: see [Files the Registry reads](#files-the-registry-reads)):
 
 ```sh
 kubectl -n services create secret generic registry-database \
-  --from-literal=username=registry --from-literal=password='…' \
+  --from-literal=username=registry --from-literal=password='<password>' \
   --from-file=ca.crt=postgres-ca.crt
 kubectl -n services create secret generic registry-broker-certs \
   --from-file=tls.crt --from-file=tls.key --from-file=ca.crt
@@ -51,9 +52,9 @@ replicaCount: 2
 
 extraVolumes:
   - name: db-credentials
-    secret: { secretName: registry-database }
+    secret: { secretName: registry-database, defaultMode: 0440 }
   - name: broker-certs
-    secret: { secretName: registry-broker-certs }
+    secret: { secretName: registry-broker-certs, defaultMode: 0440 }
 extraVolumeMounts:
   - { name: db-credentials, mountPath: /etc/credentials/database, readOnly: true }
   - { name: broker-certs, mountPath: /etc/credentials/broker, readOnly: true }
@@ -135,6 +136,31 @@ The release notes list warnings for settings that are not production-ready.
 | `hpa.enabled` | `false` | Autoscale on CPU and memory |
 | `pod.disruptionBudget.enabled` | `false` | Limit voluntary disruptions |
 | `configMap.immutable` | `false` | Immutable configuration, versioned by a content hash |
+
+## Files the Registry reads
+
+Besides its configuration, the Registry reads the files that `config` and the PGSSL*
+variables name. Provide them from Secrets with `extraVolumes` and `extraVolumeMounts`.
+[values.yaml](values.yaml) describes each file at the setting that names it, and the PEM
+formats, the Secrets and the mounting at `extraVolumes`. The examples use these files:
+
+- `/etc/credentials/database/username` and `password`: only the value
+  (`config.database.user` and `password`, `format: binary`).
+- `/etc/credentials/database/db.json`: a JSON document, for example
+  `{ "username": "registry", "password": "<password>" }`, whose string fields `jsonPath`
+  selects (`config.database.user` and `password`, `format: json`).
+- `/etc/credentials/database/ca.crt`, `tls.crt` and `tls.key`: the CA certificates of the
+  PostgreSQL server, and the client certificate and its key if the server requires them
+  (`PGSSLROOTCERT`, `PGSSLCERT` and `PGSSLKEY` in `extraEnvs`).
+- `/etc/credentials/broker/tls.crt`, `tls.key` and `ca.crt`: the client certificate with its
+  intermediate CAs, its private key, and the CA certificates of the broker, whose certificate
+  must be valid for the host name in `url` (`config.orbital.targets[].connection.auth.mtls`).
+- `/etc/otel/…`: the client certificate, key and CA certificates of `mtls`, or a file with
+  only the token or password (`config.telemetry`).
+
+PEM certificates and keys are the usual `tls.crt`, `tls.key` and `ca.crt` files, with an
+unencrypted key. Restart the pods after changing a file: the Registry loads them when it
+starts.
 
 ## Security defaults
 
