@@ -318,7 +318,7 @@ extraContainers: []
 extraVolumes: []
 
 # -- Volume mounts added to the Registry container. Do not mount anything at
-# `/etc/registry` itself; it holds the configuration.
+# `/etc/registry/config.yaml`, the configuration file, or over `/etc/registry`.
 #   - name: db-credentials
 #     mountPath: /etc/credentials/database
 #     readOnly: true

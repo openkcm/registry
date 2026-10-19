@@ -15,7 +15,7 @@ values and examples, and described in the
 | Resource | Purpose |
 | --- | --- |
 | Deployment | The Registry pods |
-| ConfigMap | The Registry configuration, rendered from `config` and mounted at `/etc/registry` |
+| ConfigMap | The Registry configuration, rendered from `config` and mounted as `/etc/registry/config.yaml` |
 | Service | gRPC API (9092) and status endpoints (8888) inside the cluster |
 | ServiceAccount | Identity of the pods. The Registry does not call the Kubernetes API, so no token is mounted |
 | NetworkPolicy | Optional (`networkPolicy.enabled`): who may reach the pods |
