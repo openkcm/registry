@@ -15,7 +15,6 @@ keywords:
 # Version of the chart. Increment it for every change to the chart.
 # Versions follow Semantic Versioning (https://semver.org/).
 version: 1.4.0
-# Version of the Registry application this chart was last tested with. The image itself is
-# selected with image.tag or image.digest; this value is only used for the version label
-# when no tag is set.
-appVersion: "1.9.0"
+# Registry release this chart is made for: the tag of its image, and the default of image.tag.
+# The workflow update-app-versions opens a pull request when openkcm/registry has a newer release.
+appVersion: "v1.9.0"

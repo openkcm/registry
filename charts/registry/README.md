@@ -44,8 +44,7 @@ kubectl -n services create secret generic registry-broker-certs \
 Create a values file, for example `registry-values.yaml`:
 
 ```yaml
-image:
-  tag: v1.9.0
+# image.tag defaults to the chart's appVersion; set it only to deploy another version.
 
 replicaCount: 2
 
@@ -112,7 +111,7 @@ The release notes list warnings for settings that are not production-ready.
 
 | Value | Default | Description |
 | --- | --- | --- |
-| `image.tag` / `image.digest` | – | **Required.** The Registry version to deploy |
+| `image.tag` / `image.digest` | chart's `appVersion` | The Registry version to deploy. Leave both empty to deploy the version this chart release is made for |
 | `image.repository` | `registry/images/registry` | Under `ghcr.io/openkcm` |
 | `replicaCount` | `1` | Use two or more in production |
 | `config.database.*` | placeholders | **Required.** PostgreSQL connection; load credentials from a Secret |
@@ -153,9 +152,11 @@ The Registry reads its configuration at startup. The chart adds a
 `checksum/config` annotation to the pods, so a configuration change restarts
 them during `helm upgrade`.
 
-Everything under `config` is written to `config.yaml`, and the Registry rejects
-unknown keys at startup. Keys that only control the chart, such as
-`configMap.immutable`, are outside `config`.
+[templates/configmap.yaml](templates/configmap.yaml) writes `config.yaml` with one
+section per setting: `application`, `status`, `logger`, `telemetry`, `grpcServer`,
+`database`, `orbital` and `validations`. Other keys under `config` are not written.
+Inside a section, the Registry rejects unknown keys at startup. Keys that only control the
+chart, such as `configMap.immutable`, are outside `config`.
 
 ## Upgrading from 1.3.x
 
@@ -176,8 +177,7 @@ unknown keys at startup. Keys that only control the chart, such as
 
 | Symptom | Cause |
 | --- | --- |
-| `Either image.tag or image.digest must be set` | Set `image.tag` or `image.digest` |
-| Pod exits with `has invalid keys` | A key under `config` is not a Registry setting |
+| Pod exits with `has invalid keys` | A key inside a section under `config` (for example `config.database`) is not a Registry setting |
 | Pod exits with `… must be greater than zero` | A required `config.orbital` value is missing |
 | Pod never becomes ready | Database unreachable, wrong credentials or TLS settings, or `config.grpcServer.flags.health` is false |
 | Tenants stay in a provisioning, blocking or terminating state | No `config.orbital.targets` entry for the tenant's region, or no CMK answers on that target |

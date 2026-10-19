@@ -57,14 +57,14 @@ strategy: {}
 image:
   # -- Container registry of the image. Set to "" when `repository` contains the
   # full image name.
-  registry: ghcr.io/openkcm
+  registry: ghcr.io/openkcm/charts/registry
 
   # -- Image repository within `image.registry`. Release images are published as
   # `ghcr.io/openkcm/registry/images/registry`.
   repository: registry/images/registry
 
-  # -- Image tag, for example `v1.9.0`. **Required** unless `image.digest` is set;
-  # the chart does not fall back to the chart's appVersion.
+  # -- Image tag, for example `v1.9.0`. Empty: the chart's appVersion, the Registry version
+  # this chart release is made for and that its OCM component references.
   tag: ""
 
   # -- Image digest, for example `sha256:0e07…`. Takes precedence over `image.tag`.
@@ -344,9 +344,11 @@ configMap:
 ###############################################################################
 # 5. Registry configuration
 #
-# Everything under `config` is written to /etc/registry/config.yaml. The Registry
-# rejects unknown keys at startup ("has invalid keys"), so only use the keys below.
-# Key names are case-insensitive.
+# templates/configmap.yaml writes these settings to /etc/registry/config.yaml, one section
+# per key: application, status, logger, telemetry, grpcServer, database, orbital and
+# validations. Other keys under `config` are not written. Inside a section, the Registry
+# rejects unknown keys at startup ("has invalid keys"), so only use the keys below. Key
+# names are case-insensitive.
 #
 # Values marked "value reference" take one of:
 #   { source: embedded, value: "…" }

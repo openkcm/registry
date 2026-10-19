@@ -22,7 +22,7 @@ spec:
     metadata:
       annotations:
         # Restart the pods when the configuration changes.
-        checksum/config: {{ include "registry.config" . | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         {{- with .Values.pod.annotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -56,7 +56,7 @@ spec:
       {{- end }}
       containers:
         - name: {{ include "registry.name" . }}
-          image: "{{ template "registry.image" (tuple .Values.image) }}"
+          image: "{{ template "registry.image" (tuple .Values.image .Chart.AppVersion) }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.image.command }}
           command:

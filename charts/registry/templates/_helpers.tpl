@@ -81,15 +81,20 @@ Name of the service account to use.
 {{- end }}
 
 {{/*
-Image reference. Either image.tag or image.digest must be set; there is no fallback to appVersion.
-A digest takes precedence over a tag.
+Image reference: registry and repository, then the digest if set, else the tag. The tag
+defaults to the chart's appVersion, the image version this chart release is made for.
+Call it with (tuple .Values.image .Chart.AppVersion).
 */}}
 {{- define "registry.image" -}}
-{{- with index . 0 -}}
-{{- if not (or .digest .tag) -}}{{ fail "Either image.tag or image.digest must be set" }}{{- end -}}
-{{- if .registry -}}{{ printf "%s/%s" .registry .repository }}{{- else -}}{{- .repository -}}{{- end -}}
-{{- if .digest -}}{{ printf "@%s" (toString .digest) }}{{- else -}}{{ printf ":%s" (toString .tag) }}{{- end -}}
-{{- end }}
+{{- $image := index . 0 -}}
+{{- $appVersion := index . 1 -}}
+{{- $repository := $image.repository -}}
+{{- if $image.registry -}}{{- $repository = printf "%s/%s" $image.registry $image.repository -}}{{- end -}}
+{{- if $image.digest -}}
+{{- printf "%s@%s" $repository (toString $image.digest) -}}
+{{- else -}}
+{{- printf "%s:%s" $repository (toString ($image.tag | default $appVersion)) -}}
+{{- end -}}
 {{- end }}
 
 {{/*
@@ -103,20 +108,15 @@ true
 {{- end }}
 
 {{/*
-The Registry configuration as rendered into config.yaml. Chart-only keys are removed,
-because the Registry rejects unknown keys at startup.
-*/}}
-{{- define "registry.config" -}}
-{{- toYaml (omit .Values.config "isImmutable") }}
-{{- end }}
-
-{{/*
-Name of the configuration ConfigMap. An immutable ConfigMap gets a content hash in its
-name, so that a changed configuration creates a new ConfigMap instead of failing the upgrade.
+Name of the configuration ConfigMap. An immutable ConfigMap gets a hash in its name, so that
+a changed configuration creates a new ConfigMap instead of failing the upgrade. config.yaml
+(templates/configmap.yaml) is made of the values under config and the chart version, so the
+hash covers these.
 */}}
 {{- define "registry.configMapName" -}}
 {{- if include "registry.configImmutable" . -}}
-{{- printf "%s-config-%s" (include "registry.fullname" . | trunc 45 | trimSuffix "-") (include "registry.config" . | sha256sum | trunc 10) }}
+{{- $hash := printf "%s\n%s" .Chart.Version (toYaml .Values.config) | sha256sum | trunc 10 }}
+{{- printf "%s-config-%s" (include "registry.fullname" . | trunc 45 | trimSuffix "-") $hash }}
 {{- else -}}
 {{- printf "%s-config" (include "registry.fullname" . | trunc 56 | trimSuffix "-") }}
 {{- end -}}
