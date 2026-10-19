@@ -22,7 +22,7 @@ spec:
     metadata:
       annotations:
         # Restart the pods when the configuration changes.
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/config: {{ include "registry.config" . | sha256sum }}
         {{- with .Values.pod.annotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

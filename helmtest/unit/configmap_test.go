@@ -10,9 +10,10 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// configSections are the top-level sections templates/configmap.yaml writes, in order.
+// configSections are the top-level sections of config.yaml with the default values, in the
+// order toYaml writes them (sorted).
 var configSections = []string{
-	"application", "status", "logger", "telemetry", "grpcServer", "database", "orbital", "validations",
+	"application", "database", "grpcServer", "logger", "orbital", "status", "telemetry", "validations",
 }
 
 // renderConfigYAML renders the chart and returns config.yaml of the configuration ConfigMap.
@@ -44,20 +45,20 @@ func topLevelKeys(t *testing.T, doc string) []string {
 	return keys
 }
 
-// TestConfigSections checks that config.yaml has exactly the sections the Registry reads,
-// and that keys under config that are not listed in templates/configmap.yaml are not written.
+// TestConfigSections checks that everything under config reaches config.yaml (helper
+// registry.config), except the chart-only key isImmutable.
 func TestConfigSections(t *testing.T) {
 	t.Run("default values", func(t *testing.T) {
 		assert.Equal(t, configSections, topLevelKeys(t, renderConfigYAML(t)))
 	})
 
-	t.Run("keys not listed are not written", func(t *testing.T) {
+	t.Run("keys under config are passed through", func(t *testing.T) {
 		cfg := renderConfigYAML(t,
 			"--set", "config.isImmutable=true",
 			"--set", "config.notARegistrySetting.key=value",
 		)
-		assert.Equal(t, configSections, topLevelKeys(t, cfg))
 		assert.NotContains(t, cfg, "isImmutable")
-		assert.NotContains(t, cfg, "notARegistrySetting")
+		// The Registry rejects this key at startup; the chart does not drop it silently.
+		assert.Contains(t, cfg, "notARegistrySetting:")
 	})
 }

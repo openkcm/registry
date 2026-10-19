@@ -108,15 +108,26 @@ true
 {{- end }}
 
 {{/*
-Name of the configuration ConfigMap. An immutable ConfigMap gets a hash in its name, so that
-a changed configuration creates a new ConfigMap instead of failing the upgrade. config.yaml
-(templates/configmap.yaml) is made of the values under config and the chart version, so the
-hash covers these.
+The Registry configuration as rendered into config.yaml: everything under config, except the
+chart-only key isImmutable, because the Registry rejects unknown keys at startup.
+*/}}
+{{- define "registry.config" -}}
+{{- $application := dict "name" (include "registry.name" .) }}
+{{- with .Values.config.environment }}{{- $_ := set $application "environment" . }}{{- end }}
+{{- with .Values.config.labels }}{{- $_ := set $application "labels" . }}{{- end }}
+{{- with .Values.config.application }}{{- $application = mergeOverwrite $application (deepCopy .) }}{{- end }}
+{{- $rest := omit .Values.config "environment" "labels" "isImmutable" "application" }}
+{{- toYaml (merge (dict "application" $application) $rest) }}
+{{- end }}
+
+{{/*
+Name of the configuration ConfigMap. An immutable ConfigMap gets a hash of the configuration
+in its name, so that a changed configuration creates a new ConfigMap instead of failing the
+upgrade.
 */}}
 {{- define "registry.configMapName" -}}
 {{- if include "registry.configImmutable" . -}}
-{{- $hash := printf "%s\n%s" .Chart.Version (toYaml .Values.config) | sha256sum | trunc 10 }}
-{{- printf "%s-config-%s" (include "registry.fullname" . | trunc 45 | trimSuffix "-") $hash }}
+{{- printf "%s-config-%s" (include "registry.fullname" . | trunc 45 | trimSuffix "-") (include "registry.config" . | sha256sum | trunc 10) }}
 {{- else -}}
 {{- printf "%s-config" (include "registry.fullname" . | trunc 56 | trimSuffix "-") }}
 {{- end -}}

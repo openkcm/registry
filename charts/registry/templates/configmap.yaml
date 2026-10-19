@@ -13,47 +13,4 @@ metadata:
 immutable: {{ include "registry.configImmutable" . | eq "true" }}
 data:
   config.yaml: |-
-    # Based on github.com/openkcm/common-sdk/pkg/commoncfg
-    {{- with .Values.config.application }}
-    application:
-      {{- toYaml . | nindent 6 }}
-    {{- end }}
-
-    {{- with .Values.config.status }}
-    status:
-      {{- toYaml . | nindent 6 }}
-    {{- end }}
-
-    {{- with .Values.config.logger }}
-    logger:
-      {{- toYaml . | nindent 6 }}
-    {{- end }}
-
-    {{- with .Values.config.telemetry }}
-    telemetry:
-      {{- toYaml . | nindent 6 }}
-    {{- end }}
-
-    # Based on github.com/openkcm/registry/internal/config
-    {{- with .Values.config.grpcServer }}
-    grpcServer:
-      {{- toYaml . | nindent 6 }}
-    {{- end }}
-
-    # PostgreSQL connection
-    {{- with .Values.config.database }}
-    database:
-      {{- toYaml . | nindent 6 }}
-    {{- end }}
-
-    # Orbital: the tenant jobs sent to the CMK regions
-    {{- with .Values.config.orbital }}
-    orbital:
-      {{- toYaml . | nindent 6 }}
-    {{- end }}
-
-    # Rules for the values callers may register
-    {{- with .Values.config.validations }}
-    validations:
-      {{- toYaml . | nindent 6 }}
-    {{- end }}
+    {{- include "registry.config" . | nindent 4 }}

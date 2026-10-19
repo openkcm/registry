@@ -354,11 +354,9 @@ configMap:
 ###############################################################################
 # 5. Registry configuration
 #
-# templates/configmap.yaml writes these settings to /etc/registry/config.yaml, one section
-# per key: application, status, logger, telemetry, grpcServer, database, orbital and
-# validations. Other keys under `config` are not written. Inside a section, the Registry
-# rejects unknown keys at startup ("has invalid keys"), so only use the keys below. Key
-# names are case-insensitive.
+# Everything under `config` is written to /etc/registry/config.yaml (helper registry.config
+# in templates/_helpers.tpl). The Registry rejects unknown keys at startup ("has invalid
+# keys"), so only use the keys below. Key names are case-insensitive.
 #
 # Values marked "value reference" take one of:
 #   { source: embedded, value: "…" }
@@ -367,15 +365,15 @@ configMap:
 #   { source: file, file: { path: /path.json, format: json, jsonPath: "$.field" } }
 ###############################################################################
 config:
+  isImmutable: false
 
-  application:
-    # -- Name of the application, attached to logs, traces and metrics.
-    name: registry
-    # -- Environment name, attached to logs, traces and metrics, for example
-    # `production` or `staging`.
-    environment: production
-    # -- Additional attributes attached to logs, traces and metrics.
-    labels: {}
+  # -- Environment name (`application.environment`), attached to logs, traces, metrics and
+  # audit events.
+  environment: production
+
+  # -- Additional attributes (`application.labels`) attached to logs, traces and metrics.
+  labels: {}
+
 
   database:
     # -- PostgreSQL host name. **Required.**

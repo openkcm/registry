@@ -163,11 +163,10 @@ The Registry reads its configuration at startup. The chart adds a
 `checksum/config` annotation to the pods, so a configuration change restarts
 them during `helm upgrade`.
 
-[templates/configmap.yaml](templates/configmap.yaml) writes `config.yaml` with one
-section per setting: `application`, `status`, `logger`, `telemetry`, `grpcServer`,
-`database`, `orbital` and `validations`. Other keys under `config` are not written.
-Inside a section, the Registry rejects unknown keys at startup. Keys that only control the
-chart, such as `configMap.immutable`, are outside `config`.
+Everything under `config` is written to `config.yaml` (helper `registry.config` in
+[templates/_helpers.tpl](templates/_helpers.tpl)), and the Registry rejects unknown keys at
+startup. Keys that only control the chart, such as `configMap.immutable`, are outside
+`config`.
 
 With `configMap.immutable: true`, every configuration change creates a ConfigMap with a
 new name and Helm deletes the previous one. Roll back with `helm rollback`, which
@@ -194,7 +193,7 @@ mount the deleted ConfigMap and do not start.
 
 | Symptom | Cause |
 | --- | --- |
-| Pod exits with `has invalid keys` | A key inside a section under `config` (for example `config.database`) is not a Registry setting |
+| Pod exits with `has invalid keys` | A key under `config` is not a Registry setting |
 | Pod exits with `… must be greater than zero` | A required `config.orbital` value is missing |
 | Pod never becomes ready | Database unreachable, wrong credentials or TLS settings, or `config.grpcServer.flags.health` is false |
 | Tenants stay in a provisioning, blocking or terminating state | No `config.orbital.targets` entry for the tenant's region, or no CMK answers on that target |
