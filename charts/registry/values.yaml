@@ -380,6 +380,13 @@ configMap:
 # `DATABASE_HOST` for `database.host` or `ORBITAL_TASKLIMITNUM` for `orbital.taskLimitNum`.
 ###############################################################################
 config:
+  # ---------------------------------------------------------------------------
+  # application: environment and labels of the Registry in its logs, traces and metrics.
+  # ---------------------------------------------------------------------------
+
+  # Names this Registry installation in everything it emits, so that its logs, traces and
+  # metrics can be told apart from those of other installations in a shared backend.
+
   # -- Name of the installation, for example `production` or `staging`
   # (`application.environment`). Attached to logs, traces and metrics.
   environment: production
@@ -397,7 +404,16 @@ config:
   #     environment: staging
   #     labels: { team: key-management }
 
-  # PostgreSQL database. The Registry creates and updates its tables at startup.
+  # ---------------------------------------------------------------------------
+  # database: PostgreSQL database of the Registry.
+  # ---------------------------------------------------------------------------
+
+  # The Registry keeps all of its state in PostgreSQL: the tenants, the systems and their
+  # regional entries, the authentication settings and configurations of the tenants, and the
+  # tenant jobs that Orbital delivers. Without the database the Registry does not start; back it
+  # up.
+
+  # The Registry creates and updates its tables at startup.
   database:
     # -- PostgreSQL host name or IP address, a plain string (not a value reference).
     # **Required**, for example `postgresql.services.svc.cluster.local`.
@@ -441,7 +457,15 @@ config:
     #   PGSSLCERT, PGSSLKEY   client certificate and key files, if the server requires them
     # Host, port, database name, user and password always come from this configuration.
 
-  # gRPC API of the Registry.
+  # ---------------------------------------------------------------------------
+  # grpcServer: gRPC API of the Registry.
+  # ---------------------------------------------------------------------------
+
+  # The API of the Registry. CMK and the tools that onboard tenants and systems call it to
+  # register, change and look up tenants, systems and their mappings, the authentication
+  # settings and the configurations of tenants. These settings control the listen address and
+  # the connections.
+
   grpcServer:
     # -- Listen address of the gRPC API, `:port` or `host:port`. Must match the `grpc`
     # container port. Default: `:9092`.
@@ -491,6 +515,10 @@ config:
       #     maxCapacity: 1          # most connections, at least initialCapacity
       #     idleTimeout: 5s         # replace a connection unused for this long
       #     maxLifeDuration: 60s    # replace a connection older than this
+
+  # ---------------------------------------------------------------------------
+  # orbital: delivery of tenant jobs to the CMK of each region.
+  # ---------------------------------------------------------------------------
 
   # Orbital delivers the jobs of a tenant (changes of the tenant, its authentication and its
   # configuration) to the CMK of the tenant's region: it confirms a new job, creates its task
@@ -589,6 +617,14 @@ config:
         execInterval: 1s
         timeout: 5s
 
+  # ---------------------------------------------------------------------------
+  # validations: rules for the values callers may register.
+  # ---------------------------------------------------------------------------
+
+  # Lets the operator restrict what may be registered beyond the checks of the API itself, for
+  # example to the regions that have a CMK or to known tenant owner types, so that wrong
+  # registrations are rejected at once instead of failing later in a region.
+
   # -- Rules that restrict the values callers may register, in addition to the Registry's
   # built-in checks (for example, IDs, names and regions must not be empty). Each entry:
   #   id               the field, see the field IDs below
@@ -675,7 +711,14 @@ config:
           spec:
             allowList: ["system", "subaccount"]
 
-  # Status server for the probes, version and metrics.
+  # ---------------------------------------------------------------------------
+  # status: status server for the probes, version and metrics.
+  # ---------------------------------------------------------------------------
+
+  # A small HTTP server next to the gRPC API. Kubernetes calls its probe endpoints to decide
+  # whether a pod is alive and ready for traffic, so it must stay enabled. It also serves the
+  # build version and, with Prometheus enabled, the metrics.
+
   status:
     # -- Serve the status endpoints (`/probe/liveness`, `/probe/readiness`, `/version`
     # and, if enabled, `/metrics` and `/debug/pprof/`). Needed by the probes.
@@ -688,7 +731,14 @@ config:
     # authentication. Keep false in production; enable it only for troubleshooting.
     profiling: false
 
-  # Logs of the Registry on standard output.
+  # ---------------------------------------------------------------------------
+  # logger: logs on standard output.
+  # ---------------------------------------------------------------------------
+
+  # The Registry logs its requests, the processing of tenant jobs and its errors to standard
+  # output, where the log collection of the cluster picks them up. These settings control the
+  # level of detail, the format and field names, and the masking of personal data.
+
   logger:
     # -- Log level: `trace`, `debug`, `info`, `warn` or `error`; other values mean `info`.
     # `debug` and `trace` log request details; use them only for troubleshooting.
@@ -725,6 +775,14 @@ config:
         # -- Name of the log level field. The Registry's own default is `info`, which
         # writes `"info":"INFO"`; the chart uses `level`.
         level: level
+
+  # ---------------------------------------------------------------------------
+  # telemetry: OpenTelemetry export of logs, traces and metrics.
+  # ---------------------------------------------------------------------------
+
+  # Exports traces, metrics and logs to an OpenTelemetry collector, or serves the metrics for
+  # Prometheus, to monitor the Registry. Without it, nothing is exported; the logs on standard
+  # output are not affected.
 
   # OpenTelemetry export (OTLP) of logs, traces and metrics. Each signal has:
   #   enabled    export this signal. Default: false
