@@ -66,7 +66,7 @@ networkPolicy:
   enabled: true
   grpc:
     from:
-      - podSelector: { matchLabels: { app.kubernetes.io/name: cmk } }
+      - podSelector: { matchLabels: { app.kubernetes.io/part-of: cmk } }
 
 config:
   database:
@@ -85,7 +85,7 @@ config:
           amqp:
             url: amqps://rabbitmq.services.svc.cluster.local:5671
             target: /queues/cmk.emea.tenants      # CMK tenantManager.amqp.source
-            source: /queues/cmk.global.tenants    # CMK tenantManager.amqp.target
+            source: /queues/cmk.emea.tenants.replies    # CMK tenantManager.amqp.target
           auth:
             type: mtls
             mtls:

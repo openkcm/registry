@@ -14,7 +14,7 @@ config:
           amqp:
             url: amqp://rabbitmq.dev.svc.cluster.local:5672
             target: /queues/cmk.emea.tenants
-            source: /queues/cmk.global.tenants
+            source: /queues/cmk.emea.tenants.replies
           auth:
             type: none
 

@@ -291,7 +291,7 @@ networkPolicy:
     #   - namespaceSelector:
     #       matchLabels: { kubernetes.io/metadata.name: services }
     #     podSelector:
-    #       matchLabels: { app.kubernetes.io/name: cmk }
+    #       matchLabels: { app.kubernetes.io/part-of: cmk }
     # Empty: no peer can reach the gRPC API.
     from: []
   status:
@@ -643,7 +643,7 @@ config:
     #         amqp:
     #           url: amqps://rabbitmq.services.svc.cluster.local:5671
     #           target: /queues/cmk.emea.tenants
-    #           source: /queues/cmk.global.tenants
+    #           source: /queues/cmk.emea.tenants.replies
     #         auth:
     #           type: mtls
     #           mtls:
@@ -658,7 +658,7 @@ config:
     #         amqp:
     #           url: amqp://rabbitmq.dev.svc.cluster.local:5672
     #           target: /queues/cmk.emea.tenants
-    #           source: /queues/cmk.global.tenants
+    #           source: /queues/cmk.emea.tenants.replies
     #         auth:
     #           type: none
     targets: []
