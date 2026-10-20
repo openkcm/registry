@@ -1,0 +1,173 @@
+# Every setting documented under `config` in charts/registry/values.yaml, with the first
+# example of each alternative. TestConfigStrict renders the chart with this file and loads the
+# rendered config.yaml the way the Registry does at startup, so a wrong key, nesting or type
+# in an example fails the test. The other alternatives are in values-all-config-alt*.yaml.
+config:
+  environment: staging
+  labels: { team: key-management }
+  application:
+    name: registry-emea
+    environment: staging
+    labels: { team: key-management }
+
+  database:
+    host: postgresql.services.svc.cluster.local
+    port: 5432
+    name: registry
+    user: { source: file, file: { path: /etc/credentials/database/username, format: binary } }
+    password:
+      source: file
+      file: { path: /etc/credentials/database/password, format: binary }
+    logLevel: 2
+
+  grpcServer:
+    address: :9092
+    flags:
+      health: true
+      reflection: false
+    attributes:
+      maxConnectionIdle: 300s
+      maxConnectionAge: 1800s
+      maxConnectionAgeGrace: 5s
+      time: 7200s
+      timeout: 20s
+    efPolMinTime: 300s
+    efPolPermitWithoutStream: false
+    maxRecvMsgSize: 4194304
+    client:
+      attributes:
+        keepaliveTime: 1s
+        keepaliveTimeout: 1s
+      pool:
+        initialCapacity: 1
+        maxCapacity: 1
+        idleTimeout: 5s
+        maxLifeDuration: 60s
+
+  orbital:
+    confirmJobAfter: 2s
+    taskLimitNum: 10
+    maxPendingReconciles: 10
+    backoffBaseIntervalSec: 2
+    backoffMaxIntervalSec: 240
+    targets:
+      - region: emea
+        connection:
+          type: amqp
+          amqp:
+            url: amqps://rabbitmq.services.svc.cluster.local:5671
+            target: /queues/cmk.emea.tenants
+            source: /queues/cmk.emea.tenants.replies
+          auth:
+            type: mtls
+            mtls:
+              certFile: /etc/credentials/broker/tls.crt
+              keyFile: /etc/credentials/broker/tls.key
+              caFile: /etc/credentials/broker/ca.crt
+    workers:
+      - name: confirm-job
+        noOfWorkers: 1
+        execInterval: 1s
+        timeout: 5s
+      - name: create-task
+        noOfWorkers: 1
+        execInterval: 1s
+        timeout: 5s
+      - name: reconcile
+        noOfWorkers: 1
+        execInterval: 1s
+        timeout: 5s
+      - name: notify-event
+        noOfWorkers: 1
+        execInterval: 1s
+        timeout: 5s
+
+  validations:
+    # The default rules of the chart.
+    - id: Auth.Type
+      constraints: [{ type: list, spec: { allowList: ["oidc"] } }]
+    - id: Auth.Properties
+      constraints:
+        - type: map-keys
+          spec:
+            keys: [{ name: issuer, required: true, constraints: [{ type: non-empty }] }]
+    - id: Tenant.UserGroups
+      constraints:
+        - type: regex
+          spec: { pattern: "^KMS_(TenantAdministrator|TenantAuditor)_[A-Za-z0-9-]+$" }
+    - id: System.Type
+      constraints: [{ type: list, spec: { allowList: ["system", "subaccount"] } }]
+    # The example with every constraint type.
+    - id: Tenant.Region
+      constraints: [{ type: list, spec: { allowList: ["emea", "us"] } }]
+    - id: RegionalSystem.Region
+      constraints: [{ type: list, spec: { allowList: ["eu10", "us10"] } }]
+    - id: Tenant.OwnerType
+      constraints: [{ type: list, spec: { allowList: ["customer"] } }]
+    - id: Tenant.ID
+      constraints: [{ type: regex, spec: { pattern: "^[a-z0-9-]{1,64}$" } }]
+    - id: Tenant.Labels
+      constraints: [{ type: non-empty-keys }, { type: non-empty-vals }]
+    - id: RegionalSystem.Labels
+      constraints:
+        - type: map-keys
+          spec:
+            keys:
+              - name: cost-center
+                required: true
+                constraints: [{ type: regex, spec: { pattern: "^[0-9]{4}$" } }]
+              - name: tier
+                constraints: [{ type: list, spec: { allowList: ["gold", "silver"] } }]
+    - id: Tenant.Contact
+      skipIfNotExists: true
+      constraints: [{ type: non-empty }]
+
+  status:
+    enabled: true
+    address: :8888
+    profiling: false
+
+  logger:
+    level: info
+    format: json
+    source: false
+    formatter:
+      time:
+        type: pattern
+        pattern: "Mon Jan 02 15:04:05 -0700 2006"
+        precision: 1s
+      fields:
+        time: ts
+        error: err
+        level: level
+        message: message
+        otel: { traceId: trace_id, spanId: span_id }
+        masking:
+          pii: [email, ip-address]
+          other: { jwt-token: "*****" }
+
+  telemetry:
+    traces:
+      enabled: true
+      protocol: grpc
+      host: { source: embedded, value: otel-collector.observability:4317 }
+      secretRef:
+        type: mtls
+        mtls:
+          cert: { source: file, file: { path: /etc/otel/tls.crt, format: binary } }
+          certKey: { source: file, file: { path: /etc/otel/tls.key, format: binary } }
+          serverCa: { source: file, file: { path: /etc/otel/ca.crt, format: binary } }
+    metrics:
+      enabled: true
+      protocol: http
+      host: { source: env, env: OTEL_HOST }
+      url: /v1/metrics
+      secretRef:
+        type: api-token
+        apiToken: { source: file, file: { path: /etc/otel/api-token, format: binary } }
+    logs:
+      enabled: true
+      protocol: http
+      host: { source: env, env: OTEL_HOST }
+      url: /v1/logs
+      secretRef: { type: insecure }

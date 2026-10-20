@@ -24,15 +24,11 @@ If release name contains chart name it will be used as a full name.
 {{- end }}
 
 {{/*
-Namespace for all resources to be installed into
-If not defined in values file then the helm release namespace is used
-By default this is not set so the helm release namespace will be used
-
-This gets around an problem within helm discussed here
-https://github.com/helm/helm/issues/5358
+Namespace for all resources. Defaults to the release namespace.
+See https://github.com/helm/helm/issues/5358
 */}}
 {{- define "registry.namespace" -}}
-    {{ .Values.namespace | default .Release.Namespace }}
+{{- .Values.namespace | default .Release.Namespace }}
 {{- end -}}
 
 {{/*
@@ -43,19 +39,29 @@ Create chart name and version as used by the chart label.
 {{- end }}
 
 {{/*
-Common labels
+Version of the deployed application: the image tag if set, else the chart's appVersion.
+*/}}
+{{- define "registry.version" -}}
+{{- (.Values.image.tag | default .Chart.AppVersion) | toString | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Common labels.
 */}}
 {{- define "registry.labels" -}}
 helm.sh/chart: {{ include "registry.chart" . }}
 {{ include "registry.selectorLabels" . }}
-{{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- with include "registry.version" . }}
+app.kubernetes.io/version: {{ . | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- with .Values.commonLabels }}
+{{ toYaml . }}
+{{- end }}
 {{- end }}
 
 {{/*
-Selector labels
+Selector labels. Do not change them: a Deployment's selector cannot be changed on upgrade.
 */}}
 {{- define "registry.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "registry.name" . }}
@@ -64,7 +70,7 @@ app.kubernetes.io/component: {{ .Chart.Name }}
 {{- end }}
 
 {{/*
-Create the name of the service account to use
+Name of the service account to use.
 */}}
 {{- define "registry.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
@@ -75,13 +81,54 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
-Util function for generating the image URL based on the provided options.
-Either image.tag or image.digest must be set explicitly; no fallback to appVersion.
+Image reference: registry and repository, then the digest if set, else the tag. The tag
+defaults to the chart's appVersion, the image version this chart release is made for.
+Call it with (tuple .Values.image .Chart.AppVersion).
 */}}
 {{- define "registry.image" -}}
-{{- with index . 0 -}}
-{{- if not (or .digest .tag) -}}{{ fail "Either image.tag or image.digest must be set" }}{{- end -}}
-{{- if .registry -}}{{ printf "%s/%s" .registry .repository }}{{- else -}}{{- .repository -}}{{- end -}}
-{{- if .digest -}}{{ printf "@%s" .digest }}{{- else -}}{{ printf ":%s" .tag }}{{- end -}}
+{{- $image := index . 0 -}}
+{{- $appVersion := index . 1 -}}
+{{- $repository := $image.repository -}}
+{{- if $image.registry -}}{{- $repository = printf "%s/%s" $image.registry $image.repository -}}{{- end -}}
+{{- if $image.digest -}}
+{{- printf "%s@%s" $repository (toString $image.digest) -}}
+{{- else -}}
+{{- printf "%s:%s" $repository (toString ($image.tag | default $appVersion)) -}}
+{{- end -}}
 {{- end }}
+
+{{/*
+Whether the configuration ConfigMap is immutable. configMap.immutable is preferred;
+config.isImmutable is still honoured for compatibility with older values files.
+*/}}
+{{- define "registry.configImmutable" -}}
+{{- if or .Values.configMap.immutable (and (kindIs "map" .Values.config) .Values.config.isImmutable) -}}
+true
+{{- end -}}
+{{- end }}
+
+{{/*
+The Registry configuration as rendered into config.yaml: everything under config, except the
+chart-only key isImmutable, because the Registry rejects unknown keys at startup.
+*/}}
+{{- define "registry.config" -}}
+{{- $application := dict "name" (include "registry.name" .) }}
+{{- with .Values.config.environment }}{{- $_ := set $application "environment" . }}{{- end }}
+{{- with .Values.config.labels }}{{- $_ := set $application "labels" . }}{{- end }}
+{{- with .Values.config.application }}{{- $application = mergeOverwrite $application (deepCopy .) }}{{- end }}
+{{- $rest := omit .Values.config "environment" "labels" "isImmutable" "application" }}
+{{- toYaml (merge (dict "application" $application) $rest) }}
+{{- end }}
+
+{{/*
+Name of the configuration ConfigMap. An immutable ConfigMap gets a hash of the configuration
+in its name, so that a changed configuration creates a new ConfigMap instead of failing the
+upgrade.
+*/}}
+{{- define "registry.configMapName" -}}
+{{- if include "registry.configImmutable" . -}}
+{{- printf "%s-config-%s" (include "registry.fullname" . | trunc 45 | trimSuffix "-") (include "registry.config" . | sha256sum | trunc 10) }}
+{{- else -}}
+{{- printf "%s-config" (include "registry.fullname" . | trunc 56 | trimSuffix "-") }}
+{{- end -}}
 {{- end }}

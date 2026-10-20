@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/openkcm/orbital"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -342,4 +344,75 @@ func TestApplyAuth_OrbitalJobCreated(t *testing.T) {
 
 		assertJobPrepared(t, db, "auth-1", authgrpc.AuthAction_AUTH_ACTION_APPLY_AUTH.String())
 	})
+}
+
+// TestAuthConfirmJob covers the window in which Orbital already sees a job while the
+// transaction that prepared it has not committed yet: young jobs are retried instead of
+// being canceled.
+func TestAuthConfirmJob(t *testing.T) {
+	const externalID = "auth-ext-1"
+	applyJob := authgrpc.AuthAction_AUTH_ACTION_APPLY_AUTH.String()
+	removeJob := authgrpc.AuthAction_AUTH_ACTION_REMOVE_AUTH.String()
+	young := time.Now().UnixNano()
+	old := time.Now().Add(-time.Hour).UnixNano()
+
+	continueType := orbital.ContinueJobConfirmer().Type()
+	cancelType := orbital.CancelJobConfirmer("").Type()
+	completeType := orbital.CompleteJobConfirmer().Type()
+
+	tests := []struct {
+		name      string
+		existing  *model.Auth
+		jobType   string
+		createdAt int64
+		expType   orbital.JobConfirmerResultType
+	}{
+		{name: "retries a young job whose auth is not visible yet", jobType: applyJob, createdAt: young, expType: continueType},
+		{name: "cancels an old job whose auth does not exist", jobType: applyJob, createdAt: old, expType: cancelType},
+		{
+			name:      "completes an apply job whose auth exists",
+			existing:  &model.Auth{ExternalID: externalID, Status: authgrpc.AuthStatus_AUTH_STATUS_APPLYING.String()},
+			jobType:   applyJob,
+			createdAt: young,
+			expType:   completeType,
+		},
+		{
+			name:      "retries a young remove job while the auth is not REMOVING yet",
+			existing:  &model.Auth{ExternalID: externalID, Status: authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String()},
+			jobType:   removeJob,
+			createdAt: young,
+			expType:   continueType,
+		},
+		{
+			name:      "cancels an old remove job while the auth is not REMOVING",
+			existing:  &model.Auth{ExternalID: externalID, Status: authgrpc.AuthStatus_AUTH_STATUS_APPLIED.String()},
+			jobType:   removeJob,
+			createdAt: old,
+			expType:   cancelType,
+		},
+		{
+			name:      "completes a remove job whose auth is REMOVING",
+			existing:  &model.Auth{ExternalID: externalID, Status: authgrpc.AuthStatus_AUTH_STATUS_REMOVING.String()},
+			jobType:   removeJob,
+			createdAt: young,
+			expType:   completeType,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &fakeAuthRepo{existingAuth: tt.existing}
+			auth := service.NewAuthForTest(repo, nil, newTestValidation(t))
+
+			result, err := auth.ConfirmJob(context.Background(), orbital.Job{
+				ExternalID: externalID,
+				Type:       tt.jobType,
+				CreatedAt:  tt.createdAt,
+			})
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			assert.Equal(t, tt.expType, result.Type())
+		})
+	}
 }

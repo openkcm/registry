@@ -353,7 +353,7 @@ func (t *Tenant) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobCo
 	tenant, err := getTenant(ctx, t.repo, job.ExternalID)
 	if err != nil {
 		if errors.Is(err, ErrTenantNotFound) {
-			return orbital.CancelJobConfirmer("tenant not found"), nil
+			return cancelOrWaitJobConfirmer(ctx, job, "tenant not found"), nil
 		}
 		slogctx.Error(ctx, "failed to load tenant for job", "error", err, "jobId", job.ID.String())
 		return nil, err
@@ -370,7 +370,7 @@ func (t *Tenant) ConfirmJob(ctx context.Context, job orbital.Job) (orbital.JobCo
 		}
 
 		if tenant.Status != model.TenantStatus(status.String()) {
-			return orbital.CancelJobConfirmer("invalid tenant status"), nil
+			return cancelOrWaitJobConfirmer(ctx, job, "invalid tenant status"), nil
 		}
 
 		return orbital.CompleteJobConfirmer(), nil

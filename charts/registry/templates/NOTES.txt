@@ -1,0 +1,46 @@
+The OpenKCM Registry is deployed as {{ include "registry.fullname" . }} in namespace {{ include "registry.namespace" . }}.
+
+{{- with .Values.service.ports }}
+gRPC API (cluster internal):  {{ include "registry.fullname" $ }}.{{ include "registry.namespace" $ }}.svc:{{ (index . 0).port }}
+{{- end }}
+Configuration:                ConfigMap {{ include "registry.configMapName" . }}
+
+Check the pods:
+  kubectl --namespace {{ include "registry.namespace" . }} get pods -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/name={{ include "registry.name" . }}
+{{- $cfg := .Values.config }}
+{{- $warnings := list }}
+{{- if not $cfg.orbital.targets }}
+{{- $warnings = append $warnings "config.orbital.targets is empty: tenant jobs cannot be delivered to any CMK. Add one target per CMK region." }}
+{{- end }}
+{{- range $target := $cfg.orbital.targets }}
+{{- $connection := $target.connection | default dict }}
+{{- $auth := $connection.auth | default dict }}
+{{- $amqp := $connection.amqp | default dict }}
+{{- if eq (toString $auth.type) "none" }}
+{{- $warnings = append $warnings (printf "config.orbital.targets: region %s uses connection.auth.type none: the Registry connects to the broker without authentication. Use mtls in production." (toString $target.region)) }}
+{{- end }}
+{{- if hasPrefix "amqp://" (lower (toString $amqp.url)) }}
+{{- $warnings = append $warnings (printf "config.orbital.targets: region %s uses an amqp:// URL: tenant jobs are sent to the broker in plain text. Use amqps:// in production." (toString $target.region)) }}
+{{- end }}
+{{- end }}
+{{- if not .Values.networkPolicy.enabled }}
+{{- $warnings = append $warnings "networkPolicy.enabled is false: the gRPC API has no authentication of its own. Restrict it to its callers with a NetworkPolicy or service mesh policy." }}
+{{- end }}
+{{- if $cfg.grpcServer.flags.reflection }}
+{{- $warnings = append $warnings "config.grpcServer.flags.reflection is true. Switch it off in production." }}
+{{- end }}
+{{- if $cfg.status.profiling }}
+{{- $warnings = append $warnings "config.status.profiling is true: profiling endpoints are served without authentication. Switch it off in production." }}
+{{- end }}
+{{- if eq (toString (default "embedded" $cfg.database.password.source)) "embedded" }}
+{{- $warnings = append $warnings "config.database.password is embedded in the ConfigMap. Load it from a mounted Secret with source: file." }}
+{{- end }}
+{{- if $warnings }}
+
+WARNINGS:
+{{- range $warnings }}
+  - {{ . }}
+{{- end }}
+{{- end }}
+
+Documentation: https://openkcm.io/components/cmk/security/registry-config

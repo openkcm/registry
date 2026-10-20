@@ -3,6 +3,8 @@ package model
 import (
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	tenantconfiggrpc "github.com/openkcm/api-sdk/proto/kms/api/cmk/registry/tenant_config/v1"
 
 	"github.com/openkcm/registry/internal/repository"
@@ -15,13 +17,14 @@ const TenantConfigTenantIDValidationID validation.ID = "TenantConfig.TenantID"
 // The status tracks whether the configuration has been propagated to the CMK layer via
 // an orbital job (UPDATING → ACTIVE on success, UPDATING_ERROR on failure).
 type TenantConfig struct {
-	TenantID     string    `gorm:"column:tenant_id;primaryKey" validationID:"TenantConfig.TenantID"`
-	SystemLimit  *int32    `gorm:"column:system_limit"`
-	KeyLimit     *int32    `gorm:"column:key_limit"`
-	Status       string    `gorm:"column:status;not null"`
-	ErrorMessage string    `gorm:"column:error_message"`
-	CreatedAt    time.Time `gorm:"column:created_at;autoCreateTime"`
-	UpdatedAt    time.Time `gorm:"column:updated_at;autoUpdateTime"`
+	TenantID       string    `gorm:"column:tenant_id;primaryKey" validationID:"TenantConfig.TenantID"`
+	SystemLimit    *int32    `gorm:"column:system_limit"`
+	KeyLimit       *int32    `gorm:"column:key_limit"`
+	KeyConfigLimit *int32    `gorm:"column:key_config_limit"`
+	Status         string    `gorm:"column:status;not null"`
+	ErrorMessage   string    `gorm:"column:error_message"`
+	CreatedAt      time.Time `gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt      time.Time `gorm:"column:updated_at;autoUpdateTime"`
 }
 
 // Validations returns the default field validators for TenantConfig.
@@ -50,24 +53,26 @@ func (tc *TenantConfig) PaginationKey() map[repository.QueryField]any {
 
 // ToProto converts the TenantConfig model to its GetTenantConfigResponse protobuf representation.
 func (tc *TenantConfig) ToProto() *tenantconfiggrpc.GetTenantConfigResponse {
-	tenantID := tc.TenantID
-	st := tenantconfiggrpc.TenantConfigStatus(tenantconfiggrpc.TenantConfigStatus_value[tc.Status])
-	errMsg := tc.ErrorMessage
-	createdAt := formatTime(tc.CreatedAt)
-	updatedAt := formatTime(tc.UpdatedAt)
+	return tenantconfiggrpc.GetTenantConfigResponse_builder{
+		TenantId:     new(tc.TenantID),
+		Status:       new(tenantconfiggrpc.TenantConfigStatus(tenantconfiggrpc.TenantConfigStatus_value[tc.Status])),
+		ErrorMessage: new(tc.ErrorMessage),
+		CreatedAt:    new(formatTime(tc.CreatedAt)),
+		UpdatedAt:    new(formatTime(tc.UpdatedAt)),
+		Values:       tc.makeProtoValues(),
+	}.Build()
+}
 
-	b := tenantconfiggrpc.GetTenantConfigResponse_builder{
-		TenantId:     &tenantID,
-		Status:       &st,
-		ErrorMessage: &errMsg,
-		CreatedAt:    &createdAt,
-		UpdatedAt:    &updatedAt,
+func (tc *TenantConfig) makeProtoValues() *tenantconfiggrpc.TenantConfigurationValues {
+	values := tenantconfiggrpc.TenantConfigurationValues_builder{
+		SystemLimit:    tc.SystemLimit,
+		KeyLimit:       tc.KeyLimit,
+		KeyConfigLimit: tc.KeyConfigLimit,
+	}.Build()
+
+	if proto.Equal(values, &tenantconfiggrpc.TenantConfigurationValues{}) {
+		return nil
 	}
-	if tc.SystemLimit != nil || tc.KeyLimit != nil {
-		b.Values = tenantconfiggrpc.TenantConfigurationValues_builder{
-			SystemLimit: tc.SystemLimit,
-			KeyLimit:    tc.KeyLimit,
-		}.Build()
-	}
-	return b.Build()
+
+	return values
 }
