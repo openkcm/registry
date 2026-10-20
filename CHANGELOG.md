@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.10.0](https://github.com/openkcm/registry/compare/v1.9.0...v1.10.0) (2026-10-20)
+
+
+### Features
+
+* add key_config_limit ([#243](https://github.com/openkcm/registry/issues/243)) ([4afe558](https://github.com/openkcm/registry/commit/4afe558598c1fc2bcf2782648fdde742a6b19af9))
+* **tenantConfig:** emit metrics ([#247](https://github.com/openkcm/registry/issues/247)) ([a8ecf34](https://github.com/openkcm/registry/commit/a8ecf34fc6497fa7ba753e62c9d93bcfcd42c73a))
+
+
+### Bug Fixes
+
+* chart refactoring in documention ([#250](https://github.com/openkcm/registry/issues/250)) ([c4e44a5](https://github.com/openkcm/registry/commit/c4e44a5b5a7d4978ae7a5a28853ec824c715e0e5))
+* content the README.md ([3725b35](https://github.com/openkcm/registry/commit/3725b359fc54170ad380e910f4acdd3680ff4e38))
+* **deps:** bump actions/upload-artifact from 7.0.1 to 7.0.2 in the actions-group group ([#248](https://github.com/openkcm/registry/issues/248)) ([e2da6d4](https://github.com/openkcm/registry/commit/e2da6d4559987ba47096c190d451592c64817960))
+* **deps:** bump the gomod-group group with 4 updates ([#244](https://github.com/openkcm/registry/issues/244)) ([db30b2a](https://github.com/openkcm/registry/commit/db30b2a4de5d3124ffc3667044900a95e7613df7))
+* update the dependencies ([#246](https://github.com/openkcm/registry/issues/246)) ([b14a7da](https://github.com/openkcm/registry/commit/b14a7da25afe0412b0fa12526ad7c8a7e2dd50d8))
+
 ## [1.9.0](https://github.com/openkcm/registry/compare/v1.8.0...v1.9.0) (2026-10-08)
 
 
