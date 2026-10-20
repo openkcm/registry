@@ -1,0 +1,25 @@
+# The third example of each alternative documented under `config` in
+# charts/registry/values.yaml (see values-all-config.yaml).
+config:
+  database:
+    host: postgresql.services.svc.cluster.local
+    user:
+      source: file
+      file: { path: /etc/credentials/database/db.json, format: json, jsonPath: "$.username" }
+    password:
+      source: file
+      file: { path: /etc/credentials/database/db.json, format: json, jsonPath: "$.password" }
+
+  telemetry:
+    traces:
+      enabled: true
+      protocol: http
+      host: { source: embedded, value: otel-collector.observability:4318 }
+      secretRef:
+        type: mtls
+        mtls:
+          cert: { source: file, file: { path: /etc/otel/tls.crt, format: binary } }
+          certKey: { source: file, file: { path: /etc/otel/tls.key, format: binary } }
+          rootCAs:
+            - { source: file, file: { path: /etc/otel/root-ca.crt, format: binary } }
+          attributes: { serverName: otel-collector.example.com }

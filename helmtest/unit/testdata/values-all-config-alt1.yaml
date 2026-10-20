@@ -1,0 +1,45 @@
+# The second example of each alternative documented under `config` in
+# charts/registry/values.yaml (see values-all-config.yaml).
+config:
+  database:
+    host: postgresql.services.svc.cluster.local
+    user: { source: env, env: DB_USER }
+    password: { source: env, env: DB_PASSWORD }
+
+  orbital:
+    targets:
+      - region: emea
+        connection:
+          type: amqp
+          amqp:
+            url: amqp://rabbitmq.dev.svc.cluster.local:5672
+            target: /queues/cmk.emea.tenants
+            source: /queues/cmk.emea.tenants.replies
+          auth:
+            type: none
+
+  logger:
+    formatter:
+      time: { type: unix, precision: 1ms }
+
+  telemetry:
+    dynatraceOneAgent: true
+    traces:
+      enabled: true
+      protocol: grpc
+      host: { source: env, env: OTEL_HOST }
+      secretRef:
+        type: basic
+        basic:
+          username: { source: env, env: OTEL_USERNAME }
+          password: { source: file, file: { path: /etc/otel/password, format: binary } }
+    logs:
+      enabled: true
+      protocol: grpc
+      host: { source: env, env: OTEL_HOST }
+      secretRef:
+        type: api-token
+        apiToken: { source: env, env: OTEL_API_TOKEN }
+    metrics:
+      enabled: true
+      prometheus: { enabled: true }

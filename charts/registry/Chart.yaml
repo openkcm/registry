@@ -1,13 +1,22 @@
 apiVersion: v2
 type: application
-description: A Helm chart for Kubernetes
 name: registry
-# This is the chart version. This version number should be incremented each time you make changes
-# to the chart and its templates, including the app version.
-# Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 1.3.2
-# This is the version number of the application being deployed. This version number should be
-# incremented each time you make changes to the application. Versions are not expected to
-# follow Semantic Versioning. They should reflect the version the application is using.
-# It is recommended to use it with quotes.
-appVersion: "0.0.1"
+description: >-
+  The OpenKCM Registry: the global registry of tenants and systems. It onboards
+  tenants and sends their jobs to the CMK of each region.
+home: https://openkcm.io/components/cmk/registry
+sources:
+  - https://github.com/openkcm/registry
+keywords:
+  - openkcm
+  - cmk
+  - registry
+  - key-management
+# Version of the chart. Increment it for every change to the chart.
+# Versions follow Semantic Versioning (https://semver.org/).
+version: 1.4.0
+# Registry release this chart deploys by default: the tag of its image (default of image.tag).
+# release-please updates it in each release pull request (marker on the line). Increase
+# `version` in the same pull request, otherwise the chart release workflow skips the
+# already-published chart version.
+appVersion: "v1.9.0" # x-release-please-version

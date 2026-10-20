@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/client/amqp"
@@ -22,6 +23,24 @@ var (
 	ErrWrongConnectionType = errors.New("wrong initiator type")
 	ErrUnexpectedJobType   = errors.New("unexpected job type")
 )
+
+// jobConfirmGracePeriod is how long a job confirmer waits for the change that prepared the
+// job to become visible before it cancels the job. Orbital stores the job outside the
+// transaction that creates or updates the auth, tenant or tenant configuration, so the
+// confirm worker can see the job before that transaction has committed.
+const jobConfirmGracePeriod = 30 * time.Second
+
+// cancelOrWaitJobConfirmer cancels the job with the given reason, unless the job is younger
+// than jobConfirmGracePeriod: then the confirmation is retried, because the transaction
+// that prepared the job may not have committed yet.
+func cancelOrWaitJobConfirmer(ctx context.Context, job orbital.Job, reason string) orbital.JobConfirmerResult {
+	if time.Since(time.Unix(0, job.CreatedAt)) < jobConfirmGracePeriod {
+		slogctx.Debug(ctx, "job cannot be confirmed yet, retrying", "reason", reason)
+		return orbital.ContinueJobConfirmer()
+	}
+	slogctx.Warn(ctx, "canceling job", "reason", reason)
+	return orbital.CancelJobConfirmer(reason)
+}
 
 // JobPreparer is the minimal interface needed to enqueue an orbital job.
 // Wrapping *Orbital behind this interface lets callers (and tests) substitute a lightweight stub.
