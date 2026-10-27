@@ -1,6 +1,6 @@
 module github.com/openkcm/registry
 
-go 1.27.1
+go 1.27.3
 
 tool github.com/grpc-ecosystem/grpc-health-probe
 
