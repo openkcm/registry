@@ -9,7 +9,7 @@ require (
 	buf.build/go/protovalidate v1.4.0
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.4
-	github.com/jackc/pgx/v5 v5.11.0
+	github.com/jackc/pgx/v5 v5.12.0
 	github.com/openkcm/api-sdk v0.23.0
 	github.com/openkcm/common-sdk v1.21.0
 	github.com/openkcm/orbital v0.6.2
@@ -20,8 +20,8 @@ require (
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/metric v1.47.0
 	go.opentelemetry.io/otel/sdk/metric v1.47.0
-	go.yaml.in/yaml/v3 v3.0.5
-	google.golang.org/grpc v1.84.0
+	go.yaml.in/yaml/v3 v3.0.6
+	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 	gorm.io/driver/postgres v1.6.3
 	gorm.io/gorm v1.31.2
