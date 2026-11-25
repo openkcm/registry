@@ -1,6 +1,8 @@
 package sql_test
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -31,7 +33,8 @@ func (noopDialector) Explain(s string, _ ...any) string                   { retu
 
 type testRecord struct{ ID string }
 
-func (testRecord) TableName() string { return "records" }
+func (testRecord) TableName() string                            { return "records" }
+func (testRecord) PaginationKey() map[repository.QueryField]any { return nil }
 
 func newTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
@@ -126,4 +129,87 @@ func TestHandleQueryField(t *testing.T) {
 		// then
 		assert.ErrorIs(t, err, sqlrepo.ErrUnknownTypeForJSONBField)
 	})
+}
+
+// errSimulatedDB is a sentinel used by newTestDBWithError.
+var errSimulatedDB = errors.New("simulated database error")
+
+// newTestDBWithError returns a gorm.DB that injects errSimulatedDB via a
+// registered callback before the given operation type runs.
+func newTestDBWithError(t *testing.T, operation string) *gorm.DB {
+	t.Helper()
+	db := newTestDB(t)
+	inject := func(d *gorm.DB) { _ = d.AddError(errSimulatedDB) }
+	const name = "test:inject_error"
+	switch operation {
+	case "create":
+		require.NoError(t, db.Callback().Create().Before("gorm:begin_transaction").Register(name, inject))
+	case "query":
+		require.NoError(t, db.Callback().Query().Before("gorm:query").Register(name, inject))
+	case "delete":
+		require.NoError(t, db.Callback().Delete().Before("gorm:begin_transaction").Register(name, inject))
+	case "update":
+		require.NoError(t, db.Callback().Update().Before("gorm:begin_transaction").Register(name, inject))
+	}
+	return db
+}
+
+// invalidQuery returns a Query whose CompositeKey contains a map[string]string
+// value, which triggers ErrUnknownTypeForJSONBField inside applyQuery.
+func invalidQuery() repository.Query {
+	q := repository.NewQuery(&testRecord{})
+	q.Where(repository.NewCompositeKey().Where("labels", map[string]string{"k": "v"}))
+	return *q
+}
+
+func TestResourceRepository_Create_DBError(t *testing.T) {
+	repo := sqlrepo.NewRepository(newTestDBWithError(t, "create"))
+	err := repo.Create(context.Background(), &testRecord{ID: "1"})
+	require.Error(t, err)
+}
+
+func TestResourceRepository_List_ApplyQueryError(t *testing.T) {
+	repo := sqlrepo.NewRepository(newTestDB(t))
+	err := repo.List(context.Background(), &[]testRecord{}, invalidQuery())
+	require.Error(t, err)
+}
+
+func TestResourceRepository_List_FindError(t *testing.T) {
+	repo := sqlrepo.NewRepository(newTestDBWithError(t, "query"))
+	q := repository.NewQuery(&testRecord{})
+	err := repo.List(context.Background(), &[]testRecord{}, *q)
+	require.Error(t, err)
+}
+
+func TestResourceRepository_Delete_DBError(t *testing.T) {
+	repo := sqlrepo.NewRepository(newTestDBWithError(t, "delete"))
+	_, err := repo.Delete(context.Background(), &testRecord{ID: "1"})
+	require.Error(t, err)
+}
+
+func TestResourceRepository_Find_DBError(t *testing.T) {
+	repo := sqlrepo.NewRepository(newTestDBWithError(t, "query"))
+	found, err := repo.Find(context.Background(), &testRecord{ID: "1"})
+	require.Error(t, err)
+	assert.False(t, found)
+}
+
+func TestResourceRepository_Patch_DBError(t *testing.T) {
+	repo := sqlrepo.NewRepository(newTestDBWithError(t, "update"))
+	patched, err := repo.Patch(context.Background(), &testRecord{ID: "1"})
+	require.Error(t, err)
+	assert.False(t, patched)
+}
+
+func TestResourceRepository_PatchAll_ApplyQueryError(t *testing.T) {
+	repo := sqlrepo.NewRepository(newTestDB(t))
+	_, err := repo.PatchAll(context.Background(), &testRecord{ID: "1"}, &[]testRecord{}, invalidQuery())
+	require.Error(t, err)
+}
+
+func TestResourceRepository_PatchAll_UpdateError(t *testing.T) {
+	repo := sqlrepo.NewRepository(newTestDBWithError(t, "update"))
+	q := repository.NewQuery(&testRecord{})
+	_, err := repo.PatchAll(context.Background(), &testRecord{ID: "1"}, &[]testRecord{}, *q)
+	require.Error(t, err)
 }
