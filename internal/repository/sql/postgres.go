@@ -3,12 +3,13 @@ package sql
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/openkcm/common-sdk/pkg/commoncfg"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+
+	slogctx "github.com/veqryn/slog-context"
 
 	"github.com/openkcm/registry/internal/config"
 	"github.com/openkcm/registry/internal/model"
@@ -18,19 +19,19 @@ import (
 func StartDB(ctx context.Context, dbConf config.DB) (*gorm.DB, error) {
 	dbCon, err := startDBConnection(dbConf)
 	if err != nil {
-		slog.Error("failed to initialize DB connection", slog.Any("error", err))
+		slogctx.Error(ctx, "failed to initialize DB connection", "error", err)
 		return nil, err
 	}
 
 	dbCon = dbCon.WithContext(ctx)
-	slog.Info("DB connection done")
+	slogctx.Info(ctx, "DB connection done")
 
 	if err = Migrate(dbCon); err != nil {
-		slog.Error("failed to run migrations", slog.Any("error", err))
+		slogctx.Error(ctx, "failed to run migrations", "error", err)
 		return nil, err
 	}
 
-	slog.Info("DB migration done")
+	slogctx.Info(ctx, "DB migration done")
 
 	return dbCon, nil
 }

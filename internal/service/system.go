@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"maps"
 	"slices"
 
@@ -207,7 +206,7 @@ func (s *System) DeleteSystem(ctx context.Context, in *systemgrpc.DeleteSystemRe
 		}
 
 		if err := validateDeleteSystem(regionalSystem); err != nil {
-			slog.Error(DeleteSystemErrMsg, "err", err.Error())
+			slogctx.Error(ctx, DeleteSystemErrMsg, "err", err.Error())
 			return err
 		}
 

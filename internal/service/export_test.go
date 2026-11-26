@@ -99,6 +99,23 @@ func NewTenantConfigWithOrbitalForTest(repo repository.Repository, orbital JobPr
 	}
 }
 
+// InvokeResolveTasksForTest calls the internal resolveTasks closure with the given job.
+// Use this to verify span-link creation without running a full orbital manager loop.
+func (o *Orbital) InvokeResolveTasksForTest(ctx context.Context, job orbital.Job) (orbital.TaskResolverResult, error) {
+	return o.resolveTasks()(ctx, job, "")
+}
+
+// BuildJobWithTraceForTest builds the orbital.Job that PrepareJob would construct,
+// including any W3C trace labels injected from ctx.
+// Use this to unit-test label injection logic without a live database.
+func BuildJobWithTraceForTest(ctx context.Context, data []byte, externalID, jobType string) orbital.Job {
+	job := orbital.NewJob(jobType, data).WithExternalID(externalID)
+	if tp, ts := InjectTraceContext(ctx); tp != "" {
+		job = job.WithLabels(orbital.Labels{"traceparent": tp, "tracestate": ts})
+	}
+	return job
+}
+
 // NoopRepo is a minimal repository.Repository that does nothing, for use in tests
 // that only exercise code paths which do not reach the repository.
 type NoopRepo struct{}

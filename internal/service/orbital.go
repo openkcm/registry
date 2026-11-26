@@ -136,10 +136,18 @@ func (o *Orbital) RegisterJobHandler(jobType string, handler JobHandler) {
 }
 
 // PrepareJob creates a new job with the given data, external ID, and job type.
+// The active span's W3C traceparent/tracestate are stored in job labels so the
+// async worker can create a linked span on the processing side (AC-03).
 func (o *Orbital) PrepareJob(ctx context.Context, data []byte, externalID, jobType string) error {
 	ctx = slogctx.With(ctx, slog.String("job type", jobType), slog.String("external ID", externalID))
 
 	job := orbital.NewJob(jobType, data).WithExternalID(externalID)
+	if tp, ts := InjectTraceContext(ctx); tp != "" {
+		job = job.WithLabels(orbital.Labels{
+			"traceparent": tp,
+			"tracestate":  ts,
+		})
+	}
 	job, err := o.manager.PrepareJob(ctx, job)
 	if err != nil {
 		slogctx.Error(ctx, "failed to prepare job", "error", err)
@@ -264,6 +272,10 @@ func (o *Orbital) confirmJob() orbital.JobConfirmFunc {
 func (o *Orbital) resolveTasks() orbital.TaskResolveFunc {
 	return func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 		slogctx.Debug(ctx, "resolving tasks for job", "id", job.ID.String(), "type", job.Type, "externalID", job.ExternalID)
+
+		ctx, span := StartLinkedSpan(ctx, "registry.job."+job.Type,
+			job.Labels["traceparent"], job.Labels["tracestate"])
+		defer span.End()
 
 		h, ok := o.getHandler(ctx, job.Type)
 		if !ok {

@@ -39,8 +39,8 @@ func TestMain(m *testing.M) {
 		postgres.BasicWaitStrategies(),
 	)
 	if err != nil {
-		log.Printf("failed to start PostgreSQL container: %v", err)
-		os.Exit(1)
+		log.Printf("PostgreSQL container unavailable — tests that need a database will be skipped: %v", err)
+		os.Exit(m.Run())
 	}
 
 	mappedPort, err := container.MappedPort(ctx, "5432")
@@ -61,8 +61,12 @@ func TestMain(m *testing.M) {
 // newTestOrbital creates a *service.Orbital backed by a real PostgreSQL store.
 // The caller receives the underlying *stdsql.DB to run verification queries.
 // The jobs table is cleared automatically when the test ends.
+// The test is skipped when Docker is not available (testDBPort == "").
 func newTestOrbital(t *testing.T) (*service.Orbital, *stdsql.DB) {
 	t.Helper()
+	if testDBPort == "" {
+		t.Skip("PostgreSQL container not available (Docker required)")
+	}
 	ctx := t.Context()
 
 	connStr := fmt.Sprintf("host=localhost port=%s user=%s password=%s dbname=%s sslmode=%s",

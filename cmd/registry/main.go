@@ -133,8 +133,10 @@ func setupGRPCServer(ctx context.Context, cfg *config.Config) (*grpc.Server, err
 		return nil, err
 	}
 
-	// Create a new gRPC server
-	// Interceptor order: validation first, then metrics, then panic recovery last
+	// Create a new gRPC server.
+	// W3C trace context is extracted by the otelgrpc stats handler already registered
+	// inside commongrpc.NewServer (AC-01). Interceptor order: validation first, then
+	// metrics, then panic recovery last.
 	grpcServer := commongrpc.NewServer(ctx, &cfg.GRPCServer.GRPCServer,
 		grpc.ChainUnaryInterceptor(
 			pv.UnaryInterceptor,
