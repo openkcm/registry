@@ -1,0 +1,6 @@
+*               @openkcm/go-maintainers
+
+# Enforce a maintainer review for workflow changes:
+/.github/       @openkcm/central-code-review
+/Makefile       @openkcm/central-code-review
+/Taskfile*      @openkcm/central-code-review
